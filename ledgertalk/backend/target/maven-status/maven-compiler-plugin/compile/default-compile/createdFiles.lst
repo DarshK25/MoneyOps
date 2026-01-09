@@ -1,0 +1,5 @@
+com\ledgertalk\users\UserRepository.class
+com\ledgertalk\LedgerTalkApplication.class
+com\ledgertalk\users\User.class
+com\ledgertalk\users\UserService.class
+com\ledgertalk\users\UserController.class
