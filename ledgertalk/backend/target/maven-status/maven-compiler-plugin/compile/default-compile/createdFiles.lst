@@ -1,5 +1,3 @@
-com\ledgertalk\users\UserRepository.class
-com\ledgertalk\LedgerTalkApplication.class
-com\ledgertalk\users\User.class
-com\ledgertalk\users\UserService.class
-com\ledgertalk\users\UserController.class
+com\ledgertalk\transactions\entity\Transaction.class
+com\ledgertalk\users\controller\InviteController.class
+com\ledgertalk\users\controller\UserController.class

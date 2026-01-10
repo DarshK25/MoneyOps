@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.ledgertalk.invoices.controller.InvoiceControllerTest
+-------------------------------------------------------------------------------
+Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 10.73 s -- in com.ledgertalk.invoices.controller.InvoiceControllerTest
