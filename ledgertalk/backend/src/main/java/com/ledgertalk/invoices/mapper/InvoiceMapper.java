@@ -5,8 +5,10 @@ import com.ledgertalk.invoices.dto.InvoiceDto;
 import com.ledgertalk.invoices.dto.InvoiceItemDto;
 import com.ledgertalk.invoices.entity.Invoice;
 import com.ledgertalk.invoices.entity.InvoiceItem;
+import com.ledgertalk.invoices.entity.InvoiceStatus;
 import org.springframework.stereotype.Component;
-
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -42,7 +44,7 @@ public class InvoiceMapper {
         invoice.setClientId(dto.getClientId());
         invoice.setIssueDate(dto.getIssueDate());
         invoice.setDueDate(dto.getDueDate());
-        invoice.setStatus(Invoice.InvoiceStatus.valueOf(dto.getStatus()));
+        invoice.setStatus(InvoiceStatus.valueOf(dto.getStatus()));
         invoice.setSubtotal(dto.getSubtotal());
         invoice.setGstTotal(dto.getGstTotal());
         invoice.setTotalAmount(dto.getTotalAmount());
@@ -57,7 +59,7 @@ public class InvoiceMapper {
         return invoice;
     }
 
-    private InvoiceItemDto toItemDto(InvoiceItem item) {
+    public InvoiceItemDto toItemDto(InvoiceItem item) {
         InvoiceItemDto dto = new InvoiceItemDto();
         dto.setType(item.getType().name());
         dto.setDescription(item.getDescription());
