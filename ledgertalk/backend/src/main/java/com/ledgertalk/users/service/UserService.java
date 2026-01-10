@@ -1,11 +1,14 @@
-// src/main/java/com/ledgertalk/users/service/UserService.java
 package com.ledgertalk.users.service;
 
+import com.ledgertalk.audit.service.AuditLogService;
 import com.ledgertalk.users.dto.UserDto;
 import com.ledgertalk.users.dto.CreateInviteRequest;
 import com.ledgertalk.users.dto.AcceptInviteRequest;
 import com.ledgertalk.users.entity.User;
 import com.ledgertalk.users.entity.Invite;
+import com.ledgertalk.users.exceptions.UserConflictException;
+import com.ledgertalk.users.exceptions.UserInvalidStateException;
+import com.ledgertalk.users.exceptions.UserNotFoundException;
 import com.ledgertalk.users.mapper.UserMapper;
 import com.ledgertalk.users.repository.UserRepository;
 import com.ledgertalk.users.repository.InviteRepository;
@@ -39,6 +42,9 @@ public class UserService {
     @Autowired
     private InviteValidator inviteValidator;
 
+    @Autowired
+    private AuditLogService auditLogService;
+
     public List<UserDto> getAllUsers(UUID orgId) {
         return userRepository.findAllByOrgId(orgId)
                 .stream()
@@ -48,14 +54,14 @@ public class UserService {
 
     public UserDto getUserById(UUID id, UUID orgId) {
         User user = userRepository.findByIdAndOrgId(id, orgId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new UserNotFoundException("User not found with id: " + id));
         return userMapper.toDto(user);
     }
 
     public UserDto createUser(UserDto dto, UUID orgId, UUID createdBy) {
         userValidator.validate(dto);
         if (userRepository.existsByEmailAndOrgId(dto.getEmail(), orgId)) {
-            throw new RuntimeException("User with this email already exists");
+            throw new UserConflictException("User with this email already exists: " + dto.getEmail());
         }
 
         User user = userMapper.toEntity(dto);
@@ -66,13 +72,20 @@ public class UserService {
         user.setUpdatedAt(LocalDateTime.now());
 
         User saved = userRepository.save(user);
+        auditLogService.logCreate("User", saved.getId().toString(), saved);
         return userMapper.toDto(saved);
     }
 
     public UserDto updateUser(UUID id, UserDto dto, UUID orgId, UUID updatedBy) {
         userValidator.validate(dto);
         User user = userRepository.findByIdAndOrgId(id, orgId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new UserNotFoundException("User not found with id: " + id));
+
+        User oldUser = new User();
+        oldUser.setName(user.getName());
+        oldUser.setEmail(user.getEmail());
+        oldUser.setRole(user.getRole());
+        oldUser.setStatus(user.getStatus());
 
         user.setName(dto.getName());
         user.setEmail(dto.getEmail());
@@ -82,13 +95,14 @@ public class UserService {
         user.setUpdatedAt(LocalDateTime.now());
 
         User saved = userRepository.save(user);
+        auditLogService.logUpdate("User", saved.getId().toString(), oldUser, saved);
         return userMapper.toDto(saved);
     }
 
     public void deleteUser(UUID id, UUID orgId) {
-        if (!userRepository.existsByIdAndOrgId(id, orgId)) {
-            throw new RuntimeException("User not found");
-        }
+        User user = userRepository.findByIdAndOrgId(id, orgId)
+                .orElseThrow(() -> new UserNotFoundException("User not found with id: " + id));
+        auditLogService.logDelete("User", id.toString(), user);
         userRepository.deleteByIdAndOrgId(id, orgId);
     }
 
@@ -102,7 +116,7 @@ public class UserService {
     public void createInvite(CreateInviteRequest request, UUID orgId, UUID createdBy) {
         userValidator.validateInvite(request);
         if (inviteRepository.existsByEmailAndOrgIdAndStatus(request.getEmail(), orgId, "PENDING")) {
-            throw new RuntimeException("Invite already exists for this email");
+            throw new UserConflictException("Invite already exists for this email: " + request.getEmail());
         }
 
         Invite invite = new Invite();
@@ -122,14 +136,14 @@ public class UserService {
         inviteValidator.validateAcceptInvite(request);
 
         Invite invite = inviteRepository.findByToken(request.getToken())
-                .orElseThrow(() -> new RuntimeException("Invalid invite token"));
+                .orElseThrow(() -> new UserNotFoundException("Invalid invite token"));
 
         if (invite.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new RuntimeException("Invite has expired");
+            throw new UserInvalidStateException("Invite has expired");
         }
 
-        if (!"PENDING".equals(invite.getStatus())) {
-            throw new RuntimeException("Invite has already been used");
+        if (Invite.InviteStatus.ACCEPTED.equals(invite.getStatus())) {
+            throw new UserInvalidStateException("Invite has already been used");
         }
 
         // Create user

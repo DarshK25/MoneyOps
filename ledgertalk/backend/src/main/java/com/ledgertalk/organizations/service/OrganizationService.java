@@ -1,10 +1,10 @@
-// src/main/java/com/ledgertalk/organizations/service/OrganizationService.java
 package com.ledgertalk.organizations.service;
 
 import com.ledgertalk.organizations.dto.BusinessOrganizationDto;
 import com.ledgertalk.organizations.dto.RegulatoryProfileDto;
 import com.ledgertalk.organizations.entity.BusinessOrganization;
 import com.ledgertalk.organizations.entity.RegulatoryProfile;
+import com.ledgertalk.organizations.exceptions.OrganizationNotFoundException;
 import com.ledgertalk.organizations.mapper.OrganizationMapper;
 import com.ledgertalk.organizations.repository.BusinessOrganizationRepository;
 import com.ledgertalk.organizations.repository.RegulatoryProfileRepository;
@@ -37,14 +37,14 @@ public class OrganizationService {
 
     public BusinessOrganizationDto getOrganizationById(UUID id, UUID userId) {
         BusinessOrganization org = orgRepository.findByIdAndCreatedBy(id, userId)
-                .orElseThrow(() -> new RuntimeException("Organization not found"));
+                .orElseThrow(() -> new OrganizationNotFoundException("Organization not found with id: " + id));
         return mapper.toDto(org);
     }
 
     public BusinessOrganizationDto getMyOrganization(UUID userId) {
         List<BusinessOrganization> orgs = orgRepository.findAllByCreatedBy(userId);
         if (orgs.isEmpty()) {
-            throw new RuntimeException("No organization found for user");
+            throw new OrganizationNotFoundException("No organization found for user: " + userId);
         }
         return mapper.toDto(orgs.get(0)); // Assuming one org per user for now
     }
@@ -63,7 +63,7 @@ public class OrganizationService {
 
     public BusinessOrganizationDto updateOrganization(UUID id, BusinessOrganizationDto dto, UUID userId) {
         BusinessOrganization existing = orgRepository.findByIdAndCreatedBy(id, userId)
-                .orElseThrow(() -> new RuntimeException("Organization not found"));
+                .orElseThrow(() -> new OrganizationNotFoundException("Organization not found with id: " + id));
 
         validator.validate(dto);
 
@@ -85,16 +85,16 @@ public class OrganizationService {
     public RegulatoryProfileDto getRegulatoryProfile(UUID orgId, UUID userId) {
         // Verify ownership
         orgRepository.findByIdAndCreatedBy(orgId, userId)
-                .orElseThrow(() -> new RuntimeException("Organization not found"));
+                .orElseThrow(() -> new OrganizationNotFoundException("Organization not found with id: " + orgId));
 
         RegulatoryProfile profile = regulatoryRepository.findByOrganizationId(orgId)
-                .orElseThrow(() -> new RuntimeException("Regulatory profile not found"));
+                .orElseThrow(() -> new OrganizationNotFoundException("Regulatory profile not found for org: " + orgId));
         return mapper.toRegulatoryDto(profile);
     }
 
     public RegulatoryProfileDto createRegulatoryProfile(UUID orgId, RegulatoryProfileDto dto, UUID userId) {
         BusinessOrganization org = orgRepository.findByIdAndCreatedBy(orgId, userId)
-                .orElseThrow(() -> new RuntimeException("Organization not found"));
+                .orElseThrow(() -> new OrganizationNotFoundException("Organization not found with id: " + orgId));
 
         validator.validateRegulatory(dto);
 
@@ -105,12 +105,12 @@ public class OrganizationService {
 
     public RegulatoryProfileDto updateRegulatoryProfile(UUID orgId, RegulatoryProfileDto dto, UUID userId) {
         BusinessOrganization org = orgRepository.findByIdAndCreatedBy(orgId, userId)
-                .orElseThrow(() -> new RuntimeException("Organization not found"));
+                .orElseThrow(() -> new OrganizationNotFoundException("Organization not found with id: " + orgId));
 
         validator.validateRegulatory(dto);
 
         RegulatoryProfile existing = regulatoryRepository.findByOrganizationId(orgId)
-                .orElseThrow(() -> new RuntimeException("Regulatory profile not found"));
+                .orElseThrow(() -> new OrganizationNotFoundException("Regulatory profile not found for org: " + orgId));
 
         RegulatoryProfile updated = mapper.toRegulatoryEntity(dto, org);
         updated.setId(existing.getId());

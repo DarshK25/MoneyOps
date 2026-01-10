@@ -1,9 +1,9 @@
-// src/main/java/com/ledgertalk/transactions/service/TransactionService.java
 package com.ledgertalk.transactions.service;
 
 import com.ledgertalk.transactions.dto.TransactionDto;
 import com.ledgertalk.transactions.entity.Transaction;
 import com.ledgertalk.transactions.entity.TransactionType;
+import com.ledgertalk.transactions.exceptions.TransactionNotFoundException;
 import com.ledgertalk.transactions.mapper.TransactionMapper;
 import com.ledgertalk.transactions.repository.TransactionRepository;
 import com.ledgertalk.transactions.validator.TransactionValidator;
@@ -36,7 +36,7 @@ public class TransactionService {
 
     public TransactionDto getTransactionById(UUID id, UUID orgId) {
         Transaction transaction = transactionRepository.findByIdAndOrgId(id, orgId)
-                .orElseThrow(() -> new RuntimeException("Transaction not found"));
+                .orElseThrow(() -> new TransactionNotFoundException("Transaction not found with id: " + id));
         return transactionMapper.toDto(transaction);
     }
 
@@ -55,7 +55,7 @@ public class TransactionService {
 
     public TransactionDto updateTransaction(UUID id, TransactionDto dto, UUID orgId) {
         Transaction existing = transactionRepository.findByIdAndOrgId(id, orgId)
-                .orElseThrow(() -> new RuntimeException("Transaction not found"));
+                .orElseThrow(() -> new TransactionNotFoundException("Transaction not found with id: " + id));
 
         transactionValidator.validate(dto);
 

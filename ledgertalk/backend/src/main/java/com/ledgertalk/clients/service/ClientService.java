@@ -1,8 +1,9 @@
-// src/main/java/com/ledgertalk/clients/service/ClientService.java
 package com.ledgertalk.clients.service;
 
 import com.ledgertalk.clients.dto.ClientDto;
 import com.ledgertalk.clients.entity.Client;
+import com.ledgertalk.clients.exceptions.ClientConflictException;
+import com.ledgertalk.clients.exceptions.ClientNotFoundException;
 import com.ledgertalk.clients.mapper.ClientMapper;
 import com.ledgertalk.clients.repository.ClientRepository;
 import com.ledgertalk.clients.validator.ClientValidator;
@@ -37,14 +38,14 @@ public class ClientService {
 
     public ClientDto getClientById(UUID id, UUID orgId) {
         Client client = clientRepository.findByIdAndOrgId(id, orgId)
-                .orElseThrow(() -> new RuntimeException("Client not found"));
+                .orElseThrow(() -> new ClientNotFoundException("Client not found with id: " + id));
         return clientMapper.toDto(client);
     }
 
     public ClientDto createClient(ClientDto dto, UUID orgId, UUID createdBy) {
         clientValidator.validate(dto);
         if (clientRepository.existsByEmailAndOrgId(dto.getEmail(), orgId)) {
-            throw new RuntimeException("Client with this email already exists");
+            throw new ClientConflictException("Client with this email already exists: " + dto.getEmail());
         }
 
         Client client = clientMapper.toEntity(dto);
@@ -61,7 +62,7 @@ public class ClientService {
     public ClientDto updateClient(UUID id, ClientDto dto, UUID orgId, UUID updatedBy) {
         clientValidator.validate(dto);
         Client client = clientRepository.findByIdAndOrgId(id, orgId)
-                .orElseThrow(() -> new RuntimeException("Client not found"));
+                .orElseThrow(() -> new ClientNotFoundException("Client not found with id: " + id));
 
         client.setName(dto.getName());
         client.setTaxId(dto.getTaxId());
@@ -84,7 +85,7 @@ public class ClientService {
 
     public void deleteClient(UUID id, UUID orgId) {
         if (!clientRepository.existsByIdAndOrgId(id, orgId)) {
-            throw new RuntimeException("Client not found");
+            throw new ClientNotFoundException("Client not found with id: " + id);
         }
         clientRepository.deleteByIdAndOrgId(id, orgId);
     }
