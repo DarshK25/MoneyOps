@@ -6,10 +6,9 @@ import com.ledgertalk.invoices.dto.InvoiceItemDto;
 import com.ledgertalk.invoices.entity.Invoice;
 import com.ledgertalk.invoices.entity.InvoiceItem;
 import com.ledgertalk.invoices.entity.InvoiceStatus;
+
 import org.springframework.stereotype.Component;
-import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.util.List;
+
 import java.util.stream.Collectors;
 
 @Component

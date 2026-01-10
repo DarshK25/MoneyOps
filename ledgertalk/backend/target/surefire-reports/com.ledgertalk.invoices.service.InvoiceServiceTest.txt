@@ -1,4 +1,4 @@
 -------------------------------------------------------------------------------
 Test set: com.ledgertalk.invoices.service.InvoiceServiceTest
 -------------------------------------------------------------------------------
-Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.909 s -- in com.ledgertalk.invoices.service.InvoiceServiceTest
+Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.768 s -- in com.ledgertalk.invoices.service.InvoiceServiceTest
