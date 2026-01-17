@@ -1,0 +1,52 @@
+@baseUrl = http://localhost:8080/api
+
+### 1. Register a new user and organization
+# @name register
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "name": "Test User",
+  "email": "test@example.com",
+  "password": "password123",
+  "orgName": "Test Organization"
+}
+
+### 2. Login
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "email": "test@example.com",
+    "password": "password123"
+}
+
+### Store the token from login response
+@authToken = {{login.response.body.data.accessToken}}
+
+### 3. Create a Document Metadata
+POST {{baseUrl}}/documents
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "name": "Project Proposal.pdf",
+  "type": "PDF",
+  "size": 102400,
+  "mimeType": "application/pdf",
+  "linkedEntityType": "PROJECT",
+  "linkedEntityId": "550e8400-e29b-41d4-a716-446655440000"
+}
+
+### 4. Get Documents for Organization
+# Need to replace ORG_ID with the actual UUID from your database or login response if available
+# For now, this request might return empty if we don't know the exact Org ID, but the token has it contextually.
+# Since our endpoint expects /org/{orgId}, we'd need to fetch the User profile to get the Org ID first or check DB.
+
+### 5. Get User Profile (to get Org ID)
+# Assuming there is a user endpoint, if not we can use the ID from the decoded token or logs.
+# For this example, let's assume we want to just test connectivity.
+
+### 6. Health Check (if actuator exists)
+GET http://localhost:8080/actuator/health

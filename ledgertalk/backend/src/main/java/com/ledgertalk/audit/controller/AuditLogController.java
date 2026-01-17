@@ -34,8 +34,8 @@ public class AuditLogController {
         // TODO: Implement pagination
         PageResponse<AuditLog> pageResponse = PageResponse.<AuditLog>builder()
                 .content(logs)
-                .page(page)
-                .size(size)
+                .pageNumber(page)
+                .pageSize(size)
                 .totalElements(logs.size())
                 .totalPages(1)
                 .build();

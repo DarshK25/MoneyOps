@@ -1,4 +1,14 @@
 spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: INSERT_YOUR_GOOGLE_CLIENT_ID_HERE
+            client-secret: INSERT_YOUR_GOOGLE_CLIENT_SECRET_HERE
+            scope:
+              - email
+              - profile
   application:
     name: ledgertalk-backend
   

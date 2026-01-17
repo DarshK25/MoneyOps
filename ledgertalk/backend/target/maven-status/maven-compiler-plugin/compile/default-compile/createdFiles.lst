@@ -1,3 +1,4 @@
+com\ledgertalk\reminders\exceptions\ReminderNotFoundException.class
 com\ledgertalk\transactions\dto\TransactionDto.class
 com\ledgertalk\auth\security\JwtProvider.class
 com\ledgertalk\users\entity\Invite.class
@@ -12,8 +13,10 @@ com\ledgertalk\users\entity\User.class
 com\ledgertalk\invoices\exceptions\InvoiceConflictException.class
 com\ledgertalk\organizations\entity\RegulatoryProfile.class
 com\ledgertalk\users\repository\InviteRepository.class
+com\ledgertalk\reminders\exceptions\ReminderInvalidStateException.class
 com\ledgertalk\users\exceptions\UserInvalidStateException.class
 com\ledgertalk\audit\entity\AuditLog$Operation.class
+com\ledgertalk\documents\exceptions\DocumentNotFoundException.class
 com\ledgertalk\auth\dto\RegisterRequest.class
 com\ledgertalk\config\JacksonConfig.class
 com\ledgertalk\shared\exceptions\UnauthorizedException.class
@@ -29,6 +32,7 @@ com\ledgertalk\auth\security\OAuth2SuccessHandler.class
 com\ledgertalk\organizations\exceptions\OrganizationConflictException.class
 com\ledgertalk\organizations\dto\RegulatoryProfileDto.class
 com\ledgertalk\organizations\controller\BusinessController.class
+com\ledgertalk\reminders\exceptions\ReminderConflictException.class
 com\ledgertalk\organizations\exceptions\OrganizationRuleViolationException.class
 com\ledgertalk\events\topics\EventTopics.class
 com\ledgertalk\organizations\mapper\OrganizationMapper.class
@@ -36,7 +40,9 @@ com\ledgertalk\users\validator\InviteValidator.class
 com\ledgertalk\audit\entity\AuditLog.class
 com\ledgertalk\shared\dto\ApiResponse.class
 com\ledgertalk\transactions\mapper\TransactionMapper.class
+com\ledgertalk\documents\controller\DocumentController.class
 com\ledgertalk\users\mapper\UserMapper.class
+com\ledgertalk\documents\exceptions\DocumentInvalidStateException.class
 com\ledgertalk\events\producer\KafkaEventProducer.class
 com\ledgertalk\invoices\exceptions\InvoiceNotFoundException.class
 com\ledgertalk\organizations\dto\BusinessOrganizationDto.class
@@ -47,6 +53,7 @@ com\ledgertalk\invoices\service\InvoiceService.class
 com\ledgertalk\organizations\exceptions\OrganizationInvalidStateException.class
 com\ledgertalk\shared\utils\OrgContext.class
 com\ledgertalk\shared\enums\CommonEnums$EventType.class
+com\ledgertalk\documents\exceptions\DocumentConflictException.class
 com\ledgertalk\transactions\entity\TransactionType.class
 com\ledgertalk\clients\entity\Client.class
 com\ledgertalk\config\CorsConfig$1.class
@@ -55,6 +62,7 @@ com\ledgertalk\audit\controller\AuditLogController.class
 com\ledgertalk\shared\constants\AppConstants.class
 com\ledgertalk\transactions\exceptions\TransactionInvalidStateException.class
 com\ledgertalk\transactions\exceptions\TransactionNotFoundException.class
+com\ledgertalk\documents\entity\Document.class
 com\ledgertalk\transactions\controller\TransactionController.class
 com\ledgertalk\auth\dto\LoginRequest.class
 com\ledgertalk\organizations\controller\RegulatoryController.class
@@ -64,12 +72,15 @@ com\ledgertalk\shared\exceptions\ApiException.class
 com\ledgertalk\shared\exceptions\BusinessRuleException.class
 com\ledgertalk\invoices\dto\InvoiceDto.class
 com\ledgertalk\organizations\exceptions\OrganizationNotFoundException.class
+com\ledgertalk\shared\dto\PageResponse$PageResponseBuilder.class
 com\ledgertalk\organizations\validator\OrganizationValidator.class
 com\ledgertalk\shared\enums\CommonEnums$Status.class
 com\ledgertalk\transactions\validator\TransactionValidator.class
 com\ledgertalk\audit\repository\AuditLogRepository.class
 com\ledgertalk\auth\dto\OAuthUserInfo.class
+com\ledgertalk\auth\config\PasswordEncoderConfig.class
 com\ledgertalk\transactions\service\TransactionService.class
+com\ledgertalk\documents\repository\DocumentRepository.class
 com\ledgertalk\organizations\entity\BusinessOrganization$TargetMarket.class
 com\ledgertalk\invoices\exceptions\InvoiceInvalidStateException.class
 com\ledgertalk\transactions\exceptions\TransactionRuleViolationException.class
@@ -109,7 +120,9 @@ com\ledgertalk\shared\utils\MoneyUtil.class
 com\ledgertalk\organizations\entity\BusinessOrganization$Industry.class
 com\ledgertalk\organizations\entity\BusinessOrganization$Month.class
 com\ledgertalk\organizations\entity\BusinessOrganization.class
+com\ledgertalk\reminders\exceptions\ReminderRuleViolationException.class
 com\ledgertalk\users\controller\InviteController.class
+com\ledgertalk\documents\exceptions\DocumentRuleViolationException.class
 com\ledgertalk\shared\exceptions\ForbiddenException.class
 com\ledgertalk\auth\security\UserDetailsServiceImpl.class
 com\ledgertalk\organizations\repository\RegulatoryProfileRepository.class
@@ -125,6 +138,7 @@ com\ledgertalk\auth\security\AuthEntryPoint.class
 com\ledgertalk\shared\exceptions\ConflictException.class
 com\ledgertalk\users\entity\Invite$InviteStatus.class
 com\ledgertalk\clients\exceptions\ClientNotFoundException.class
+com\ledgertalk\documents\service\DocumentService.class
 com\ledgertalk\events\consumer\NotificationConsumer.class
 com\ledgertalk\events\producer\EventPublisher.class
 com\ledgertalk\shared\dto\PageResponse.class

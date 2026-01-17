@@ -1,30 +1,55 @@
-package com.ledgertalk.documents.entity;
+package com.ledgertalk.documents.controller;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-import lombok.Data;
+import com.ledgertalk.documents.entity.Document;
+import com.ledgertalk.documents.service.DocumentService;
+import com.ledgertalk.shared.dto.ApiResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
-import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "documents")
-@Data
-public class Document {
+@RestController
+@RequestMapping("/api/documents")
+@RequiredArgsConstructor
+@Tag(name = "Documents", description = "Document management endpoints")
+public class DocumentController {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
+    private final DocumentService documentService;
 
-    private String name;
-    private String type;
-    private String url;
+    @GetMapping("/org/{orgId}")
+    @Operation(summary = "Get all documents for an organization")
+    public ResponseEntity<ApiResponse<List<Document>>> getDocumentsByOrg(@PathVariable UUID orgId) {
+        return ResponseEntity.ok(ApiResponse.success(documentService.getDocumentsByOrg(orgId)));
+    }
 
-    private UUID orgId;
-    private UUID uploadedBy;
+    @GetMapping("/{id}")
+    @Operation(summary = "Get document by ID")
+    public ResponseEntity<ApiResponse<Document>> getDocumentById(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.success(documentService.getDocumentById(id)));
+    }
 
-    private LocalDateTime uploadedAt;
+    @PostMapping
+    @Operation(summary = "Create document metadata")
+    public ResponseEntity<ApiResponse<Document>> createDocument(@RequestBody Document document) {
+        return ResponseEntity.ok(ApiResponse.success(documentService.createDocumentMetadata(document)));
+    }
+
+    @GetMapping("/entity/{entityType}/{entityId}")
+    @Operation(summary = "Get documents linked to a specific entity")
+    public ResponseEntity<ApiResponse<List<Document>>> getDocumentsByEntity(
+            @PathVariable String entityType,
+            @PathVariable UUID entityId) {
+        return ResponseEntity.ok(ApiResponse.success(documentService.getDocumentsByEntity(entityType, entityId)));
+    }
+
+    @DeleteMapping("/{id}")
+    @Operation(summary = "Delete document")
+    public ResponseEntity<ApiResponse<Void>> deleteDocument(@PathVariable UUID id) {
+        documentService.deleteDocument(id);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
 }

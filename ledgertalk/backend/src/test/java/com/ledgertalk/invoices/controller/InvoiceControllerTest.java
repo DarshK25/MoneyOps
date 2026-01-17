@@ -22,7 +22,17 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
+import com.ledgertalk.auth.security.AuthEntryPoint;
+import com.ledgertalk.auth.security.JwtFilter;
+import com.ledgertalk.auth.security.OAuth2SuccessHandler;
+
+import org.springframework.security.test.context.support.WithMockUser;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+
+import com.ledgertalk.auth.security.JwtProvider;
+
 @WebMvcTest(InvoiceController.class)
+@WithMockUser
 public class InvoiceControllerTest {
 
     @Autowired
@@ -30,6 +40,18 @@ public class InvoiceControllerTest {
 
     @MockBean
     private InvoiceService invoiceService;
+
+    @MockBean
+    private JwtProvider jwtProvider;
+
+    @MockBean
+    private AuthEntryPoint authEntryPoint;
+
+    @MockBean
+    private OAuth2SuccessHandler oAuth2SuccessHandler;
+
+    @MockBean
+    private org.springframework.security.core.userdetails.UserDetailsService userDetailsService;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -52,6 +74,7 @@ public class InvoiceControllerTest {
         when(invoiceService.createInvoice(any(InvoiceDto.class), eq(orgId), eq(userId))).thenReturn(dto);
 
         mockMvc.perform(post("/api/invoices")
+                .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(dto))
                 .header("X-Org-Id", orgId.toString())

@@ -34,10 +34,7 @@ public class SecurityConfig {
         this.oAuth2SuccessHandler = oAuth2SuccessHandler;
     }
 
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
+
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
