@@ -5,6 +5,7 @@ import com.ledgertalk.auth.security.JwtFilter;
 import com.ledgertalk.auth.security.OAuth2SuccessHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -24,7 +25,7 @@ public class SecurityConfig {
     public SecurityConfig(
             JwtFilter jwtFilter,
             AuthEntryPoint authEntryPoint,
-            OAuth2SuccessHandler oAuth2SuccessHandler
+            @Lazy OAuth2SuccessHandler oAuth2SuccessHandler
     ) {
         this.jwtFilter = jwtFilter;
         this.authEntryPoint = authEntryPoint;
@@ -38,7 +39,9 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        http.csrf(csrf -> csrf.disable());
+        http.csrf(csrf -> csrf.ignoringRequestMatchers("/h2-console/**"));
+        
+        http.headers(headers -> headers.frameOptions(frameOptions -> frameOptions.disable()));
 
         http.exceptionHandling(ex -> 
             ex.authenticationEntryPoint(authEntryPoint)
@@ -53,14 +56,16 @@ public class SecurityConfig {
                 "/api/auth/**",
                 "/oauth2/**",
                 "/swagger-ui/**",
-                "/v3/api-docs/**"
+                "/v3/api-docs/**",
+                "/h2-console/**"
             ).permitAll()
             .anyRequest().authenticated()
         );
 
-        http.oauth2Login(oauth -> 
-            oauth.successHandler(oAuth2SuccessHandler)
-        );
+        // TODO: Configure OAuth2 login when providers are set up
+        // http.oauth2Login(oauth -> 
+        //     oauth.successHandler(oAuth2SuccessHandler)
+        // );
 
         http.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
