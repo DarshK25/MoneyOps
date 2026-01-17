@@ -116,7 +116,7 @@ public class UserService {
 
     public void createInvite(CreateInviteRequest request, UUID orgId, UUID createdBy) {
         userValidator.validateInvite(request);
-        if (inviteRepository.existsByEmailAndOrgIdAndStatus(request.getEmail(), orgId, "PENDING")) {
+        if (inviteRepository.existsByEmailAndOrgIdAndStatus(request.getEmail(), orgId, Invite.InviteStatus.PENDING)) {
             throw new RuntimeException("Invite already exists for this email");
         }
 
@@ -171,7 +171,7 @@ public class UserService {
     }
 
     public List<Invite> getPendingInvites(UUID orgId) {
-        return inviteRepository.findAllByOrgIdAndStatus(orgId, "PENDING");
+        return inviteRepository.findAllByOrgIdAndStatus(orgId, Invite.InviteStatus.PENDING);
     }
 
     private String hashPassword(String password) {

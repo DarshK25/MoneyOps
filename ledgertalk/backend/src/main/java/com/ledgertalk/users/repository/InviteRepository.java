@@ -20,11 +20,11 @@ public interface InviteRepository extends JpaRepository<Invite, UUID> {
 
     List<Invite> findAllByOrgId(UUID orgId);
 
-    List<Invite> findAllByOrgIdAndStatus(UUID orgId, String status);
+    List<Invite> findAllByOrgIdAndStatus(UUID orgId, Invite.InviteStatus status);
 
     @Modifying
     @Query("DELETE FROM Invite i WHERE i.expiresAt < :now")
     void deleteExpiredInvites(@Param("now") LocalDateTime now);
 
-    boolean existsByEmailAndOrgIdAndStatus(String email, UUID orgId, String status);
+    boolean existsByEmailAndOrgIdAndStatus(String email, UUID orgId, Invite.InviteStatus status);
 }
