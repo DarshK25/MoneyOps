@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -19,14 +20,19 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableWebSecurity
 public class SecurityConfig {
 
-    @Autowired
-    private JwtFilter jwtFilter;
+    private final JwtFilter jwtFilter;
+    private final AuthEntryPoint authEntryPoint;
+    private final OAuth2SuccessHandler oAuth2SuccessHandler;
 
-    @Autowired
-    private AuthEntryPoint authEntryPoint;
-
-    @Autowired
-    private OAuth2SuccessHandler oAuth2SuccessHandler;
+    public SecurityConfig(
+            JwtFilter jwtFilter,
+            AuthEntryPoint authEntryPoint,
+            OAuth2SuccessHandler oAuth2SuccessHandler
+    ) {
+        this.jwtFilter = jwtFilter;
+        this.authEntryPoint = authEntryPoint;
+        this.oAuth2SuccessHandler = oAuth2SuccessHandler;
+    }
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -35,18 +41,29 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        http
-            .csrf().disable()
-            .exceptionHandling().authenticationEntryPoint(authEntryPoint)
-            .and()
-            .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-            .and()
-            .authorizeHttpRequests()
-                .requestMatchers("/api/auth/**", "/oauth2/**", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
-                .anyRequest().authenticated()
-            .and()
-            .oauth2Login()
-                .successHandler(oAuth2SuccessHandler);
+        http.csrf(csrf -> csrf.disable());
+
+        http.exceptionHandling(ex -> 
+            ex.authenticationEntryPoint(authEntryPoint)
+        );
+
+        http.sessionManagement(session -> 
+            session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+        );
+
+        http.authorizeHttpRequests(auth -> auth
+            .requestMatchers(
+                "/api/auth/**",
+                "/oauth2/**",
+                "/swagger-ui/**",
+                "/v3/api-docs/**"
+            ).permitAll()
+            .anyRequest().authenticated()
+        );
+
+        http.oauth2Login(oauth -> 
+            oauth.successHandler(oAuth2SuccessHandler)
+        );
 
         http.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
