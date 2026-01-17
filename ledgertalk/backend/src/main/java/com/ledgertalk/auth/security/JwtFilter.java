@@ -43,19 +43,34 @@ public class JwtFilter extends OncePerRequestFilter {
 
             SecurityContextHolder.getContext().setAuthentication(authentication);
 
-            // Set org context from headers
-            String orgIdHeader = request.getHeader("X-Org-Id");
-            String userIdHeader = request.getHeader("X-User-Id");
+            try {
+                // Set org context from headers
+                String orgIdHeader = request.getHeader("X-Org-Id");
+                String userIdHeader = request.getHeader("X-User-Id");
 
-            if (orgIdHeader != null) {
-                OrgContext.setOrgId(UUID.fromString(orgIdHeader));
+                if (userIdHeader != null) {
+                    // Validate that the header matches the authenticated user
+                    if (!userIdHeader.equals(userId)) {
+                        response.sendError(HttpServletResponse.SC_FORBIDDEN, "User ID header does not match authenticated user");
+                        return;
+                    }
+                    OrgContext.setUserId(UUID.fromString(userId)); // Use trusted userId from token
+                } else {
+                    // Always set userId from token if not in header (or purely rely on token)
+                    OrgContext.setUserId(UUID.fromString(userId));
+                }
+
+                if (orgIdHeader != null) {
+                    OrgContext.setOrgId(UUID.fromString(orgIdHeader));
+                }
+
+                filterChain.doFilter(request, response);
+            } finally {
+                OrgContext.clear();
             }
-            if (userIdHeader != null) {
-                OrgContext.setUserId(UUID.fromString(userIdHeader));
-            }
+        } else {
+            filterChain.doFilter(request, response);
         }
-
-        filterChain.doFilter(request, response);
     }
 
     private String getJwtFromRequest(HttpServletRequest request) {

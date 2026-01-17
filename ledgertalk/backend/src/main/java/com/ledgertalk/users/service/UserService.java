@@ -43,6 +43,9 @@ public class UserService {
     @Autowired
     private AuditLogService auditLogService;
 
+    @Autowired
+    private org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+
     public List<UserDto> getAllUsers(UUID orgId) {
         return userRepository.findAllByOrgId(orgId)
                 .stream()
@@ -140,7 +143,7 @@ public class UserService {
             throw new RuntimeException("Invite has expired");
         }
 
-        if (!"PENDING".equals(invite.getStatus())) {
+        if (Invite.InviteStatus.PENDING != invite.getStatus()) {
             throw new RuntimeException("Invite has already been used");
         }
 
@@ -172,7 +175,6 @@ public class UserService {
     }
 
     private String hashPassword(String password) {
-        // Implement proper password hashing (e.g., BCrypt)
-        return password; // Placeholder
+        return passwordEncoder.encode(password);
     }
 }
