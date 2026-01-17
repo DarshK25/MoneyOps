@@ -32,15 +32,13 @@ public class AuditLogController {
 
         List<AuditLog> logs = auditLogService.getAllAuditLogs();
         // TODO: Implement pagination
-        PageResponse<AuditLog> pageResponse = new PageResponse<>(
-                logs,
-                page,
-                size,
-                logs.size(),
-                1,
-                true,
-                true
-        );
+        PageResponse<AuditLog> pageResponse = PageResponse.<AuditLog>builder()
+                .content(logs)
+                .page(page)
+                .size(size)
+                .totalElements(logs.size())
+                .totalPages(1)
+                .build();
 
         return ResponseEntity.ok(ApiResponse.success(pageResponse));
     }

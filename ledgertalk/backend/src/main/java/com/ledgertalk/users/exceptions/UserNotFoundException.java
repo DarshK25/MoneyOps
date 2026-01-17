@@ -10,8 +10,4 @@ public class UserNotFoundException extends NotFoundException {
     public UserNotFoundException(UUID id) {
         super("User", id);
     }
-
-    public UserNotFoundException(String message) {
-        super(message);
-    }
 }

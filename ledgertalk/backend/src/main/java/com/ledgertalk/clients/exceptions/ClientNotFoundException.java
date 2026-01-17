@@ -10,8 +10,4 @@ public class ClientNotFoundException extends NotFoundException {
     public ClientNotFoundException(UUID id) {
         super("Client", id);
     }
-
-    public ClientNotFoundException(String message) {
-        super(message);
-    }
 }

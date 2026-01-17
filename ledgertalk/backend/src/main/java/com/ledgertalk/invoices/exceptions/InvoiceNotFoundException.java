@@ -10,8 +10,4 @@ public class InvoiceNotFoundException extends NotFoundException {
     public InvoiceNotFoundException(UUID id) {
         super("Invoice", id);
     }
-
-    public InvoiceNotFoundException(String message) {
-        super(message);
-    }
 }

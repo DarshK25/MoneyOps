@@ -1,3 +1,4 @@
+// src/main/java/com/ledgertalk/users/service/UserService.java
 package com.ledgertalk.users.service;
 
 import com.ledgertalk.audit.service.AuditLogService;
@@ -6,9 +7,6 @@ import com.ledgertalk.users.dto.CreateInviteRequest;
 import com.ledgertalk.users.dto.AcceptInviteRequest;
 import com.ledgertalk.users.entity.User;
 import com.ledgertalk.users.entity.Invite;
-import com.ledgertalk.users.exceptions.UserConflictException;
-import com.ledgertalk.users.exceptions.UserInvalidStateException;
-import com.ledgertalk.users.exceptions.UserNotFoundException;
 import com.ledgertalk.users.mapper.UserMapper;
 import com.ledgertalk.users.repository.UserRepository;
 import com.ledgertalk.users.repository.InviteRepository;
@@ -54,14 +52,14 @@ public class UserService {
 
     public UserDto getUserById(UUID id, UUID orgId) {
         User user = userRepository.findByIdAndOrgId(id, orgId)
-                .orElseThrow(() -> new UserNotFoundException("User not found with id: " + id));
+                .orElseThrow(() -> new RuntimeException("User not found"));
         return userMapper.toDto(user);
     }
 
     public UserDto createUser(UserDto dto, UUID orgId, UUID createdBy) {
         userValidator.validate(dto);
         if (userRepository.existsByEmailAndOrgId(dto.getEmail(), orgId)) {
-            throw new UserConflictException("User with this email already exists: " + dto.getEmail());
+            throw new RuntimeException("User with this email already exists");
         }
 
         User user = userMapper.toEntity(dto);
@@ -79,7 +77,7 @@ public class UserService {
     public UserDto updateUser(UUID id, UserDto dto, UUID orgId, UUID updatedBy) {
         userValidator.validate(dto);
         User user = userRepository.findByIdAndOrgId(id, orgId)
-                .orElseThrow(() -> new UserNotFoundException("User not found with id: " + id));
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
         User oldUser = new User();
         oldUser.setName(user.getName());
@@ -101,7 +99,7 @@ public class UserService {
 
     public void deleteUser(UUID id, UUID orgId) {
         User user = userRepository.findByIdAndOrgId(id, orgId)
-                .orElseThrow(() -> new UserNotFoundException("User not found with id: " + id));
+                .orElseThrow(() -> new RuntimeException("User not found"));
         auditLogService.logDelete("User", id.toString(), user);
         userRepository.deleteByIdAndOrgId(id, orgId);
     }
@@ -116,7 +114,7 @@ public class UserService {
     public void createInvite(CreateInviteRequest request, UUID orgId, UUID createdBy) {
         userValidator.validateInvite(request);
         if (inviteRepository.existsByEmailAndOrgIdAndStatus(request.getEmail(), orgId, "PENDING")) {
-            throw new UserConflictException("Invite already exists for this email: " + request.getEmail());
+            throw new RuntimeException("Invite already exists for this email");
         }
 
         Invite invite = new Invite();
@@ -136,14 +134,14 @@ public class UserService {
         inviteValidator.validateAcceptInvite(request);
 
         Invite invite = inviteRepository.findByToken(request.getToken())
-                .orElseThrow(() -> new UserNotFoundException("Invalid invite token"));
+                .orElseThrow(() -> new RuntimeException("Invalid invite token"));
 
         if (invite.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new UserInvalidStateException("Invite has expired");
+            throw new RuntimeException("Invite has expired");
         }
 
-        if (Invite.InviteStatus.ACCEPTED.equals(invite.getStatus())) {
-            throw new UserInvalidStateException("Invite has already been used");
+        if (!"PENDING".equals(invite.getStatus())) {
+            throw new RuntimeException("Invite has already been used");
         }
 
         // Create user

@@ -1,3 +1,4 @@
+// src/main/java/com/ledgertalk/invoices/service/InvoiceService.java
 package com.ledgertalk.invoices.service;
 
 import com.ledgertalk.invoices.dto.InvoiceDto;
@@ -5,8 +6,6 @@ import com.ledgertalk.invoices.dto.InvoiceItemDto;
 import com.ledgertalk.invoices.entity.Invoice;
 import com.ledgertalk.invoices.entity.InvoiceItem;
 import com.ledgertalk.invoices.entity.InvoiceStatus;
-import com.ledgertalk.invoices.exceptions.InvoiceInvalidStateException;
-import com.ledgertalk.invoices.exceptions.InvoiceNotFoundException;
 import com.ledgertalk.invoices.mapper.InvoiceMapper;
 import com.ledgertalk.invoices.repository.InvoiceRepository;
 import com.ledgertalk.invoices.repository.InvoiceItemRepository;
@@ -41,7 +40,7 @@ public class InvoiceService {
 
     public InvoiceDto getInvoiceById(UUID id, UUID orgId) {
         Invoice invoice = invoiceRepository.findByIdAndOrgId(id, orgId)
-                .orElseThrow(() -> new InvoiceNotFoundException("Invoice not found with id: " + id));
+                .orElseThrow(() -> new RuntimeException("Invoice not found"));
         return invoiceMapper.toDto(invoice);
     }
 
@@ -61,10 +60,10 @@ public class InvoiceService {
 
     public InvoiceDto updateInvoice(UUID id, InvoiceDto dto, UUID orgId) {
         Invoice existing = invoiceRepository.findByIdAndOrgId(id, orgId)
-                .orElseThrow(() -> new InvoiceNotFoundException("Invoice not found with id: " + id));
+                .orElseThrow(() -> new RuntimeException("Invoice not found"));
 
         if (existing.getStatus() != InvoiceStatus.DRAFT) {
-            throw new InvoiceInvalidStateException("Can only update draft invoices");
+            throw new IllegalStateException("Can only update draft invoices");
         }
 
         invoiceValidator.validate(dto);
@@ -84,10 +83,10 @@ public class InvoiceService {
 
     public void deleteInvoice(UUID id, UUID orgId) {
         Invoice invoice = invoiceRepository.findByIdAndOrgId(id, orgId)
-                .orElseThrow(() -> new InvoiceNotFoundException("Invoice not found with id: " + id));
+                .orElseThrow(() -> new RuntimeException("Invoice not found"));
 
         if (invoice.getStatus() == InvoiceStatus.PAID) {
-            throw new InvoiceInvalidStateException("Cannot delete paid invoices");
+            throw new IllegalStateException("Cannot delete paid invoices");
         }
 
         invoiceRepository.deleteByIdAndOrgId(id, orgId);
@@ -95,10 +94,10 @@ public class InvoiceService {
 
     public InvoiceDto sendInvoice(UUID id, UUID orgId) {
         Invoice invoice = invoiceRepository.findByIdAndOrgId(id, orgId)
-                .orElseThrow(() -> new InvoiceNotFoundException("Invoice not found with id: " + id));
+                .orElseThrow(() -> new RuntimeException("Invoice not found"));
 
         if (invoice.getStatus() != InvoiceStatus.DRAFT) {
-            throw new InvoiceInvalidStateException("Can only send draft invoices");
+            throw new IllegalStateException("Can only send draft invoices");
         }
 
         invoice.setStatus(InvoiceStatus.SENT);
@@ -109,10 +108,10 @@ public class InvoiceService {
 
     public InvoiceDto markPaid(UUID id, UUID orgId) {
         Invoice invoice = invoiceRepository.findByIdAndOrgId(id, orgId)
-                .orElseThrow(() -> new InvoiceNotFoundException("Invoice not found with id: " + id));
+                .orElseThrow(() -> new RuntimeException("Invoice not found"));
 
         if (invoice.getStatus() != InvoiceStatus.SENT) {
-            throw new InvoiceInvalidStateException("Can only mark sent invoices as paid");
+            throw new IllegalStateException("Can only mark sent invoices as paid");
         }
 
         invoice.setStatus(InvoiceStatus.PAID);
@@ -135,10 +134,10 @@ public class InvoiceService {
     // InvoiceItem operations
     public InvoiceItemDto addItem(UUID invoiceId, InvoiceItemDto itemDto, UUID orgId) {
         Invoice invoice = invoiceRepository.findByIdAndOrgId(invoiceId, orgId)
-                .orElseThrow(() -> new InvoiceNotFoundException("Invoice not found with id: " + invoiceId));
+                .orElseThrow(() -> new RuntimeException("Invoice not found"));
 
         if (invoice.getStatus() != InvoiceStatus.DRAFT) {
-            throw new InvoiceInvalidStateException("Can only add items to draft invoices");
+            throw new IllegalStateException("Can only add items to draft invoices");
         }
 
         InvoiceItem item = new InvoiceItem();
@@ -169,14 +168,14 @@ public class InvoiceService {
 
     public void updateItem(UUID itemId, InvoiceItemDto itemDto, UUID orgId) {
         InvoiceItem item = invoiceItemRepository.findById(itemId)
-                .orElseThrow(() -> new InvoiceNotFoundException("Item not found with id: " + itemId));
+                .orElseThrow(() -> new RuntimeException("Item not found"));
 
         // Check org via invoice
         invoiceRepository.findByIdAndOrgId(item.getInvoice().getId(), orgId)
-                .orElseThrow(() -> new InvoiceNotFoundException("Invoice not found with id: " + item.getInvoice().getId()));
+                .orElseThrow(() -> new RuntimeException("Invoice not found"));
 
         if (item.getInvoice().getStatus() != InvoiceStatus.DRAFT) {
-            throw new InvoiceInvalidStateException("Can only update items in draft invoices");
+            throw new IllegalStateException("Can only update items in draft invoices");
         }
 
         item.setDescription(itemDto.getDescription());
@@ -202,13 +201,13 @@ public class InvoiceService {
 
     public void deleteItem(UUID itemId, UUID orgId) {
         InvoiceItem item = invoiceItemRepository.findById(itemId)
-                .orElseThrow(() -> new InvoiceNotFoundException("Item not found with id: " + itemId));
+                .orElseThrow(() -> new RuntimeException("Item not found"));
 
         invoiceRepository.findByIdAndOrgId(item.getInvoice().getId(), orgId)
-                .orElseThrow(() -> new InvoiceNotFoundException("Invoice not found with id: " + item.getInvoice().getId()));
+                .orElseThrow(() -> new RuntimeException("Invoice not found"));
 
         if (item.getInvoice().getStatus() != InvoiceStatus.DRAFT) {
-            throw new InvoiceInvalidStateException("Can only delete items from draft invoices");
+            throw new IllegalStateException("Can only delete items from draft invoices");
         }
 
         invoiceItemRepository.deleteById(itemId);
