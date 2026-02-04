@@ -4,8 +4,8 @@ spring:
       client:
         registration:
           google:
-            client-id: INSERT_YOUR_GOOGLE_CLIENT_ID_HERE
-            client-secret: INSERT_YOUR_GOOGLE_CLIENT_SECRET_HERE
+            client-id: ${GOOGLE_OAUTH_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
             scope:
               - email
               - profile
@@ -34,7 +34,12 @@ spring:
         dialect: org.hibernate.dialect.H2Dialect
 
   kafka:
+    enabled: false
     bootstrap-servers: localhost:9092
+
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
 
 server:
   port: 8000
@@ -46,3 +51,4 @@ jwt:
 logging:
   level:
     com.moneyops: DEBUG
+    org.apache.kafka: ERROR

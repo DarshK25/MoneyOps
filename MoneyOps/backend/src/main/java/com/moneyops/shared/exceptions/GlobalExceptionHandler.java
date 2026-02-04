@@ -59,6 +59,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<ErrorResponse>> handleGeneric(Exception ex, WebRequest request) {
+        ex.printStackTrace(); // Log the actual stack trace to console
         ErrorResponse error = new ErrorResponse("INTERNAL_ERROR", "An unexpected error occurred", request.getDescription(false));
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.error("Internal server error"));

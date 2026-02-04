@@ -9,10 +9,14 @@ import org.springframework.stereotype.Component;
 @Component
 public class EventPublisher {
 
-    @Autowired
+    @Autowired(required = false)
     private KafkaTemplate<String, String> kafkaTemplate;
 
     public void publish(DomainEvent event) {
-        kafkaTemplate.send(event.getTopic(), event.getKey(), event.getPayload());
+        if (kafkaTemplate != null) {
+            kafkaTemplate.send(event.getTopic(), event.getKey(), event.getPayload());
+        } else {
+            System.out.println("Kafka not available. Skipping event: " + event.getTopic());
+        }
     }
 }

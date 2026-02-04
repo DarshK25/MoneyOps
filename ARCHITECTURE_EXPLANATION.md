@@ -42,7 +42,7 @@ This is **NOT** just API calls. This is a **distributed, intelligent orchestrati
               │
 ┌─────────────┴───────────────────────────────────────────────────┐
 │         AI GATEWAY (Member 1 - THE CORE COMPLEXITY)            │
-│                                                                  │
+│                           2                                       │
 │  ┌─────────────────────────────────────────────────────────┐   │
 │  │ REQUEST LAYER (FastAPI)                                 │   │
 │  │ - /api/v1/chat/    (sync text chat)                    │   │
@@ -112,36 +112,29 @@ This is **NOT** just API calls. This is a **distributed, intelligent orchestrati
 │  │  │ │ - get_transactions()                    │   │  │  │
 │  │  │ │ - record_payment()                      │   │  │  │
 │  │  │ └─────────────────────────────────────────┘   │  │  │
-│  │  └───────┬────────────────────────────────────────┘  │  │
-│  │          │                                           │  │
-│  │  ┌───────┴──────────────────────────────────────┐   │  │
-│  │  │ LLM Integration (Reasoning & Response Gen)   │   │  │
+│  │  └───────┬─────────────────────────────────-─────┘  │  │
+│  │          │                                         │  │
+│  │  ┌───────┴─────────────────────────────────────┐   │  │
+│  │  │ LLM Integration (Reasoning & Response Gen)  │   │  │
 │  │  │ ┌──────────────────────────────────────┐    │   │  │
-│  │  │ │ Groq API (Fast inference)             │    │   │  │
-│  │  │ │ llama-3.1-70b-versatile               │    │   │  │
-│  │  │ │ - Intent classification               │    │   │  │
-│  │  │ │ - Quick queries                       │    │   │  │
-│  │  │ │ - Response formatting                 │    │   │  │
-│  │  │ └──────────────────────────────────────┘    │   │  │
-│  │  │ ┌──────────────────────────────────────┐    │   │  │
-│  │  │ │ Claude API (Complex reasoning)        │    │   │  │
-│  │  │ │ claude-3-5-sonnet                     │    │   │  │
-│  │  │ │ - Complex analysis                    │    │   │  │
-│  │  │ │ - Compliance decisions                │    │   │  │
-│  │  │ │ - Strategy recommendations            │    │   │  │
+│  │  │ │ Groq API (Fast inference)            │    │   │  │
+│  │  │ │ groq/compond                         │    │   │  │
+│  │  │ │ - Intent classification              │    │   │  │
+│  │  │ │ - Quick queries                      │    │   │  │
+│  │  │ │ - Response formatting                │    │   │  │
 │  │  │ └──────────────────────────────────────┘    │   │  │
 │  │  └─────────────────────────────────────────────┘   │  │
 │  └────────────────────────────────────────────────────┘  │
-│             │                                             │
-│  ┌──────────┴──────────────────────────────────────────┐ │
+│             │                                            │
+│  ┌──────────┴─────────────────────────────────────────┐ │
 │  │ INTEGRATION LAYER (Backend Communication)          │ │
 │  │                                                    │ │
-│  │ Backend HTTP Client                               │ │
-│  │ - Service discovery                               │ │
-│  │ - Authentication/Authorization                    │ │
-│  │ - Connection pooling                              │ │
-│  │ - Retry logic & circuit breakers                  │ │
-│  │ - Request/Response transformation                 │ │
+│  │ Backend HTTP Client                                │ │
+│  │ - Service discovery                                │ │
+│  │ - Authentication/Authorization                     │ │
+│  │ - Connection pooling                               │ │
+│  │ - Retry logic & circuit breakers                   │ │
+│  │ - Request/Response transformation                  │ │
 │  └────────────────────────────────────────────────────┘ │
 └─────────────┬───────────────────────────────────────────┘
               │
@@ -152,7 +145,7 @@ This is **NOT** just API calls. This is a **distributed, intelligent orchestrati
 │  │ - User Auth       - Invoice Management                   │   │
 │  │ - Organization    - Client Management                    │   │
 │  │ - Transactions    - Document Storage                     │   │
-│  │ - Audit Logs      - Events/Webhooks                     │   │
+│  │ - Audit Logs      - Events/Webhooks                      │   │
 │  └──────────────────────────────────────────────────────────┘   │
 └─────────────┬───────────────────────────────────────────────────┘
               │
@@ -172,7 +165,7 @@ This is **NOT** just API calls. This is a **distributed, intelligent orchestrati
 │  │   * Invoice reminder workflows (scheduled)               │   │
 │  │   * Compliance reporting workflows                       │   │
 │  │   * Document processing workflows                        │   │
-│  │ - Integrates with SendGrid for notifications            │   │
+│  │ - Integrates with SendGrid for notifications             │   │
 │  │ - Maintains workflow state                               │   │
 │  └──────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
@@ -492,7 +485,6 @@ Backend Event → Workflow Engine → AI Gateway Agents → Backend Actions
 
 ---
 
-## Complexity Metrics to Show Teachers
 
 ### Code Organization
 ```
@@ -667,7 +659,6 @@ async def chat(req: ChatRequest):
 
 ---
 
-## Key Arguments for Teachers
 
 ### 1. **Distributed System Design**
 "We're not building a monolith. We're building 4 independent services:
@@ -737,7 +728,6 @@ This is production engineering."
 
 ---
 
-## Demo Script for Teachers
 
 **Scenario: "Send reminder to ABC Corp about overdue invoice"**
 
@@ -789,4 +779,3 @@ It's the difference between:
 - Building a REST endpoint
 - Building an AI-powered business intelligence system
 
-Show the teachers the architecture diagram and walk them through **one request** in detail. That's where the complexity reveals itself.
