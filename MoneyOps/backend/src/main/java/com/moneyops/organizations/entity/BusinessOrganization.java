@@ -1,70 +1,39 @@
-// src/main/java/com/moneyops/organizations/entity/BusinessOrganization.java
 package com.moneyops.organizations.entity;
 
-import jakarta.persistence.*;
 import lombok.Data;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-@Entity
-@Table(name = "business_organizations")
+@Document(collection = "business_organizations")
 @Data
 public class BusinessOrganization {
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
+    private UUID id = UUID.randomUUID();
 
-    @Column(nullable = false)
     private String legalName;
-
     private String tradingName;
-
-    @Enumerated(EnumType.STRING)
     private BusinessType businessType;
-
-    @Enumerated(EnumType.STRING)
     private Industry industry;
-
     private LocalDate registrationDate;
-
-    @Enumerated(EnumType.STRING)
     private TurnoverRange annualTurnoverRange;
-
     private String primaryEmail;
-
     private String primaryPhone;
-
     private String website;
-
     private Integer employeeCount;
-
-    @Column(columnDefinition = "TEXT")
     private String registeredAddress;
-
-    @Enumerated(EnumType.STRING)
     private Month financialYearStartMonth;
-
     private String preferredLanguage;
-
     private String primaryActivity;
-
-    @Enumerated(EnumType.STRING)
     private TargetMarket targetMarket;
-
-    @Enumerated(EnumType.STRING)
     private AccountingMethod accountingMethod;
-
-    @Column(nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
-
-    @Column(nullable = false)
     private LocalDateTime updatedAt = LocalDateTime.now();
-
-    @Column(nullable = false)
     private UUID createdBy;
 
-    // Enums
     public enum BusinessType {
         Proprietorship, Partnership, LLP, PvtLtd, PublicLtd, NGO, Other
     }

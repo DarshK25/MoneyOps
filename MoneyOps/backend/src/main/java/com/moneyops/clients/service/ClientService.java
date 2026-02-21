@@ -90,7 +90,8 @@ public class ClientService {
     }
 
     public List<ClientDto> searchClients(UUID orgId, String search) {
-        return clientRepository.searchByOrgIdWithFilters(orgId, search)
+        String pattern = ".*" + java.util.regex.Pattern.quote(search) + ".*";
+        return clientRepository.searchByOrgIdWithFilters(orgId, pattern)
                 .stream()
                 .map(clientMapper::toDto)
                 .collect(Collectors.toList());

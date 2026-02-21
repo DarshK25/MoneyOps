@@ -9,7 +9,7 @@ import com.moneyops.invoices.entity.InvoiceStatus;
 
 import org.springframework.stereotype.Component;
 
-import java.util.stream.Collectors;
+import java.util.UUID;
 
 @Component
 public class InvoiceMapper {
@@ -28,17 +28,13 @@ public class InvoiceMapper {
         dto.setCurrency(invoice.getCurrency());
         dto.setPaymentDate(invoice.getPaymentDate());
         dto.setNotes(invoice.getNotes());
-        if (invoice.getItems() != null) {
-            dto.setItems(invoice.getItems().stream()
-                    .map(this::toItemDto)
-                    .collect(Collectors.toList()));
-        }
+        // Items are loaded separately and set on DTO when needed
         return dto;
     }
 
     public Invoice toEntity(InvoiceDto dto) {
         Invoice invoice = new Invoice();
-        invoice.setId(dto.getId());
+        if (dto.getId() != null) invoice.setId(dto.getId());
         invoice.setInvoiceNumber(dto.getInvoiceNumber());
         invoice.setClientId(dto.getClientId());
         invoice.setIssueDate(dto.getIssueDate());
@@ -50,11 +46,6 @@ public class InvoiceMapper {
         invoice.setCurrency(dto.getCurrency());
         invoice.setPaymentDate(dto.getPaymentDate());
         invoice.setNotes(dto.getNotes());
-        if (dto.getItems() != null) {
-            invoice.setItems(dto.getItems().stream()
-                    .map(itemDto -> toItemEntity(itemDto, invoice))
-                    .collect(Collectors.toList()));
-        }
         return invoice;
     }
 
@@ -71,9 +62,9 @@ public class InvoiceMapper {
         return dto;
     }
 
-    private InvoiceItem toItemEntity(InvoiceItemDto dto, Invoice invoice) {
+    public InvoiceItem toItemEntity(InvoiceItemDto dto, UUID invoiceId) {
         InvoiceItem item = new InvoiceItem();
-        item.setInvoice(invoice);
+        item.setInvoiceId(invoiceId);
         item.setType(InvoiceItem.ItemType.valueOf(dto.getType()));
         item.setDescription(dto.getDescription());
         item.setQuantity(dto.getQuantity());

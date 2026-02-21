@@ -69,7 +69,7 @@ public class OrganizationMapper {
 
     public RegulatoryProfile toRegulatoryEntity(RegulatoryProfileDto dto, BusinessOrganization org) {
         RegulatoryProfile profile = new RegulatoryProfile();
-        profile.setOrganization(org);
+        profile.setOrgId(org.getId());
         profile.setPanNumber(dto.getPanNumber());
         profile.setStateOfRegistration(dto.getStateOfRegistration());
         profile.setGstRegistered(dto.getGstRegistered());

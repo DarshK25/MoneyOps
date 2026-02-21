@@ -81,19 +81,21 @@ public class TransactionService {
     }
 
     public List<TransactionDto> getTransactionsByDateRange(UUID orgId, LocalDate startDate, LocalDate endDate) {
-        return transactionRepository.findByOrgIdAndDateRange(orgId, startDate, endDate).stream()
+        return transactionRepository.findByOrgIdAndTransactionDateBetween(orgId, startDate, endDate).stream()
                 .map(transactionMapper::toDto)
                 .collect(Collectors.toList());
     }
 
     public BigDecimal getTotalIncome(UUID orgId) {
-        BigDecimal total = transactionRepository.getTotalByOrgIdAndType(orgId, TransactionType.INCOME);
-        return total != null ? total : BigDecimal.ZERO;
+        return transactionRepository.findByOrgIdAndType(orgId, TransactionType.INCOME).stream()
+                .map(Transaction::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     public BigDecimal getTotalExpense(UUID orgId) {
-        BigDecimal total = transactionRepository.getTotalByOrgIdAndType(orgId, TransactionType.EXPENSE);
-        return total != null ? total : BigDecimal.ZERO;
+        return transactionRepository.findByOrgIdAndType(orgId, TransactionType.EXPENSE).stream()
+                .map(Transaction::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     public Map<String, BigDecimal> getFinancialSummary(UUID orgId) {

@@ -41,7 +41,11 @@ public class InvoiceService {
     public InvoiceDto getInvoiceById(UUID id, UUID orgId) {
         Invoice invoice = invoiceRepository.findByIdAndOrgId(id, orgId)
                 .orElseThrow(() -> new RuntimeException("Invoice not found"));
-        return invoiceMapper.toDto(invoice);
+        InvoiceDto dto = invoiceMapper.toDto(invoice);
+        dto.setItems(invoiceItemRepository.findByInvoiceId(id).stream()
+                .map(invoiceMapper::toItemDto)
+                .collect(Collectors.toList()));
+        return dto;
     }
 
     public InvoiceDto createInvoice(InvoiceDto dto, UUID orgId, UUID userId) {
@@ -55,7 +59,13 @@ public class InvoiceService {
         invoice.setUpdatedAt(LocalDateTime.now());
 
         Invoice saved = invoiceRepository.save(invoice);
-        return invoiceMapper.toDto(saved);
+        if (dto.getItems() != null) {
+            for (InvoiceItemDto itemDto : dto.getItems()) {
+                InvoiceItem item = invoiceMapper.toItemEntity(itemDto, saved.getId());
+                invoiceItemRepository.save(item);
+            }
+        }
+        return getInvoiceById(saved.getId(), orgId);
     }
 
     public InvoiceDto updateInvoice(UUID id, InvoiceDto dto, UUID orgId) {
@@ -75,10 +85,15 @@ public class InvoiceService {
         updated.setCreatedBy(existing.getCreatedBy());
         updated.setUpdatedAt(LocalDateTime.now());
 
-        // Delete old items and save new ones
         invoiceItemRepository.deleteByInvoiceId(id);
         Invoice saved = invoiceRepository.save(updated);
-        return invoiceMapper.toDto(saved);
+        if (dto.getItems() != null) {
+            for (InvoiceItemDto itemDto : dto.getItems()) {
+                InvoiceItem item = invoiceMapper.toItemEntity(itemDto, saved.getId());
+                invoiceItemRepository.save(item);
+            }
+        }
+        return getInvoiceById(saved.getId(), orgId);
     }
 
     public void deleteInvoice(UUID id, UUID orgId) {
@@ -170,11 +185,10 @@ public class InvoiceService {
         InvoiceItem item = invoiceItemRepository.findById(itemId)
                 .orElseThrow(() -> new RuntimeException("Item not found"));
 
-        // Check org via invoice
-        invoiceRepository.findByIdAndOrgId(item.getInvoice().getId(), orgId)
+        Invoice invoice = invoiceRepository.findByIdAndOrgId(item.getInvoiceId(), orgId)
                 .orElseThrow(() -> new RuntimeException("Invoice not found"));
 
-        if (item.getInvoice().getStatus() != InvoiceStatus.DRAFT) {
+        if (invoice.getStatus() != InvoiceStatus.DRAFT) {
             throw new IllegalStateException("Can only update items in draft invoices");
         }
 
@@ -183,7 +197,6 @@ public class InvoiceService {
         item.setRate(itemDto.getRate());
         item.setGstPercent(itemDto.getGstPercent());
 
-        // Recalculate
         var qty = item.getType() == InvoiceItem.ItemType.SERVICE ? 1 : item.getQuantity();
         var lineSubtotal = item.getRate().multiply(BigDecimal.valueOf(qty));
         var lineGst = lineSubtotal.multiply(item.getGstPercent().divide(BigDecimal.valueOf(100)));
@@ -194,26 +207,22 @@ public class InvoiceService {
         item.setLineTotal(lineTotal);
 
         invoiceItemRepository.save(item);
-
-        // Recalculate invoice totals
-        recalculateInvoiceTotals(item.getInvoice());
+        recalculateInvoiceTotals(invoice);
     }
 
     public void deleteItem(UUID itemId, UUID orgId) {
         InvoiceItem item = invoiceItemRepository.findById(itemId)
                 .orElseThrow(() -> new RuntimeException("Item not found"));
 
-        invoiceRepository.findByIdAndOrgId(item.getInvoice().getId(), orgId)
+        Invoice invoice = invoiceRepository.findByIdAndOrgId(item.getInvoiceId(), orgId)
                 .orElseThrow(() -> new RuntimeException("Invoice not found"));
 
-        if (item.getInvoice().getStatus() != InvoiceStatus.DRAFT) {
+        if (invoice.getStatus() != InvoiceStatus.DRAFT) {
             throw new IllegalStateException("Can only delete items from draft invoices");
         }
 
         invoiceItemRepository.deleteById(itemId);
-
-        // Recalculate invoice totals
-        recalculateInvoiceTotals(item.getInvoice());
+        recalculateInvoiceTotals(invoice);
     }
 
     private void recalculateInvoiceTotals(Invoice invoice) {

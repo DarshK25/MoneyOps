@@ -100,7 +100,7 @@ public class AuditLogService {
     }
 
     public List<AuditLog> getAuditLogsByDateRange(LocalDateTime start, LocalDateTime end) {
-        return auditLogRepository.findByOrgIdAndTimestampBetween(OrgContext.getOrgId(), start, end);
+        return auditLogRepository.findByOrgIdAndTimestampBetweenOrderByTimestampDesc(OrgContext.getOrgId(), start, end);
     }
 
     public List<AuditLog> getAuditLogsByOperation(AuditLog.Operation operation) {

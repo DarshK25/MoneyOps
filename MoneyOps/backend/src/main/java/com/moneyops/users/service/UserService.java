@@ -108,7 +108,8 @@ public class UserService {
     }
 
     public List<UserDto> searchUsers(UUID orgId, String search) {
-        return userRepository.searchByOrgIdWithFilters(orgId, search)
+        String pattern = ".*" + java.util.regex.Pattern.quote(search) + ".*";
+        return userRepository.searchByOrgIdWithFilters(orgId, pattern)
                 .stream()
                 .map(userMapper::toDto)
                 .collect(Collectors.toList());
