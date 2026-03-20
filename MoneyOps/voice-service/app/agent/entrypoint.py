@@ -317,16 +317,18 @@ def _extract_user_context(ctx: JobContext) -> dict:
 
 
 def _create_tts():
-    """Try Cartesia first (better voice quality), fall back to Groq Orpheus."""
-    if HAS_CARTESIA and settings.CARTESIA_API_KEY:
+    """Try requested provider, or fall back to Groq if requested or if Cartesia fails."""
+    provider = settings.TTS_PROVIDER.lower()
+    
+    if provider == "cartesia" and HAS_CARTESIA and settings.CARTESIA_API_KEY:
         try:
             tts = _cartesia_plugin.TTS(api_key=settings.CARTESIA_API_KEY)
             logger.info("tts_provider", provider="cartesia")
             return tts
         except Exception as e:
-            logger.warning("cartesia_init_failed", error=str(e))
+            logger.warning("cartesia_init_failed", error=str(e), note="Falling back to Groq")
 
-    # Groq Orpheus — requires accepting terms at console.groq.com/playground
+    # Fallback/Default: Groq Orpheus
     logger.info("tts_provider", provider="groq-orpheus")
     return groq.TTS(model="canopylabs/orpheus-v1-english", voice="autumn")
 
