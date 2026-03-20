@@ -14,7 +14,7 @@ import { Loader2 } from "lucide-react";
 
 export function BusinessInfoStep({ initialData = {}, onNext, loading }) {
     const [formData, setFormData] = useState({
-        name: initialData.name || "",
+        legalName: initialData.legalName || "",
         tradingName: initialData.tradingName || "",
         businessType: initialData.businessType || "",
         industry: initialData.industry || "",
@@ -23,7 +23,7 @@ export function BusinessInfoStep({ initialData = {}, onNext, loading }) {
         primaryPhone: initialData.primaryPhone || "",
         website: initialData.website || "",
         registeredAddress: initialData.registeredAddress || "",
-        numberOfEmployees: initialData.numberOfEmployees || "",
+        numberOfEmployees: initialData.numberOfEmployees || null,
         annualTurnover: initialData.annualTurnover || "",
     });
 
@@ -47,11 +47,11 @@ export function BusinessInfoStep({ initialData = {}, onNext, loading }) {
             <div className="grid gap-4 md:grid-cols-2">
                 {/* Business Name */}
                 <div className="space-y-2">
-                    <Label htmlFor="name">Business Name *</Label>
+                    <Label htmlFor="legalName">Business Name *</Label>
                     <Input
-                        id="name"
-                        value={formData.name}
-                        onChange={(e) => updateField("name", e.target.value)}
+                        id="legalName"
+                        value={formData.legalName}
+                        onChange={(e) => updateField("legalName", e.target.value)}
                         required
                         placeholder="ABC Private Limited"
                     />
@@ -109,8 +109,15 @@ export function BusinessInfoStep({ initialData = {}, onNext, loading }) {
                             <SelectItem value="healthcare">Healthcare</SelectItem>
                             <SelectItem value="education">Education</SelectItem>
                             <SelectItem value="construction">Construction &amp; Real Estate</SelectItem>
-                            <SelectItem value="hospitality">Hospitality &amp; Tourism</SelectItem>
+                            <SelectItem value="energy_utilities">Energy &amp; Utilities</SelectItem>
                             <SelectItem value="finance">Finance &amp; Banking</SelectItem>
+                            <SelectItem value="hospitality">Hospitality &amp; Tourism</SelectItem>
+                            <SelectItem value="logistics">Logistics &amp; Supply Chain</SelectItem>
+                            <SelectItem value="agriculture">Agriculture &amp; Food</SelectItem>
+                            <SelectItem value="media">Media &amp; Entertainment</SelectItem>
+                            <SelectItem value="telecom">Telecommunications</SelectItem>
+                            <SelectItem value="aerospace">Aerospace &amp; Defence</SelectItem>
+                            <SelectItem value="government">Government &amp; Public Sector</SelectItem>
                             <SelectItem value="other">Other</SelectItem>
                         </SelectContent>
                     </Select>

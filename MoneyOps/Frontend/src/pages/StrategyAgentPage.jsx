@@ -3,14 +3,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  Brain, Target, TrendingUp, AlertTriangle, CheckCircle2, 
-  Lightbulb, Zap, Activity, BarChart3, RefreshCw 
+import {
+  Brain, Target, TrendingUp, AlertTriangle, CheckCircle2,
+  Lightbulb, Zap, Activity, BarChart3, RefreshCw
 } from "lucide-react";
 import { useOrganization, useAuth } from "@clerk/clerk-react";
 import { toast } from "sonner";
 
-const AI_GATEWAY_URL = import.meta.env.VITE_AI_GATEWAY_URL || "http://localhost:8000";
+const AI_GATEWAY_URL = ""; // Use Vite proxy via relative paths (/api/v1)
 
 export default function StrategyAgentPage() {
   const { organization } = useOrganization();
@@ -241,7 +241,7 @@ export default function StrategyAgentPage() {
                 <tool.ResultComponent data={results[tool.key]} />
               ) : (
                 <div className="text-center py-8 text-white/30">
-                  <tool.icon />
+                  <div className="flex justify-center mb-2 opacity-30">{tool.icon}</div>
                   <p className="text-sm mt-2">Click Run to execute analysis</p>
                 </div>
               )}

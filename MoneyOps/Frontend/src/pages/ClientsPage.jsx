@@ -1,11 +1,4 @@
 import { useState, useEffect } from "react";
-import { useAuth } from "@clerk/clerk-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
     Dialog,
     DialogContent,
@@ -15,6 +8,8 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
     Plus,
     Users,
@@ -26,41 +21,73 @@ import {
     Search,
     TrendingUp,
     DollarSign,
+    MoreVertical,
+    Trash2,
+    Edit2,
+    ArrowRight,
+    Filter,
+    Hash
 } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth, useUser } from "@clerk/clerk-react";
+import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import ClientDetailDialog from "@/components/ClientDetailDialog";
+import { AnimatePresence } from "framer-motion";
 
-// ── Initial form state ────────────────────────────────────────────────────────
 const INITIAL_FORM = {
     name: "",
     email: "",
-    phone: "",
+    phoneNumber: "",
     company: "",
-    gstin: "",
+    taxId: "",
     address: "",
     notes: "",
 };
 
 export default function ClientsPage() {
     const { getToken } = useAuth();
+    const { user } = useUser();
+    const { userId: internalUserId, orgId: internalOrgId } = useOnboardingStatus();
     const [clients, setClients] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
     const [dialogOpen, setDialogOpen] = useState(false);
     const [saving, setSaving] = useState(false);
     const [formData, setFormData] = useState(INITIAL_FORM);
+    const [selectedClient, setSelectedClient] = useState(null);
 
     useEffect(() => {
-        fetchClients();
-    }, []);
+        if (internalUserId && internalOrgId) {
+            fetchClients();
+        }
+    }, [internalUserId, internalOrgId]);
 
-    // ── API Calls ───────────────────────────────────────────────────────────────
+    // LISTEN FOR VOICE ACTIONS (Bug 3 Refresh)
+    useEffect(() => {
+        const handleVoiceAction = () => {
+            console.log("Refetching clients due to voice action");
+            fetchClients();
+        };
+        window.addEventListener("voice:client-created", handleVoiceAction);
+        return () => window.removeEventListener("voice:client-created", handleVoiceAction);
+    }, [internalUserId, internalOrgId]);
 
     const fetchClients = async () => {
         try {
             setLoading(true);
             const token = await getToken();
             const res = await fetch("/api/clients", {
-                headers: { Authorization: `Bearer ${token}` }
+                headers: {
+                    "Authorization": `Bearer ${token}`,
+                    "X-User-Id": internalUserId,
+                    "X-Org-Id": internalOrgId
+                }
             });
             if (!res.ok) throw new Error("Failed to fetch");
             const data = await res.json();
@@ -78,7 +105,6 @@ export default function ClientsPage() {
             toast.error("Client name is required");
             return;
         }
-
         setSaving(true);
         try {
             const token = await getToken();
@@ -86,16 +112,14 @@ export default function ClientsPage() {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`
+                    "Authorization": `Bearer ${token}`,
+                    "X-User-Id": internalUserId,
+                    "X-Org-Id": internalOrgId
                 },
                 body: JSON.stringify(formData),
             });
-
             const data = await res.json();
-            if (!res.ok || !data.success) {
-                throw new Error(data.message || "Failed to create client");
-            }
-
+            if (!res.ok) throw new Error(data.message || "Failed to create client");
             toast.success("Client created successfully");
             setDialogOpen(false);
             setFormData(INITIAL_FORM);
@@ -107,7 +131,31 @@ export default function ClientsPage() {
         }
     };
 
-    // ── Derived state ───────────────────────────────────────────────────────────
+    const handleDeleteClient = async (client) => {
+        const id = client.id || client._id;
+        if (!window.confirm(`Are you sure you want to delete client "${client.name}"? This cannot be undone.`)) return;
+
+        setSaving(true);
+        try {
+            const token = await getToken();
+            const res = await fetch(`/api/clients/${id}`, {
+                method: "DELETE",
+                headers: {
+                    "Authorization": `Bearer ${token}`,
+                    "X-User-Id": internalUserId,
+                    "X-Org-Id": internalOrgId
+                }
+            });
+            if (!res.ok) throw new Error("Failed to delete client");
+            toast.success("Client deleted successfully");
+            setSelectedClient(null);
+            fetchClients();
+        } catch (error) {
+            toast.error(error.message);
+        } finally {
+            setSaving(false);
+        }
+    };
 
     const filteredClients = clients.filter(
         (client) =>
@@ -117,300 +165,159 @@ export default function ClientsPage() {
             client.company?.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    const stats = {
-        total: clients.length,
-        active: clients.filter((c) => c.status === "active").length,
-        totalRevenue: clients.reduce((sum, c) => sum + (c.totalRevenue || 0), 0),
-        avgLifetimeValue:
-            clients.length > 0
-                ? clients.reduce((sum, c) => sum + (c.lifetimeValue || 0), 0) / clients.length
-                : 0,
+    const handleClientUpdate = (updated) => {
+        setClients(prev => prev.map(c => (c.id === updated.id ? updated : c)));
+        if (selectedClient?.id === updated.id) setSelectedClient(updated);
     };
 
-    // ── Helpers ────────────────────────────────────────────────────────────────
-
-    const updateForm = (field, value) =>
-        setFormData((prev) => ({ ...prev, [field]: value }));
-
-    // ── Render ──────────────────────────────────────────────────────────────────
-
     return (
-        <div className="space-y-6">
-            {/* ── Page Header ──────────────────────────────────────────────────── */}
-            <div className="flex items-center justify-between">
+        <div className="mo-page">
+            <AnimatePresence>
+                {selectedClient && (
+                    <ClientDetailDialog 
+                        client={selectedClient} 
+                        onClose={() => setSelectedClient(null)} 
+                        onUpdate={handleClientUpdate}
+                        onDelete={handleDeleteClient}
+                        internalUserId={internalUserId}
+                        internalOrgId={internalOrgId}
+                    />
+                )}
+            </AnimatePresence>
+
+            <div className="flex justify-between items-center mb-2">
                 <div>
-                    <h2 className="text-3xl font-bold tracking-tight">Clients</h2>
-                    <p className="text-slate-500 text-sm mt-1">Manage your client relationships</p>
+                    <h1 className="mo-h1">Clients</h1>
+                    <p className="mo-text-secondary">Manage your business relationships and leads</p>
                 </div>
-
-                <div className="flex items-center gap-2">
-                    {/* Refresh */}
-                    <Button variant="outline" size="icon" onClick={fetchClients} disabled={loading}>
-                        <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-                    </Button>
-
-                    {/* Create dialog */}
+                <div className="flex gap-3">
+                    <button className="mo-btn-secondary" onClick={fetchClients} disabled={loading}>
+                        <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                    </button>
                     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                         <DialogTrigger asChild>
-                            <Button className="bg-green-600 hover:bg-green-700">
-                                <Plus className="h-4 w-4 mr-2" /> New Client
-                            </Button>
+                            <button className="mo-btn-primary flex items-center gap-2">
+                                <Plus className="h-4 w-4" /> New Client
+                            </button>
                         </DialogTrigger>
-
-                        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+                        <DialogContent className="bg-[#1A1A1A] border-[#2A2A2A] text-white">
                             <DialogHeader>
-                                <DialogTitle>Create New Client</DialogTitle>
-                                <DialogDescription>
-                                    Add a new client to your database. Fill in the details below.
+                                <DialogTitle className="text-white">Add New Client</DialogTitle>
+                                <DialogDescription className="text-[#A0A0A0]">
+                                    Enter details for your new client.
                                 </DialogDescription>
                             </DialogHeader>
-
                             <div className="grid gap-4 py-4">
-                                {/* Name */}
                                 <div className="grid gap-2">
-                                    <Label htmlFor="client-name">Name *</Label>
-                                    <Input
-                                        id="client-name"
+                                    <Label htmlFor="name" className="text-white">Name</Label>
+                                    <input
+                                        id="name"
+                                        className="mo-input px-3 py-2"
                                         value={formData.name}
-                                        onChange={(e) => updateForm("name", e.target.value)}
-                                        placeholder="John Doe"
+                                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                        placeholder="Full Name"
                                     />
                                 </div>
-
-                                {/* Email */}
                                 <div className="grid gap-2">
-                                    <Label htmlFor="client-email">Email</Label>
-                                    <Input
-                                        id="client-email"
-                                        type="email"
+                                    <Label htmlFor="email" className="text-white">Email</Label>
+                                    <input
+                                        id="email"
+                                        className="mo-input px-3 py-2"
                                         value={formData.email}
-                                        onChange={(e) => updateForm("email", e.target.value)}
-                                        placeholder="john@example.com"
+                                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                        placeholder="Email Address"
                                     />
                                 </div>
-
-                                {/* Phone */}
                                 <div className="grid gap-2">
-                                    <Label htmlFor="client-phone">Phone</Label>
-                                    <Input
-                                        id="client-phone"
-                                        type="tel"
-                                        value={formData.phone}
-                                        onChange={(e) => updateForm("phone", e.target.value)}
-                                        placeholder="+91 98765 43210"
+                                    <Label htmlFor="phone" className="text-white">Phone</Label>
+                                    <input
+                                        id="phone"
+                                        className="mo-input px-3 py-2"
+                                        value={formData.phoneNumber}
+                                        onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
+                                        placeholder="Phone Number"
                                     />
                                 </div>
-
-                                {/* Company */}
                                 <div className="grid gap-2">
-                                    <Label htmlFor="client-company">Company</Label>
-                                    <Input
-                                        id="client-company"
-                                        value={formData.company}
-                                        onChange={(e) => updateForm("company", e.target.value)}
-                                        placeholder="Acme Corp"
-                                    />
-                                </div>
-
-                                {/* GSTIN */}
-                                <div className="grid gap-2">
-                                    <Label htmlFor="client-gstin">GST Number (GSTIN)</Label>
-                                    <Input
-                                        id="client-gstin"
-                                        value={formData.gstin}
-                                        onChange={(e) => updateForm("gstin", e.target.value.toUpperCase())}
-                                        placeholder="22AAAAA0000A1Z5"
-                                        maxLength={15}
-                                    />
-                                    <p className="text-xs text-slate-400">15-character GST Identification Number</p>
-                                </div>
-
-                                {/* Address */}
-                                <div className="grid gap-2">
-                                    <Label htmlFor="client-address">Address</Label>
+                                    <Label htmlFor="address" className="text-white">Address</Label>
                                     <Textarea
-                                        id="client-address"
+                                        id="address"
+                                        className="mo-input"
                                         value={formData.address}
-                                        onChange={(e) => updateForm("address", e.target.value)}
-                                        placeholder="123 Main St, City, State"
-                                        rows={2}
-                                    />
-                                </div>
-
-                                {/* Notes */}
-                                <div className="grid gap-2">
-                                    <Label htmlFor="client-notes">Notes</Label>
-                                    <Textarea
-                                        id="client-notes"
-                                        value={formData.notes}
-                                        onChange={(e) => updateForm("notes", e.target.value)}
-                                        placeholder="Additional notes about the client"
-                                        rows={2}
+                                        onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                                        placeholder="Office Address"
                                     />
                                 </div>
                             </div>
-
                             <DialogFooter>
-                                <Button variant="outline" onClick={() => setDialogOpen(false)}>
-                                    Cancel
-                                </Button>
-                                <Button
-                                    onClick={handleCreateClient}
-                                    disabled={saving}
-                                    className="bg-green-600 hover:bg-green-700"
-                                >
-                                    {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                <button className="mo-btn-secondary" onClick={() => setDialogOpen(false)}>Cancel</button>
+                                <button className="mo-btn-primary flex items-center gap-2" onClick={handleCreateClient} disabled={saving}>
+                                    {saving && <Loader2 className="h-4 w-4 animate-spin" />}
                                     Create Client
-                                </Button>
+                                </button>
                             </DialogFooter>
                         </DialogContent>
                     </Dialog>
                 </div>
             </div>
 
-            {/* ── Stats Cards ───────────────────────────────────────────────────── */}
-            <div className="grid gap-4 md:grid-cols-4">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-slate-500">Total Clients</CardTitle>
-                        <Users className="h-4 w-4 text-slate-400" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-3xl font-bold">{stats.total}</div>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-slate-500">Active</CardTitle>
-                        <TrendingUp className="h-4 w-4 text-slate-400" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-3xl font-bold text-green-600">{stats.active}</div>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-slate-500">Total Revenue</CardTitle>
-                        <DollarSign className="h-4 w-4 text-slate-400" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-3xl font-bold">₹{stats.totalRevenue.toLocaleString()}</div>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-slate-500">
-                            Avg Lifetime Value
-                        </CardTitle>
-                        <TrendingUp className="h-4 w-4 text-slate-400" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-3xl font-bold">
-                            ₹{stats.avgLifetimeValue.toFixed(0)}
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* ── Search ───────────────────────────────────────────────────────── */}
-            <div className="relative max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input
-                    placeholder="Search clients…"
+            <div className="relative mb-6">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#A0A0A0]" />
+                <input
+                    className="mo-input w-full pl-10 pr-4 py-2"
+                    placeholder="Search clients..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
                 />
             </div>
 
-            {/* ── Client List ──────────────────────────────────────────────────── */}
             {loading ? (
-                <div className="flex items-center justify-center h-64">
-                    <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+                <div className="flex justify-center p-20">
+                    <Loader2 className="h-8 w-8 animate-spin mo-accent" />
                 </div>
             ) : filteredClients.length === 0 ? (
-                /* Empty state */
-                <Card className="border-dashed">
-                    <CardContent className="flex flex-col items-center justify-center py-16">
-                        <Users className="h-16 w-16 text-slate-300 mb-4" />
-                        <h3 className="text-lg font-semibold mb-2">
-                            {searchQuery ? "No clients found" : "No clients yet"}
-                        </h3>
-                        <p className="text-slate-500 mb-6 text-center max-w-sm text-sm">
-                            {searchQuery
-                                ? "Try adjusting your search query"
-                                : "Add your first client to start managing relationships and invoices"}
-                        </p>
-                        {!searchQuery && (
-                            <Button
-                                onClick={() => setDialogOpen(true)}
-                                className="bg-green-600 hover:bg-green-700"
-                            >
-                                <Plus className="h-4 w-4 mr-2" /> Add Your First Client
-                            </Button>
-                        )}
-                    </CardContent>
-                </Card>
+                <div className="mo-card text-center py-20 flex flex-col items-center">
+                    <Users className="h-12 w-12 text-[#2A2A2A] mb-4" />
+                    <h3 className="mo-h2 mb-2">No clients found</h3>
+                    <p className="mo-text-secondary">Add your first client to get started.</p>
+                </div>
             ) : (
-                /* Client cards grid */
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {filteredClients.map((client) => (
-                        <Card key={client.id} className="hover:shadow-md transition-shadow cursor-pointer">
-                            <CardHeader className="pb-3">
-                                <div className="flex items-start justify-between">
-                                    <div className="flex-1 min-w-0">
-                                        <CardTitle className="text-lg truncate">{client.name}</CardTitle>
-                                        <Badge
-                                            variant={client.status === "active" ? "success" : "secondary"}
-                                            className="mt-2"
-                                        >
-                                            {client.status || "active"}
-                                        </Badge>
+                        <div 
+                            key={client.id} 
+                            className="mo-card flex flex-col justify-between cursor-pointer hover:border-[#4CBB17]"
+                            onClick={() => setSelectedClient(client)}
+                        >
+                            <div>
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className="h-10 w-10 rounded-full bg-[#4CBB1720] flex items-center justify-center">
+                                        <Building className="h-5 w-5 mo-accent" />
                                     </div>
+                                    <div className="mo-badge-success">{client.status || 'Active'}</div>
                                 </div>
-                            </CardHeader>
-
-                            <CardContent>
-                                <div className="space-y-2 text-sm">
-                                    {client.email && (
-                                        <div className="flex items-center gap-2 text-slate-500">
-                                            <Mail className="h-3.5 w-3.5 flex-shrink-0" />
-                                            <span className="truncate">{client.email}</span>
+                                <h3 className="mo-h2 mb-1 truncate">{client.name}</h3>
+                                <p className="mo-text-secondary mb-4 truncate">{client.email || 'No email'}</p>
+                                
+                                <div className="space-y-2">
+                                    {client.phoneNumber && (
+                                        <div className="flex items-center gap-2 text-xs text-[#A0A0A0]">
+                                            <Phone className="h-3 w-3" /> {client.phoneNumber}
                                         </div>
                                     )}
-                                    {client.phone && (
-                                        <div className="flex items-center gap-2 text-slate-500">
-                                            <Phone className="h-3.5 w-3.5 flex-shrink-0" />
-                                            <span>{client.phone}</span>
-                                        </div>
-                                    )}
-                                    {client.company && (
-                                        <div className="flex items-center gap-2 text-slate-500">
-                                            <Building className="h-3.5 w-3.5 flex-shrink-0" />
-                                            <span className="truncate">{client.company}</span>
-                                        </div>
-                                    )}
-                                    {client.gstin && (
-                                        <div className="flex items-center gap-2">
-                                            <Badge variant="secondary" className="font-mono text-xs">
-                                                GST: {client.gstin}
-                                            </Badge>
-                                        </div>
-                                    )}
-                                    {client.totalRevenue > 0 && (
-                                        <div className="pt-2 mt-2 border-t border-slate-100">
-                                            <p className="text-xs text-slate-400">Total Revenue</p>
-                                            <p className="font-semibold text-slate-800">
-                                                ₹{client.totalRevenue.toLocaleString()}
-                                            </p>
+                                    {(client.taxId || client.gstin) && (
+                                        <div className="flex items-center gap-2 text-xs text-[#A0A0A0]">
+                                            <Hash className="h-3 w-3" /> {client.taxId || client.gstin}
                                         </div>
                                     )}
                                 </div>
-                            </CardContent>
-                        </Card>
+                            </div>
+                            
+                            <div className="mt-6 pt-4 border-t mo-divider flex justify-between items-center">
+                                <span className="text-xs font-bold mo-accent">View Details</span>
+                                <Edit2 className="h-4 w-4 text-[#2A2A2A]" />
+                            </div>
+                        </div>
                     ))}
                 </div>
             )}

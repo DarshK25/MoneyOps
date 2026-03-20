@@ -1,16 +1,20 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useUser } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, X, Phone, PhoneOff, Mic } from "lucide-react";
+import { X, Phone, PhoneOff, Mic, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
     LiveKitRoom,
     RoomAudioRenderer,
     useConnectionState,
+    useRoomContext,
     ConnectionState,
 } from "@livekit/components-react";
 import "@livekit/components-styles";
+import { AIVoiceInput } from "@/components/ui/ai-voice-input";
+import { motion, AnimatePresence } from "framer-motion";
+import { useVoiceEvents } from "@/hooks/useVoiceEvents";
+import ClientInputDialog from "./ClientInputDialog";
 
 export function VoiceCallAgent({ agentType = "orchestrator" }) {
     const { user, isLoaded } = useUser();
@@ -19,8 +23,7 @@ export function VoiceCallAgent({ agentType = "orchestrator" }) {
     const [url, setUrl] = useState("");
     const [isConnect, setIsConnect] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
-
-    const [liveKitUnavailable, setLiveKitUnavailable] = useState(false);
+    const [activeDialog, setActiveDialog] = useState(null);
 
     const startCall = async () => {
         if (!user?.id) {
@@ -30,43 +33,45 @@ export function VoiceCallAgent({ agentType = "orchestrator" }) {
         setIsProcessing(true);
         try {
             const userId = user.id;
-            const res = await fetch(`/api/v1/voice/token?user_id=${userId}`);
-
-            // LiveKit SDK not installed on gateway
-            if (res.status === 503) {
-                setLiveKitUnavailable(true);
-                setIsProcessing(false);
-                return;
-            }
-
-            // LiveKit keys not configured
-            if (res.status === 500) {
-                setLiveKitUnavailable(true);
-                setIsProcessing(false);
-                return;
-            }
-
+            const sessionToken = await window.Clerk?.session?.getToken();
+            const orgId = user.organizationMemberships?.[0]?.organization?.id || userId;
+            const metadata = JSON.stringify({
+                user_id: userId,
+                org_id: orgId,
+                user_name: user.fullName || user.username || "User",
+                auth_token: sessionToken || "",
+            });
+            const params = new URLSearchParams({ user_id: userId, org_id: orgId, metadata });
+            const res = await fetch(`/api/v1/voice/token?${params.toString()}`, {
+                headers: {
+                    "Authorization": `Bearer ${sessionToken}`,
+                    "X-User-Id": userId,
+                    "X-Org-Id": orgId
+                }
+            });
             if (!res.ok) {
-                throw new Error(`Failed to fetch token (${res.status})`);
+                const errText = await res.text();
+                throw new Error(errText || `Failed to fetch token (${res.status})`);
             }
-
             const contentType = res.headers.get("content-type");
             if (!contentType?.includes("application/json")) {
-                throw new Error("Server returned non-JSON. Is AI Gateway running on port 8000?");
+                throw new Error(
+                    "Server returned non-JSON. Is AI Gateway running on port 8001? " +
+                    "Restart the dev server after adding the proxy."
+                );
             }
-
             const data = await res.json();
-            if (!data.token || !data.url) {
-                throw new Error("Invalid token response: missing token or url");
-            }
-
+            if (!data.token || !data.url) throw new Error("Invalid token response: missing token or url");
             setToken(data.token);
             setUrl(data.url);
             setIsConnect(true);
             setIsProcessing(false);
         } catch (error) {
             console.error("Failed to start call:", error);
-            toast.error("Could not connect to voice agent. Check AI Gateway is running.");
+            const message = error?.message?.includes("non-JSON")
+                ? "AI Gateway not reachable. Check it's running on port 8001 and has LIVEKIT_* in .env"
+                : "Failed to start voice agent";
+            toast.error(message);
             setIsProcessing(false);
             setIsConnect(false);
         }
@@ -76,153 +81,278 @@ export function VoiceCallAgent({ agentType = "orchestrator" }) {
         setIsConnect(false);
         setToken("");
         setIsProcessing(false);
+        setActiveDialog(null);
     }, []);
 
+    useEffect(() => {
+        const handleOpenDialog = (e) => setActiveDialog(e.detail);
+        window.addEventListener("voice:open_input_dialog", handleOpenDialog);
+        return () => window.removeEventListener("voice:open_input_dialog", handleOpenDialog);
+    }, []);
+
+    // Collapsed pill button when hidden
     if (!isVisible) {
         return (
-            <Button
-                className="fixed bottom-4 right-4 rounded-full h-14 w-14 shadow-xl z-50 bg-green-600 hover:bg-green-700 animate-in zoom-in slide-in-from-bottom-4"
+            <motion.button
+                initial={{ scale: 0, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0, opacity: 0 }}
+                className="fixed bottom-6 right-6 rounded-full h-14 w-14 shadow-2xl z-50 flex items-center justify-center transition-all hover:scale-105"
+                style={{ backgroundColor: "#4CBB17", color: "#000", boxShadow: "0 0 24px rgba(0,255,178,0.4)" }}
                 onClick={() => setIsVisible(true)}
+                aria-label="Open Voice Agent"
             >
                 <Phone className="h-6 w-6" />
-            </Button>
+            </motion.button>
         );
     }
 
     return (
-        <Card className="fixed bottom-4 right-4 w-80 shadow-xl border-primary/20 z-50 backdrop-blur-sm bg-background/95 animate-in slide-in-from-bottom-10 fade-in duration-300">
-            <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                    {isConnect ? (
-                        <span className="relative flex h-3 w-3">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-                        </span>
-                    ) : (
-                        <span className="relative inline-flex rounded-full h-3 w-3 bg-slate-300"></span>
-                    )}
-                    Voice Agent ({agentType})
-                </CardTitle>
-                <div className="flex items-center gap-1">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={() => setIsVisible(false)}
-                    >
-                        <X className="h-3 w-3" />
-                    </Button>
-                </div>
-            </CardHeader>
-            <CardContent>
-                {token ? (
-                    <LiveKitRoom
-                        token={token}
-                        serverUrl={url}
-                        connect={isConnect}
-                        audio={true}
-                        video={false}
-                        onDisconnected={disconnect}
-                        data-lk-theme="default"
-                        style={{ height: "100%" }}
-                    >
-                        <AgentContent onDisconnect={disconnect} />
-                        <RoomAudioRenderer />
-                    </LiveKitRoom>
-                ) : (
-                    <div className="flex flex-col items-center justify-center space-y-4 py-4">
-                        {liveKitUnavailable ? (
-                            <>
-                                <div className="h-16 w-16 rounded-full bg-amber-50 flex items-center justify-center">
-                                    <Mic className="h-8 w-8 text-amber-400" />
-                                </div>
-                                <p className="text-xs text-slate-500 text-center">
-                                    Voice calls require LiveKit configuration.
-                                </p>
-                                <p className="text-[10px] text-slate-400 text-center">
-                                    Add <code className="bg-slate-100 px-1 rounded">LIVEKIT_API_KEY</code>, <code className="bg-slate-100 px-1 rounded">LIVEKIT_API_SECRET</code> and <code className="bg-slate-100 px-1 rounded">LIVEKIT_URL</code> to your AI Gateway <code className="bg-slate-100 px-1 rounded">.env</code>
-                                </p>
-                            </>
+        <AnimatePresence>
+            <motion.div
+                key="voice-panel"
+                initial={{ opacity: 0, y: 24, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 24, scale: 0.96 }}
+                transition={{ type: "spring", bounce: 0.2, duration: 0.4 }}
+                className="fixed bottom-6 right-6 w-[300px] shadow-2xl z-50 rounded-2xl overflow-hidden"
+                style={{
+                    backgroundColor: "var(--voice-bg, #111111)",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    backdropFilter: "blur(20px)",
+                    boxShadow: isConnect
+                        ? "0 0 0 1px rgba(0,255,178,0.25), 0 20px 60px rgba(0,0,0,0.5), 0 0 40px rgba(0,255,178,0.08)"
+                        : "0 20px 60px rgba(0,0,0,0.5)",
+                }}
+            >
+                {/* Header */}
+                <div
+                    className="flex items-center justify-between px-4 py-3"
+                    style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}
+                >
+                    <div className="flex items-center gap-2">
+                        {/* Live indicator */}
+                        {isConnect ? (
+                            <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#4CBB17] opacity-75" />
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#4CBB17]" />
+                            </span>
                         ) : (
-                            <>
-                                <div className="h-16 w-16 rounded-full bg-slate-100 flex items-center justify-center">
-                                    <Mic className="h-8 w-8 text-slate-400" />
-                                </div>
-                                <p className="text-xs text-slate-500 text-center">
-                                    Connect to speak with the {agentType} agent.
-                                </p>
-                                <Button
-                                    onClick={startCall}
-                                    disabled={isProcessing || !isLoaded || !user?.id}
-                                    className="w-full bg-green-600 hover:bg-green-700"
-                                >
-                                    {isProcessing ? (
-                                        <>
-                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Connecting...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Phone className="mr-2 h-4 w-4" /> Start Call
-                                        </>
-                                    )}
-                                </Button>
-                            </>
+                            <span className="h-2 w-2 rounded-full bg-white/20" />
                         )}
+                        <span className="text-sm font-semibold text-white">Voice Agent</span>
+                        <span
+                            className="text-xs px-1.5 py-0.5 rounded-md font-medium"
+                            style={{ backgroundColor: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.4)" }}
+                        >
+                            {agentType}
+                        </span>
                     </div>
+                    <button
+                        className="p-1 rounded-lg transition-colors"
+                        style={{ color: "rgba(255,255,255,0.3)" }}
+                        onMouseEnter={e => e.currentTarget.style.color = "#fff"}
+                        onMouseLeave={e => e.currentTarget.style.color = "rgba(255,255,255,0.3)"}
+                        onClick={() => setIsVisible(false)}
+                        aria-label="Minimise voice agent"
+                    >
+                        <X className="h-4 w-4" />
+                    </button>
+                </div>
+
+                {/* Body */}
+                <div className="p-5">
+                    {token ? (
+                        <LiveKitRoom
+                            token={token}
+                            serverUrl={url}
+                            connect={isConnect}
+                            audio={true}
+                            video={false}
+                            onDisconnected={disconnect}
+                            data-lk-theme="default"
+                            style={{ height: "100%" }}
+                        >
+                            <AgentContent onDisconnect={disconnect} />
+                            <RoomAudioRenderer />
+                        </LiveKitRoom>
+                    ) : (
+                        /* Idle / pre-connect state */
+                        <div className="flex flex-col items-center gap-5 py-2">
+                            <AIVoiceInput
+                                isActive={false}
+                                isConnecting={isProcessing}
+                                onToggle={isLoaded && user?.id ? startCall : undefined}
+                            />
+                            {(!isLoaded || !user?.id) && (
+                                <p className="text-xs text-center" style={{ color: "rgba(255,255,255,0.3)" }}>
+                                    Sign in to start a voice session
+                                </p>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+            </motion.div>
+            
+            <AnimatePresence>
+                {activeDialog && (
+                    <ClientInputDialog 
+                        dialog={activeDialog}
+                        onSubmit={(result) => {
+                            toast.success(result.message);
+                        }}
+                        onClose={() => setActiveDialog(null)}
+                    />
                 )}
-            </CardContent>
-        </Card>
+            </AnimatePresence>
+        </AnimatePresence>
     );
 }
 
 function AgentContent({ onDisconnect }) {
+    useVoiceEvents();
     const { state } = useConnectionState();
+    const isConnected = state === ConnectionState.Connected;
+    const isConnecting = state === ConnectionState.Connecting;
+    const isDisconnected = state === ConnectionState.Disconnected || state === ConnectionState.Reconnecting;
+
+    // ── Transcript feed ─────────────────────────────────────
+    const room = useRoomContext();
+    const [transcript, setTranscript] = useState([]);
+    const transcriptEndRef = useRef(null);
+
+    useEffect(() => {
+        if (!room) return;
+        const handler = (segments, participant) => {
+            const finalSegments = segments.filter(s => s.final && s.text?.trim());
+            if (!finalSegments.length) return;
+            // Local participant = user speech; remote/agent = agent speech
+            const isUserSpeech = participant?.isLocal === true;
+            setTranscript(prev => [
+                ...prev.slice(-20), // keep last 20 lines to avoid overflow
+                ...finalSegments.map(s => ({
+                    id: s.id,
+                    role: isUserSpeech ? "user" : "agent",
+                    text: s.text.trim(),
+                }))
+            ]);
+        };
+        room.on("transcriptionReceived", handler);
+        return () => room.off("transcriptionReceived", handler);
+    }, [room]);
+
+    // Auto-scroll transcript to bottom
+    useEffect(() => {
+        transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [transcript]);
+
+    // Single exclusive status label
+    const statusLabel = isConnecting
+        ? { text: "Connecting to room…", color: "#FFB300" }
+        : isConnected
+            ? { text: "Connected · Listening", color: "#4CBB17" }
+            : isDisconnected
+                ? { text: "Disconnected", color: "#CD1C18" }
+                : null;
 
     return (
-        <div className="flex flex-col space-y-4">
-            {/* Status Display */}
-            <div className="text-center py-2 h-6">
-                {state === ConnectionState.Connecting && (
-                    <p className="text-xs text-yellow-600 animate-pulse">Connecting to room...</p>
-                )}
-                {state === ConnectionState.Connected && (
-                    <p className="text-xs text-green-600">Connected. Listening...</p>
-                )}
-                {(state === ConnectionState.Disconnected || state === ConnectionState.Reconnecting) && (
-                    <p className="text-xs text-red-500">Disconnected</p>
+        <div className="flex flex-col gap-3">
+            {/* ── Status — exactly one label at a time ── */}
+            <div className="text-center h-5">
+                {statusLabel && (
+                    <p
+                        className={isConnecting ? "text-xs animate-pulse" : "text-xs"}
+                        style={{ color: statusLabel.color }}
+                    >
+                        {statusLabel.text}
+                    </p>
                 )}
             </div>
 
-            {/* Visualizer Placeholder */}
-            <div className="h-16 bg-slate-50 rounded-lg flex items-center justify-center overflow-hidden relative">
-                {state === ConnectionState.Connected ? (
-                    <div className="flex items-center gap-1 h-8 items-end">
-                        <div className="w-1 bg-green-500 animate-[pulse_1s_ease-in-out_infinite]" style={{ height: '40%', animationDelay: '0ms' }}></div>
-                        <div className="w-1 bg-green-500 animate-[pulse_1.2s_ease-in-out_infinite]" style={{ height: '70%', animationDelay: '100ms' }}></div>
-                        <div className="w-1 bg-green-500 animate-[pulse_0.8s_ease-in-out_infinite]" style={{ height: '30%', animationDelay: '200ms' }}></div>
-                        <div className="w-1 bg-green-500 animate-[pulse_1.1s_ease-in-out_infinite]" style={{ height: '60%', animationDelay: '300ms' }}></div>
-                        <div className="w-1 bg-green-500 animate-[pulse_0.9s_ease-in-out_infinite]" style={{ height: '50%', animationDelay: '400ms' }}></div>
+            {/* Voice visualizer */}
+            <AIVoiceInput
+                isActive={isConnected}
+                isConnecting={isConnecting}
+                onToggle={onDisconnect}
+            />
+
+            {/* ── Transcript feed ── */}
+            {(transcript.length > 0 || isConnected) && (
+                <div
+                    className="mx-3 rounded-xl overflow-hidden"
+                    style={{
+                        backgroundColor: "rgba(255,255,255,0.03)",
+                        border: "1px solid rgba(255,255,255,0.06)",
+                    }}
+                >
+                    <div
+                        className="px-3 py-1.5 flex items-center gap-1.5"
+                        style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}
+                    >
+                        <span className="text-[9px] font-semibold uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.25)" }}>
+                            Transcript
+                        </span>
                     </div>
-                ) : (
-                    <div className="text-slate-300 text-xs">Waveform</div>
-                )}
-            </div>
+                    <div
+                        className="flex flex-col gap-1.5 px-3 py-2 overflow-y-auto"
+                        style={{ maxHeight: "110px", scrollbarWidth: "none" }}
+                    >
+                        {transcript.length === 0 ? (
+                            <p className="text-[10px] text-center py-1" style={{ color: "rgba(255,255,255,0.18)" }}>
+                                Transcript will appear here…
+                            </p>
+                        ) : (
+                            transcript.map((entry) => (
+                                <div
+                                    key={entry.id}
+                                    className={`flex gap-1.5 ${entry.role === "user" ? "justify-end" : "justify-start"}`}
+                                >
+                                    <div
+                                        className="max-w-[85%] rounded-lg px-2.5 py-1 text-[10px] leading-relaxed"
+                                        style={
+                                            entry.role === "user"
+                                                ? {
+                                                    backgroundColor: "rgba(76,187,23,0.15)",
+                                                    color: "rgba(255,255,255,0.75)",
+                                                    borderRadius: "10px 10px 2px 10px",
+                                                }
+                                                : {
+                                                    backgroundColor: "rgba(255,255,255,0.06)",
+                                                    color: "rgba(255,255,255,0.55)",
+                                                    borderRadius: "10px 10px 10px 2px",
+                                                }
+                                        }
+                                    >
+                                        {entry.text}
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                        <div ref={transcriptEndRef} />
+                    </div>
+                </div>
+            )}
 
-            {/* Controls */}
-            <div className="flex justify-center gap-4 pt-2">
-                <Button
-                    variant="destructive"
-                    size="icon"
-                    className="h-12 w-12 rounded-full shadow-lg hover:scale-105 transition-transform"
+            {/* End call button */}
+            <div className="flex justify-center px-3">
+                <button
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all hover:opacity-90"
+                    style={{
+                        backgroundColor: "rgba(255, 68, 68, 0.15)",
+                        color: "#CD1C18",
+                        border: "1px solid rgba(255, 68, 68, 0.3)",
+                    }}
                     onClick={onDisconnect}
                 >
-                    <PhoneOff className="h-5 w-5" />
-                </Button>
+                    <PhoneOff className="h-4 w-4" />
+                    End Call
+                </button>
             </div>
 
-            <div className="text-center pt-2">
-                <p className="text-[10px] text-slate-400">Powered by LiveKit</p>
-            </div>
+            <p className="text-center text-[9px] pb-2" style={{ color: "rgba(255,255,255,0.15)" }}>
+                Powered by LiveKit
+            </p>
         </div>
     );
 }

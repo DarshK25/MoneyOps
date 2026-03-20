@@ -41,11 +41,10 @@ class IntentClassifier:
         return {
             # Operational intents
             Intent.INVOICE_CREATE: [
-                r"create.*invoice",
+                r"creat.*invoice",
+                r"invoice.*for\s+\w+",
                 r"new invoice",
-                r"generate.*invoice",
                 r"make.*invoice",
-                r"invoice for",
             ],
             Intent.INVOICE_QUERY: [
                 r"show.*invoices?",
@@ -71,9 +70,10 @@ class IntentClassifier:
             ],
             Intent.CLIENT_CREATE: [
                 r"add.*client",
-                r"new.*client",
-                r"create.*client",
+                r"create.*client", 
+                r"new client",
                 r"register.*client",
+                r"onboard.*client",
             ],
             Intent.CLIENT_QUERY: [
                 r"show.*clients?",
@@ -136,18 +136,16 @@ class IntentClassifier:
                 r"^moneyops$",
             ],
             Intent.HELP: [
-                r"\b(help|guide|assist)\b",
+                r"^(help|what can you do|what do you do|how do you work)",
                 r"what.*can.*do",
                 r"how.*use",
             ],
             Intent.CONFIRMATION: [
-                r"\b(yes|yeah|yep|sure|ok|okay|correct|right|fine)\b",
-                r"go ahead",
-                r"proceed",
-                r"confirm",
+                r"^(yes|yeah|yep|sure|ok|okay|correct|right|fine|got it|sounds good)[\.\!]*$",
+                r"^(go ahead|proceed|confirm)[\.\!]*$",
             ],
             Intent.CANCELLATION: [
-                r"\b(no|nope|nah|cancel|stop|abort|nevermind)\b",
+                r"^(no|nope|nah|cancel|stop|abort|nevermind)[\.\!]*$",
                 r"don't.*do.*that",
                 r"wrong",
             ],
@@ -205,7 +203,12 @@ class IntentClassifier:
         for intent, patterns in self.intent_patterns.items():
             for pattern in patterns:
                 try:
-                    # Use re.search with IGNORECASE for flexibility
+                    # For common conversational intents, try fullmatch first for precision
+                    if intent in (Intent.CONFIRMATION, Intent.CANCELLATION, Intent.GREETING):
+                        if re.fullmatch(pattern, user_input_lower, re.IGNORECASE):
+                            return {"intent": intent, "confidence": 0.95, "pattern": pattern}
+                    
+                    # For all intents (including fallback for the above), try search
                     if re.search(pattern, user_input_lower, re.IGNORECASE):
                         # Higher confidence for longer, more specific patterns
                         confidence = 0.95 if len(pattern) > 20 else 0.9 if len(pattern) > 15 else 0.85
@@ -286,7 +289,7 @@ CONVERSATIONAL INTENTS:
 User Input: "{user_input}"
 """
 
-        if conversation_history and len(conversation_history) > 0:
+        if isinstance(conversation_history, list) and len(conversation_history) > 0:
             prompt += f"\n\nPrevious Intent: {conversation_history[-1].get('intent', 'N/A')}"
             prompt += "\nThis might be a follow-up question."
 

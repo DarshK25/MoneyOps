@@ -28,14 +28,24 @@ async def lifespan(app: FastAPI):
         version=settings.APP_VERSION,
         environment=settings.ENVIRONMENT,
     )
-    
-    # TODO: Initialize connections (Redis, etc.)
-    
+
+    # Connect to Redis
+    try:
+        from app.integrations.redis_client import get_redis
+        await get_redis()
+        logger.info("redis_ready")
+    except Exception as e:
+        logger.warning("redis_unavailable", error=str(e), note="Continuing without cache")
+
     yield
-    
-    # Shutdown
+
+    # Shutdown — close Redis
+    try:
+        from app.integrations.redis_client import close_redis
+        await close_redis()
+    except Exception:
+        pass
     logger.info("shutting_down_ai_gateway")
-    # TODO: Cleanup connections
 
 
 # Create FastAPI app
@@ -118,7 +128,9 @@ app.include_router(health.router, prefix="/api/v1", tags=["Health"])
 
 # Voice router (production endpoint)
 from app.api.v1 import voice
+from app.routes.market import router as market_router
 app.include_router(voice.router, prefix="/api/v1", tags=["Voice"])
+app.include_router(market_router)
 
 # Test routers
 if settings.ENVIRONMENT != "production":

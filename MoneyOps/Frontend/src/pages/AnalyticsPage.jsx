@@ -1,13 +1,5 @@
 import { useState, useEffect } from "react";
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import {
     BarChart3,
     TrendingUp,
     TrendingDown,
@@ -18,102 +10,150 @@ import {
     Info,
 } from "lucide-react";
 import { toast } from "sonner";
+import { InteractiveTrendCard } from "@/components/ui/trend-card";
+import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
+import { useAuth, useUser } from "@clerk/clerk-react";
 
-// ── Fallback Data ─────────────────────────────────────────────────────────────
-// Used when API fails or returns empty data, ensuring the UI always looks good.
+// ── Fallback Data (only used when API fails) ────────────────────────────────
 const FALLBACK_DATA = {
     kpis: [
-        {
-            name: "Total Revenue",
-            value: "₹12,45,000",
-            trend: "up",
-            change: "+12.5%",
-        },
-        {
-            name: "Net Profit",
-            value: "₹4,20,000",
-            trend: "up",
-            change: "+8.2%",
-        },
-        {
-            name: "Expenses",
-            value: "₹8,25,000",
-            trend: "down",
-            change: "-2.1%",
-        },
-        {
-            name: "Active Clients",
-            value: "42",
-            trend: "neutral",
-            change: "0%",
-        },
+        { name: "Total Revenue", value: "₹0", trend: "neutral", change: "0%" },
+        { name: "Net Profit", value: "₹0", trend: "neutral", change: "0%" },
+        { name: "Expenses", value: "₹0", trend: "neutral", change: "0%" },
+        { name: "Active Clients", value: "0", trend: "neutral", change: "0%" },
     ],
-    revenueByCategory: [
-        { category: "Consulting", amount: 500000, percentage: 40 },
-        { category: "Development", amount: 450000, percentage: 36 },
-        { category: "Retainers", amount: 200000, percentage: 16 },
-        { category: "Workshops", amount: 95000, percentage: 8 },
-    ],
+    revenueByCategory: [],
     monthlyTrends: [
-        { month: "Jan", revenue: 150000, expenses: 100000 },
-        { month: "Feb", revenue: 180000, expenses: 110000 },
-        { month: "Mar", revenue: 160000, expenses: 95000 },
-        { month: "Apr", revenue: 210000, expenses: 120000 },
-        { month: "May", revenue: 190000, expenses: 105000 },
-        { month: "Jun", revenue: 240000, expenses: 130000 },
+        { month: "Jan", revenue: 0, expenses: 0 },
+        { month: "Feb", revenue: 0, expenses: 0 },
+        { month: "Mar", revenue: 0, expenses: 0 },
     ],
     clientMetrics: [
-        {
-            metric: "Client Retention Rate",
-            value: 92,
-            target: 95,
-            percentage: 92,
-        },
-        {
-            metric: "On-time Payment Rate",
-            value: 85,
-            target: 90,
-            percentage: 85,
-        },
-        {
-            metric: "Avg Project Value",
-            value: "₹2.5L",
-            target: "₹3.0L",
-            percentage: 83,
-        },
-        {
-            metric: "New Leads / Month",
-            value: 15,
-            target: 20,
-            percentage: 75,
-        },
+        { metric: "Client Retention Rate", value: 0, target: 95, percentage: 0 },
+        { metric: "On-time Payment Rate", value: 0, target: 90, percentage: 0 },
+        { metric: "Avg Project Value", value: "₹0", target: "₹3.0L", percentage: 0 },
+        { metric: "New Leads / Month", value: 0, target: 20, percentage: 0 },
     ],
 };
 
 export default function AnalyticsPage() {
+    const { userId, orgId } = useOnboardingStatus();
+    const { getToken } = useAuth();
+    const { user } = useUser();
     const [data, setData] = useState(null);
+    const [orgName, setOrgName] = useState("Your Business");
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        fetchAnalytics();
-    }, []);
+        if (user?.id) {
+            fetchAnalytics();
+            fetchOrgName();
+        }
+    }, [orgId, userId, user?.id]);
+
+    const fetchOrgName = async () => {
+        if (!userId) return;
+        try {
+            const res = await fetch(`/api/org/my`, {
+                headers: { "X-User-Id": userId, "X-Org-Id": orgId }
+            });
+            if (res.ok) {
+                const result = await res.json();
+                setOrgName(result.data?.legalName || "Your Business");
+            }
+        } catch (err) {
+            console.error("Failed to fetch org name", err);
+        }
+    };
 
     const fetchAnalytics = async () => {
         try {
             setLoading(true);
-            // Simulate API call - in real app, replace with actual fetch
-            // const res = await fetch('/api/analytics');
-            // const result = await res.json();
+            const token = await getToken();
+            const headers = {
+                "Authorization": `Bearer ${token}`,
+                "X-User-Id": user?.id,
+                "X-Org-Id": orgId
+            };
 
-            // Simulating network delay for realism
-            await new Promise((resolve) => setTimeout(resolve, 800));
+            // Fetch all data in parallel from our backend
+            const [metricsRes, budgetRes, ledgerRes, clientsRes, invoicesRes] = await Promise.all([
+                fetch(`/api/finance-intelligence/metrics?businessId=1`, { headers }),
+                fetch(`/api/finance-intelligence/budget?businessId=1`, { headers }),
+                fetch(`/api/finance-intelligence/ledger?businessId=1`, { headers }),
+                fetch(`/api/clients`, { headers }),
+                fetch(`/api/invoices`, { headers }),
+            ]);
 
-            // Use fallback data for now since backend likely doesn't have this endpoint ready yet
-            setData(FALLBACK_DATA);
+            let metrics = null, budget = null, ledger = null, clients = [], invoices = [];
+
+            if (metricsRes.ok) metrics = await metricsRes.json();
+            if (budgetRes.ok) budget = await budgetRes.json();
+            if (ledgerRes.ok) ledger = await ledgerRes.json();
+            if (clientsRes.ok) {
+                const cr = await clientsRes.json();
+                clients = cr.data || cr || [];
+            }
+            if (invoicesRes.ok) {
+                const ir = await invoicesRes.json();
+                invoices = ir.data || ir || [];
+            }
+
+            const revenue = metrics?.revenue || 0;
+            const expenses = metrics?.expenses || 0;
+            const netProfit = metrics?.netProfit || 0;
+            const collectionRate = metrics?.collectionRate || 0;
+            const totalClients = Array.isArray(clients) ? clients.length : 0;
+
+            // Build KPIs from real data
+            const kpis = [
+                { name: "Total Revenue", value: `₹${revenue.toLocaleString("en-IN")}`, trend: revenue > 0 ? "up" : "neutral", change: revenue > 0 ? `+${collectionRate.toFixed(0)}% collected` : "0%" },
+                { name: "Net Profit", value: `₹${netProfit.toLocaleString("en-IN")}`, trend: netProfit > 0 ? "up" : netProfit < 0 ? "down" : "neutral", change: revenue > 0 ? `${((netProfit / revenue) * 100).toFixed(1)}% margin` : "0%" },
+                { name: "Expenses", value: `₹${expenses.toLocaleString("en-IN")}`, trend: expenses > 0 ? "down" : "neutral", change: revenue > 0 ? `${((expenses / revenue) * 100).toFixed(1)}% of revenue` : "0%" },
+                { name: "Active Clients", value: String(totalClients), trend: totalClients > 0 ? "up" : "neutral", change: `${metrics?.totalInvoices || 0} invoices` },
+            ];
+
+            // Build revenue by category from budget data
+            const budgetItems = budget?.items || [];
+            const revenueByCategory = budgetItems.length > 0
+                ? budgetItems.map(b => ({
+                    category: b.category,
+                    amount: b.actual || 0,
+                    percentage: budget.totalActual > 0 ? Math.round((b.actual / budget.totalActual) * 100) : 0,
+                }))
+                : FALLBACK_DATA.revenueByCategory;
+
+            // Build monthly trends from ledger entries
+            const entries = ledger?.entries || [];
+            const monthMap = {};
+            entries.forEach(e => {
+                const d = new Date(e.date);
+                const key = d.toLocaleString("en-US", { month: "short" });
+                if (!monthMap[key]) monthMap[key] = { month: key, revenue: 0, expenses: 0 };
+                if (e.type === "INCOME") monthMap[key].revenue += e.amount || 0;
+                else monthMap[key].expenses += e.amount || 0;
+            });
+            const monthlyTrends = Object.values(monthMap).length > 0
+                ? Object.values(monthMap)
+                : FALLBACK_DATA.monthlyTrends;
+
+            // Build client metrics from real data
+            const paidInvoices = metrics?.paidCount || 0;
+            const totalInvoices = metrics?.totalInvoices || 0;
+            const paymentRate = totalInvoices > 0 ? Math.round((paidInvoices / totalInvoices) * 100) : 0;
+            const avgValue = totalClients > 0 ? Math.round(revenue / totalClients) : 0;
+
+            const clientMetrics = [
+                { metric: "Collection Rate", value: collectionRate, target: 90, percentage: collectionRate },
+                { metric: "On-time Payment Rate", value: paymentRate, target: 90, percentage: paymentRate },
+                { metric: "Avg Client Value", value: `₹${avgValue.toLocaleString("en-IN")}`, target: "₹1,00,000", percentage: Math.min(100, Math.round((avgValue / 100000) * 100)) },
+                { metric: "Total Invoices", value: totalInvoices, target: 20, percentage: Math.min(100, Math.round((totalInvoices / 20) * 100)) },
+            ];
+
+            setData({ kpis, revenueByCategory, monthlyTrends, clientMetrics });
         } catch (error) {
-            console.error(error);
+            console.error("Failed to load analytics:", error);
             toast.error("Failed to load analytics data");
-            // Fallback to ensure UI doesn't break
             setData(FALLBACK_DATA);
         } finally {
             setLoading(false);
@@ -123,7 +163,7 @@ export default function AnalyticsPage() {
     if (loading) {
         return (
             <div className="flex items-center justify-center h-96">
-                <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+                <Loader2 className="h-8 w-8 animate-spin text-[#4CBB17]" />
             </div>
         );
     }
@@ -131,10 +171,10 @@ export default function AnalyticsPage() {
     if (!data) {
         return (
             <div className="flex flex-col items-center justify-center h-96 gap-4">
-                <p className="text-slate-500">Failed to load analytics data</p>
-                <Button onClick={fetchAnalytics}>
-                    <RefreshCw className="mr-2 h-4 w-4" /> Retry
-                </Button>
+                <p className="text-[#A0A0A0]">Failed to load analytics data</p>
+                <button onClick={fetchAnalytics} className="mo-btn-primary flex items-center gap-2">
+                    <RefreshCw className="h-4 w-4" /> Retry
+                </button>
             </div>
         );
     }
@@ -143,234 +183,166 @@ export default function AnalyticsPage() {
 
     return (
         <div className="flex flex-col gap-6">
-            {/* ── Header ─────────────────────────────────────────────────────── */}
+            {/* ── Header ──────────────────────────────────────────────────────── */}
             <div className="flex items-center justify-between flex-wrap gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold">Analytics</h1>
-                    <p className="text-slate-500 text-sm mt-1">
-                        Business insights and performance metrics
-                    </p>
+                    <h1 className="mo-h1">Analytics</h1>
+                    <p className="mo-text-secondary mt-1">Performance metrics for {orgName}</p>
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="outline">
-                        <Calendar className="mr-2 h-4 w-4" />
-                        Date Range
-                    </Button>
-                    <Button>
-                        <BarChart3 className="mr-2 h-4 w-4" />
-                        Export Report
-                    </Button>
+                    <button onClick={fetchAnalytics} className="mo-btn-secondary flex items-center gap-2">
+                        <RefreshCw className="h-4 w-4" /> Refresh
+                    </button>
+                    <button className="mo-btn-primary flex items-center gap-2">
+                        <BarChart3 className="h-4 w-4" /> Export Report
+                    </button>
                 </div>
             </div>
 
-            {/* ── KPIs ───────────────────────────────────────────────────────── */}
+            {/* ── KPIs ────────────────────────────────────────────────────────── */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 {kpis.map((kpi, index) => (
-                    <Card key={index}>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium text-slate-500">
-                                {kpi.name}
-                            </CardTitle>
+                    <div key={index} className="mo-stat-card">
+                        <div className="flex items-center justify-between mb-3">
+                            <span className="text-sm text-[#A0A0A0] font-medium">{kpi.name}</span>
                             {kpi.trend === "up" ? (
-                                <TrendingUp className="h-4 w-4 text-green-600" />
+                                <TrendingUp className="h-4 w-4 text-[#4CBB17]" />
                             ) : kpi.trend === "down" ? (
-                                <TrendingDown className="h-4 w-4 text-red-600" />
+                                <TrendingDown className="h-4 w-4 text-[#CD1C18]" />
                             ) : (
-                                <Info className="h-4 w-4 text-slate-400" />
+                                <Info className="h-4 w-4 text-[#A0A0A0]" />
                             )}
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{kpi.value}</div>
-                            <p
-                                className={`text-xs mt-1 ${kpi.trend === "up"
-                                        ? "text-green-600"
-                                        : kpi.trend === "down"
-                                            ? "text-red-600"
-                                            : "text-slate-500"
-                                    }`}
-                            >
-                                {kpi.change} {kpi.trend !== "neutral" && "from last month"}
-                            </p>
-                        </CardContent>
-                    </Card>
+                        </div>
+                        <div className="text-2xl font-bold text-white">{kpi.value}</div>
+                        <p className={`text-xs mt-1 font-medium ${kpi.trend === "up"
+                            ? "text-[#4CBB17]"
+                            : kpi.trend === "down"
+                                ? "text-[#CD1C18]"
+                                : "text-[#A0A0A0]"
+                            }`}>
+                            {kpi.change}
+                        </p>
+                    </div>
                 ))}
             </div>
 
+            {/* ── Charts Row ──────────────────────────────────────────────────── */}
             <div className="grid gap-6 md:grid-cols-2">
-                {/* ── Revenue by Category ────────────────────────────────────── */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Revenue by Category</CardTitle>
-                        <CardDescription>Breakdown of revenue sources (Top 5)</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                        {revenueByCategory.length > 0 ? (
-                            revenueByCategory.map((item, index) => (
-                                <div key={index} className="space-y-2">
-                                    <div className="flex justify-between text-sm">
-                                        <span className="font-medium text-slate-700">
-                                            {item.category}
-                                        </span>
-                                        <span className="font-semibold">
-                                            ₹{item.amount.toLocaleString("en-IN")}
-                                        </span>
-                                    </div>
-                                    <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                                        <div
-                                            className="bg-blue-600 h-2 rounded-full transition-all duration-500 ease-out"
-                                            style={{ width: `${item.percentage}%` }}
-                                        ></div>
-                                    </div>
-                                    <div className="text-xs text-slate-400 text-right">
-                                        {item.percentage}%
-                                    </div>
-                                </div>
-                            ))
-                        ) : (
-                            <p className="text-sm text-slate-500 text-center py-8">
-                                No revenue data available
-                            </p>
-                        )}
-                    </CardContent>
-                </Card>
+                {/* Revenue Trend — InteractiveTrendCard */}
+                <InteractiveTrendCard
+                    title="Revenue"
+                    subtitle="Transaction Trend"
+                    totalValue={monthlyTrends.reduce((s, m) => s + m.revenue, 0)}
+                    newValue={monthlyTrends[monthlyTrends.length - 1]?.revenue ?? 0}
+                    totalValueLabel="Total Revenue"
+                    newValueLabel="Last Month"
+                    chartData={monthlyTrends.map(m => ({ month: m.month, value: m.revenue }))}
+                    defaultBarColor="#2A2A2A"
+                    barColor="#4CBB17"
+                    adjacentBarColor="#4CBB1760"
+                    formatValue={(v) => `₹${v.toLocaleString("en-IN")}`}
+                    formatTooltip={(v) => `₹${v.toLocaleString("en-IN")}`}
+                />
 
-                {/* ── Monthly Trends Chart ───────────────────────────────────── */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Monthly Trends</CardTitle>
-                        <CardDescription>Revenue vs. Expenses (Last 6 Months)</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="flex flex-col h-full justify-between gap-6">
-                            {/* Legend */}
-                            <div className="flex items-center gap-6 text-sm justify-center">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                                    <span className="text-slate-600">Revenue</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                                    <span className="text-slate-600">Expenses</span>
-                                </div>
-                            </div>
-
-                            {/* Bar Chart */}
-                            <div className="flex items-end justify-between gap-2 h-48 pt-4 pb-2">
-                                {monthlyTrends.map((month, index) => {
-                                    const maxVal = Math.max(
-                                        ...monthlyTrends.map((m) => Math.max(m.revenue, m.expenses))
-                                    ) * 1.1; // 10% headroom
-
-                                    const revHeight = (month.revenue / maxVal) * 100;
-                                    const expHeight = (month.expenses / maxVal) * 100;
-
-                                    return (
-                                        <div
-                                            key={index}
-                                            className="flex flex-col items-center gap-2 h-full justify-end flex-1"
-                                        >
-                                            <div className="flex gap-1 items-end h-full w-full justify-center">
-                                                {/* Revenue Bar */}
-                                                <div
-                                                    className="w-3 sm:w-6 bg-green-500 rounded-t transition-all hover:opacity-80"
-                                                    style={{ height: `${revHeight}%` }}
-                                                    title={`Revenue: ₹${month.revenue.toLocaleString()}`}
-                                                ></div>
-                                                {/* Expense Bar */}
-                                                <div
-                                                    className="w-3 sm:w-6 bg-red-500 rounded-t transition-all hover:opacity-80"
-                                                    style={{ height: `${expHeight}%` }}
-                                                    title={`Expenses: ₹${month.expenses.toLocaleString()}`}
-                                                ></div>
-                                            </div>
-                                            <span className="text-xs font-medium text-slate-500">
-                                                {month.month}
-                                            </span>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
+                {/* Expense Trend — InteractiveTrendCard */}
+                <InteractiveTrendCard
+                    title="Expenses"
+                    subtitle="Transaction Trend"
+                    totalValue={monthlyTrends.reduce((s, m) => s + m.expenses, 0)}
+                    newValue={monthlyTrends[monthlyTrends.length - 1]?.expenses ?? 0}
+                    totalValueLabel="Total Expenses"
+                    newValueLabel="Last Month"
+                    chartData={monthlyTrends.map(m => ({ month: m.month, value: m.expenses }))}
+                    defaultBarColor="#2A2A2A"
+                    barColor="#CD1C18"
+                    adjacentBarColor="#CD1C1860"
+                    formatValue={(v) => `₹${v.toLocaleString("en-IN")}`}
+                    formatTooltip={(v) => `₹${v.toLocaleString("en-IN")}`}
+                />
             </div>
 
-            {/* ── Client Metrics ─────────────────────────────────────────────── */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Client Performance Metrics</CardTitle>
-                    <CardDescription>
-                        Track your client-related KPIs and targets
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                        {clientMetrics.map((metric, index) => (
-                            <div key={index} className="space-y-3">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-sm font-medium text-slate-700">
-                                        {metric.metric}
+            {/* ── Expense by Category ──────────────────────────────────────────── */}
+            {revenueByCategory.length > 0 && (
+                <InteractiveTrendCard
+                    title="Expense by Category"
+                    subtitle="Breakdown of spending"
+                    totalValue={revenueByCategory.reduce((s, c) => s + c.amount, 0)}
+                    newValue={Math.max(...revenueByCategory.map(c => c.amount))}
+                    totalValueLabel="Total Spend"
+                    newValueLabel="Top Category"
+                    chartData={revenueByCategory.map(c => ({ month: c.category.slice(0, 4), value: c.amount }))}
+                    defaultBarColor="#2A2A2A"
+                    barColor="#4CBB17"
+                    adjacentBarColor="#4CBB1760"
+                    formatValue={(v) => `₹${v.toLocaleString("en-IN")}`}
+                    formatTooltip={(v) => `₹${v.toLocaleString("en-IN")}`}
+                />
+            )}
+
+            {/* ── Client Metrics ───────────────────────────────────────────────── */}
+            <div className="mo-card">
+                <h2 className="mo-h2 mb-1">Client Performance Metrics</h2>
+                <p className="mo-text-secondary mb-6">Track your client-related KPIs and targets</p>
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+                    {clientMetrics.map((metric, index) => (
+                        <div key={index} className="space-y-3">
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-white">{metric.metric}</span>
+                                <Target className="h-4 w-4 text-[#A0A0A0]" />
+                            </div>
+                            <div className="space-y-1.5">
+                                <div className="flex justify-between text-sm items-end">
+                                    <span className="font-bold text-lg leading-none text-white">
+                                        {metric.value}
+                                        {metric.metric.includes("Rate") ? "%" : ""}
                                     </span>
-                                    <Target className="h-4 w-4 text-slate-400" />
+                                    <span className="text-xs text-[#A0A0A0]">
+                                        Target: {metric.target}
+                                        {metric.metric.includes("Rate") ? "%" : ""}
+                                    </span>
                                 </div>
-                                <div className="space-y-2">
-                                    <div className="flex justify-between text-sm items-end">
-                                        <span className="font-bold text-lg leading-none">
-                                            {metric.value}
-                                            {metric.metric.includes("Rate") ? "%" : ""}
-                                        </span>
-                                        <span className="text-xs text-slate-400">
-                                            Target: {metric.target}
-                                            {metric.metric.includes("Rate") ? "%" : ""}
-                                        </span>
-                                    </div>
-                                    <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                                        <div
-                                            className={`h-2 rounded-full transition-all duration-500 ${metric.percentage >= 90
-                                                    ? "bg-green-500"
+                                <div className="mo-progress-bg">
+                                    <div
+                                        className="h-full rounded-full transition-all duration-500"
+                                        style={{
+                                            width: `${Math.min(metric.percentage, 100)}%`,
+                                            backgroundColor:
+                                                metric.percentage >= 90
+                                                    ? "#4CBB17"
                                                     : metric.percentage >= 70
-                                                        ? "bg-yellow-500"
-                                                        : "bg-red-500"
-                                                }`}
-                                            style={{ width: `${Math.min(metric.percentage, 100)}%` }}
-                                        ></div>
-                                    </div>
-                                    <div className="text-xs text-slate-500">
-                                        {Math.round(metric.percentage)}% of target achieved
-                                    </div>
+                                                        ? "#FFB300"
+                                                        : "#CD1C18",
+                                        }}
+                                    />
+                                </div>
+                                <div className="text-xs text-[#A0A0A0]">
+                                    {Math.round(metric.percentage)}% of target achieved
                                 </div>
                             </div>
-                        ))}
-                    </div>
-                </CardContent>
-            </Card>
+                        </div>
+                    ))}
+                </div>
+            </div>
 
-            {/* ── AI Insights ────────────────────────────────────────────────── */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>AI Insights & Recommendations</CardTitle>
-                    <CardDescription>
-                        Data-driven insights to improve your business
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg flex gap-4 items-start">
-                        <div className="bg-blue-100 p-2 rounded-md shrink-0">
-                            <TrendingUp className="h-5 w-5 text-blue-600" />
-                        </div>
-                        <div>
-                            <h4 className="font-semibold text-blue-900 text-sm">
-                                Projected Growth
-                            </h4>
-                            <p className="text-sm text-blue-700 mt-1 leading-relaxed">
-                                Based on your current transaction history and invoice clearance rate,
-                                your revenue is projected to grow by <strong>18%</strong> next month.
-                                Consider increasing your retainer capacity to stabilize cash flow.
-                            </p>
-                        </div>
+            {/* ── AI Insights ─────────────────────────────────────────────────── */}
+            <div className="mo-card">
+                <h2 className="mo-h2 mb-1">AI Insights & Recommendations</h2>
+                <p className="mo-text-secondary mb-5">Data-driven insights from your live financial data</p>
+                <div className="p-4 bg-[#4CBB1710] border border-[#4CBB1730] rounded-xl flex gap-4 items-start">
+                    <div className="bg-[#4CBB1720] p-2 rounded-lg shrink-0">
+                        <TrendingUp className="h-5 w-5 text-[#4CBB17]" />
                     </div>
-                </CardContent>
-            </Card>
+                    <div>
+                        <h4 className="font-semibold text-[#4CBB17] text-sm">Live Financial Summary</h4>
+                        <p className="text-sm text-[#A0A0A0] mt-1 leading-relaxed">
+                            Your collection rate is <strong className="text-white">{(data?.kpis?.[0]?.change) || "N/A"}</strong>.
+                            {" "}You have <strong className="text-white">{data?.kpis?.[3]?.value || 0} clients</strong> generating
+                            {" "}<strong className="text-white">{data?.kpis?.[0]?.value || "₹0"}</strong> in revenue.
+                            Focus on clearing overdue invoices to improve cashflow.
+                        </p>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }

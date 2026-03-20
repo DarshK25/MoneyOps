@@ -1,10 +1,14 @@
 import { useState, useEffect } from "react";
-import { useAuth } from "@clerk/clerk-react";
 import { Link, useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+    DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import {
     Plus,
     IndianRupee,
@@ -15,33 +19,36 @@ import {
     Download,
     MoreVertical,
     Search,
+    Trash2
 } from "lucide-react";
 import { toast } from "sonner";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { useAuth, useUser } from "@clerk/clerk-react";
+import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 
-// ── Status badge styles ───────────────────────────────────────────────────────
-
-const STATUS_CLASSES = {
-    paid: "bg-green-500/10 text-green-600 hover:bg-green-500/20",
-    sent: "bg-blue-500/10 text-blue-600 hover:bg-blue-500/20",
-    overdue: "bg-red-500/10 text-red-600 hover:bg-red-500/20",
-    draft: "bg-slate-500/10 text-slate-500 hover:bg-slate-500/20",
+const STATUS_STYLES = {
+    paid: "mo-badge-success",
+    sent: { backgroundColor: "#3B82F620", color: "#60A5FA", border: "1px solid #3B82F640", borderRadius: "6px", padding: "2px 8px", fontSize: "12px", fontWeight: "500", display: "inline-flex" },
+    overdue: "mo-badge-danger",
+    draft: "mo-badge-neutral",
 };
 
-const getStatusClass = (status) =>
-    STATUS_CLASSES[status] ?? STATUS_CLASSES.draft;
-
-// ── Filter tab config ─────────────────────────────────────────────────────────
+const STATUS_BADGE_CLASS = (status) => {
+    const s = status?.toLowerCase() || "draft";
+    const map = {
+        paid: "inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-[#4CBB1720] text-[#4CBB17] border border-[#4CBB1740]",
+        sent: "inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-[#60A5FA20] text-[#60A5FA] border border-[#60A5FA40]",
+        overdue: "inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-[#CD1C1820] text-[#CD1C18] border border-[#CD1C1840]",
+        draft: "inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-[#A0A0A020] text-[#A0A0A0] border border-[#A0A0A040]",
+    };
+    return map[s] ?? map.draft;
+};
 
 const TABS = ["all", "draft", "sent", "paid", "overdue"];
 
 export default function InvoicesPage() {
     const { getToken } = useAuth();
+    const { user } = useUser();
+    const { userId: internalUserId, orgId: internalOrgId } = useOnboardingStatus();
     const navigate = useNavigate();
     const [invoices, setInvoices] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -50,21 +57,26 @@ export default function InvoicesPage() {
     const [actionLoading, setActionLoading] = useState(null);
 
     useEffect(() => {
-        fetchInvoices();
-    }, []);
-
-    // ── API ───────────────────────────────────────────────────────────────────
+        if (internalUserId && internalOrgId) {
+            fetchInvoices();
+        }
+    }, [internalUserId, internalOrgId]);
 
     const fetchInvoices = async () => {
         try {
             setLoading(true);
             const token = await getToken();
             const res = await fetch("/api/invoices", {
-                headers: { Authorization: `Bearer ${token}` }
+                headers: {
+                    "Authorization": `Bearer ${token}`,
+                    "X-User-Id": internalUserId,
+                    "X-Org-Id": internalOrgId
+                }
             });
             if (!res.ok) throw new Error("Failed to fetch");
             const data = await res.json();
-            setInvoices(data.invoices || []);
+            // Backend returns List<InvoiceDto> directly
+            setInvoices(Array.isArray(data) ? data : []);
         } catch {
             toast.error("Failed to load invoices");
             setInvoices([]);
@@ -74,26 +86,54 @@ export default function InvoicesPage() {
     };
 
     const handleViewInvoice = (invoice) => {
-        navigate(`/invoices/${invoice.id}`);
+        const id = invoice.id || invoice._id;
+        if (id) navigate(`/invoices/${id}`);
+    };
+
+    const handleDeleteInvoice = async (invoice) => {
+        const id = invoice.id || invoice._id;
+        if (!window.confirm(`Delete invoice #${invoice.invoiceNumber}?`)) return;
+
+        setActionLoading(id);
+        try {
+            const token = await getToken();
+            const res = await fetch(`/api/invoices/${id}`, {
+                method: "DELETE",
+                headers: {
+                    "Authorization": `Bearer ${token}`,
+                    "X-User-Id": internalUserId,
+                    "X-Org-Id": internalOrgId
+                }
+            });
+            if (!res.ok) throw new Error("Failed to delete invoice");
+            toast.success("Invoice deleted");
+            fetchInvoices();
+        } catch (error) {
+            toast.error(error.message);
+        } finally {
+            setActionLoading(null);
+        }
     };
 
     const handleSendInvoice = async (invoice) => {
-        if (!invoice.client?.email && !invoice.description?.includes("@")) {
+        if (!invoice.clientEmail && !invoice.notes?.includes("@")) {
             toast.error("No email address found for this client");
             return;
         }
-
-        setActionLoading(invoice.id);
+        setActionLoading(invoice.id || invoice._id);
         try {
             const token = await getToken();
-            const res = await fetch(`/api/invoices/${invoice.id}/send`, {
-                method: "POST",
-                headers: { Authorization: `Bearer ${token}` }
+            const id = invoice.id || invoice._id;
+            const res = await fetch(`/api/invoices/${id}/send`, {
+                method: "PATCH",
+                headers: {
+                    "Authorization": `Bearer ${token}`,
+                    "X-User-Id": internalUserId,
+                    "X-Org-Id": internalOrgId
+                }
             });
-            const data = await res.json();
-            if (!res.ok || !data.success) throw new Error(data.message || "Failed to send");
-
-            toast.success(`Invoice sent to ${invoice.client?.email || "client"}`);
+            if (!res.ok) throw new Error("Failed to send");
+            toast.success(`Invoice sent to ${invoice.clientEmail || "client"}`);
             fetchInvoices();
         } catch (error) {
             toast.error(error?.message || "Failed to send invoice");
@@ -103,15 +143,19 @@ export default function InvoicesPage() {
     };
 
     const handleDownloadInvoice = async (invoice) => {
-        setActionLoading(invoice.id);
+        const id = invoice.id || invoice._id;
+        setActionLoading(id);
         try {
             toast.info("Generating PDF…");
             const token = await getToken();
-            const res = await fetch(`/api/invoices/${invoice.id}/download`, {
-                headers: { Authorization: `Bearer ${token}` }
+            const res = await fetch(`/api/invoices/${id}/download`, {
+                headers: {
+                    "Authorization": `Bearer ${token}`,
+                    "X-User-Id": internalUserId,
+                    "X-Org-Id": internalOrgId
+                }
             });
             if (!res.ok) throw new Error("Failed to generate PDF");
-
             const blob = await res.blob();
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement("a");
@@ -121,7 +165,6 @@ export default function InvoicesPage() {
             a.click();
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
-
             toast.success("Invoice downloaded successfully");
         } catch (error) {
             toast.error(error?.message || "Failed to download invoice");
@@ -130,237 +173,234 @@ export default function InvoicesPage() {
         }
     };
 
-    // ── Derived state ─────────────────────────────────────────────────────────
-
     const stats = {
         total: invoices.length,
-        paid: invoices.filter((inv) => inv.status === "paid").length,
-        pending: invoices.filter((inv) => inv.status === "sent" || inv.status === "draft").length,
-        overdue: invoices.filter((inv) => inv.status === "overdue").length,
+        paid: invoices.filter((inv) => inv.status?.toLowerCase() === "paid").length,
+        pending: invoices.filter((inv) => ["sent", "draft"].includes(inv.status?.toLowerCase())).length,
+        overdue: invoices.filter((inv) => inv.status?.toLowerCase() === "overdue").length,
         paidAmount: invoices
-            .filter((inv) => inv.status === "paid")
-            .reduce((sum, inv) => sum + (inv.total || 0), 0),
+            .filter((inv) => inv.status?.toLowerCase() === "paid")
+            .reduce((sum, inv) => sum + (inv.totalAmount || 0), 0),
     };
 
     const filteredInvoices = invoices.filter((invoice) => {
-        const statusMatch =
-            activeTab === "all" || invoice.status === activeTab;
-
+        const statusMatch = activeTab === "all" || invoice.status?.toLowerCase() === activeTab;
         const searchMatch =
             !searchQuery ||
             invoice.invoiceNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            invoice.client?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            invoice.description?.toLowerCase().includes(searchQuery.toLowerCase());
-
+            invoice.clientName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            invoice.notes?.toLowerCase().includes(searchQuery.toLowerCase());
         return statusMatch && searchMatch;
     });
 
-    // ── Render ────────────────────────────────────────────────────────────────
-
     return (
-        <div className="space-y-6">
-            {/* ── Header ─────────────────────────────────────────────────────── */}
-            <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-6">
+            {/* ── Header ──────────────────────────────────────────────────────── */}
+            <div className="flex items-center justify-between flex-wrap gap-4">
                 <div>
-                    <h2 className="text-3xl font-bold tracking-tight">Invoices</h2>
-                    <p className="text-slate-500 text-sm mt-1">Manage and track your invoices</p>
+                    <h1 className="mo-h1">Invoices</h1>
+                    <p className="mo-text-secondary mt-1">Manage and track your invoices</p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <Button variant="outline" size="icon" onClick={fetchInvoices} disabled={loading}>
+                    <button
+                        className="mo-btn-secondary flex items-center gap-2"
+                        onClick={fetchInvoices}
+                        disabled={loading}
+                        aria-label="Refresh invoices"
+                    >
                         <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-                    </Button>
+                    </button>
                     <Link to="/invoices/new">
-                        <Button className="bg-green-600 hover:bg-green-700">
-                            <Plus className="h-4 w-4 mr-2" /> New Invoice
-                        </Button>
+                        <button className="mo-btn-primary flex items-center gap-2">
+                            <Plus className="h-4 w-4" /> New Invoice
+                        </button>
                     </Link>
                 </div>
             </div>
 
-            {/* ── Stats Cards ───────────────────────────────────────────────── */}
+            {/* ── Stats ───────────────────────────────────────────────────────── */}
             <div className="grid gap-4 md:grid-cols-4">
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-slate-500">Total Invoices</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-3xl font-bold">{stats.total}</div>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-slate-500">Paid</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-3xl font-bold text-green-600">{stats.paid}</div>
-                        <p className="text-xs text-slate-400 mt-1">₹{stats.paidAmount.toLocaleString("en-IN")}</p>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-slate-500">Pending</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-3xl font-bold text-blue-600">{stats.pending}</div>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-slate-500">Overdue</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-3xl font-bold text-red-600">{stats.overdue}</div>
-                    </CardContent>
-                </Card>
+                <div className="mo-stat-card">
+                    <p className="text-sm text-[#A0A0A0] mb-2">Total Invoices</p>
+                    <div className="text-3xl font-bold text-white">{stats.total}</div>
+                </div>
+                <div className="mo-stat-card">
+                    <p className="text-sm text-[#A0A0A0] mb-2">Paid</p>
+                    <div className="text-3xl font-bold text-[#4CBB17]">{stats.paid}</div>
+                    <p className="text-xs text-[#A0A0A0] mt-1">₹{stats.paidAmount.toLocaleString("en-IN")}</p>
+                </div>
+                <div className="mo-stat-card">
+                    <p className="text-sm text-[#A0A0A0] mb-2">Pending</p>
+                    <div className="text-3xl font-bold text-white">{stats.pending}</div>
+                </div>
+                <div className="mo-stat-card">
+                    <p className="text-sm text-[#A0A0A0] mb-2">Overdue</p>
+                    <div className="text-3xl font-bold text-[#CD1C18]">{stats.overdue}</div>
+                </div>
             </div>
 
-            {/* ── Search + Filter Tabs ──────────────────────────────────────── */}
+            {/* ── Search + Tabs ───────────────────────────────────────────────── */}
             <div className="flex flex-wrap items-center gap-4">
                 <div className="relative flex-1 max-w-md">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                    <Input
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#A0A0A0]" />
+                    <input
                         placeholder="Search invoices…"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-10"
+                        className="mo-input w-full pl-10 pr-4 py-2 text-sm focus:outline-none"
+                        style={{
+                            backgroundColor: "#1A1A1A",
+                            border: "1px solid #2A2A2A",
+                            borderRadius: "8px",
+                            color: "#ffffff",
+                            width: "100%",
+                        }}
                     />
                 </div>
-
                 <div className="flex items-center gap-2 flex-wrap">
                     {TABS.map((tab) => (
-                        <Button
+                        <button
                             key={tab}
-                            variant={activeTab === tab ? "default" : "outline"}
-                            size="sm"
                             onClick={() => setActiveTab(tab)}
-                            className={
-                                activeTab === tab
-                                    ? "bg-green-600 hover:bg-green-700 capitalize"
-                                    : "capitalize"
-                            }
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium capitalize transition-all ${activeTab === tab
+                                ? "bg-[#4CBB17] text-black"
+                                : "bg-[#1A1A1A] text-[#A0A0A0] border border-[#2A2A2A] hover:border-[#4CBB17] hover:text-white"
+                                }`}
                         >
                             {tab}
-                        </Button>
+                        </button>
                     ))}
                 </div>
             </div>
 
-            {/* ── Invoice List ─────────────────────────────────────────────── */}
+            {/* ── Invoice List ─────────────────────────────────────────────────── */}
             {loading ? (
                 <div className="flex items-center justify-center h-64">
-                    <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+                    <Loader2 className="h-8 w-8 animate-spin text-[#4CBB17]" />
                 </div>
             ) : filteredInvoices.length === 0 ? (
-                <Card className="border-dashed">
-                    <CardContent className="flex flex-col items-center justify-center py-16">
-                        <div className="rounded-full bg-slate-100 p-6 mb-4">
-                            <IndianRupee className="h-12 w-12 text-slate-400" />
-                        </div>
-                        <h3 className="text-xl font-semibold mb-2">No Invoices Found</h3>
-                        <p className="text-slate-500 mb-6 text-center max-w-sm text-sm">
-                            {activeTab === "all"
-                                ? "Create your first invoice to get started with billing."
-                                : `No ${activeTab} invoices found.`}
-                        </p>
-                        <Link to="/invoices/new">
-                            <Button className="bg-green-600 hover:bg-green-700">
-                                <Plus className="h-4 w-4 mr-2" /> Create Invoice
-                            </Button>
-                        </Link>
-                    </CardContent>
-                </Card>
+                <div className="mo-card flex flex-col items-center justify-center py-16 border-dashed">
+                    <div className="rounded-full bg-[#1A1A1A] p-6 mb-4 border border-[#2A2A2A]">
+                        <IndianRupee className="h-12 w-12 text-[#A0A0A0]" />
+                    </div>
+                    <h3 className="text-xl font-semibold text-white mb-2">No Invoices Found</h3>
+                    <p className="text-[#A0A0A0] mb-6 text-center max-w-sm text-sm">
+                        {activeTab === "all"
+                            ? "Create your first invoice to get started with billing."
+                            : `No ${activeTab} invoices found.`}
+                    </p>
+                    <Link to="/invoices/new">
+                        <button className="mo-btn-primary flex items-center gap-2">
+                            <Plus className="h-4 w-4" /> Create Invoice
+                        </button>
+                    </Link>
+                </div>
             ) : (
-                <div className="grid gap-4">
+                <div className="flex flex-col gap-3">
                     {filteredInvoices.map((invoice) => (
-                        <Card key={invoice.id} className="hover:shadow-md transition-shadow">
-                            <CardHeader>
-                                <div className="flex items-start justify-between">
-                                    <div className="space-y-1">
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                            <h3 className="text-lg font-semibold">
-                                                Invoice #{invoice.invoiceNumber}
-                                            </h3>
-                                            <Badge className={getStatusClass(invoice.status)}>
-                                                {invoice.status}
-                                            </Badge>
+                        <div
+                            key={invoice.id || invoice._id}
+                            className="mo-card !py-4 cursor-pointer"
+                            onClick={() => handleViewInvoice(invoice)}
+                        >
+                            <div className="flex items-start justify-between flex-wrap gap-4">
+                                {/* Left */}
+                                <div className="space-y-1.5">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <h3 className="text-base font-semibold text-white">
+                                            Invoice #{invoice.invoiceNumber}
+                                        </h3>
+                                        <span className={STATUS_BADGE_CLASS(invoice.status)}>
+                                            {invoice.status}
+                                        </span>
+                                    </div>
+                                    <p className="text-sm text-[#A0A0A0]">
+                                        {invoice.clientName || invoice.notes || "No client"}
+                                    </p>
+                                </div>
+
+                                {/* Right */}
+                                <div className="flex items-center gap-4">
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
+                                        <div>
+                                            <p className="text-[#A0A0A0] mb-0.5 text-xs">Amount</p>
+                                            <p className="font-semibold text-white">
+                                                ₹{invoice.totalAmount?.toLocaleString("en-IN")}
+                                            </p>
                                         </div>
-                                        <p className="text-sm text-slate-500">
-                                            {invoice.client?.name || invoice.description || "No client"}
-                                        </p>
+                                        <div>
+                                            <p className="text-[#A0A0A0] mb-0.5 text-xs">Issue Date</p>
+                                            <p className="font-medium text-white">
+                                                {new Date(invoice.issueDate).toLocaleDateString()}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[#A0A0A0] mb-0.5 text-xs">Due Date</p>
+                                            <p className="font-medium text-white">
+                                                {new Date(invoice.dueDate).toLocaleDateString()}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[#A0A0A0] mb-0.5 text-xs">Payment</p>
+                                            <p className="font-medium text-white">
+                                                {invoice.paymentDate
+                                                    ? new Date(invoice.paymentDate).toLocaleDateString()
+                                                    : "Not paid"}
+                                            </p>
+                                        </div>
                                     </div>
-
-                                    {/* Actions dropdown */}
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                            <Button variant="ghost" size="icon">
-                                                <MoreVertical className="h-4 w-4" />
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end">
-                                            <DropdownMenuItem onClick={() => handleViewInvoice(invoice)}>
-                                                <Eye className="h-4 w-4 mr-2" /> View
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => handleSendInvoice(invoice)}
-                                                disabled={actionLoading === invoice.id}
-                                            >
-                                                {actionLoading === invoice.id ? (
-                                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                                ) : (
-                                                    <Send className="h-4 w-4 mr-2" />
-                                                )}
-                                                Send
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => handleDownloadInvoice(invoice)}
-                                                disabled={actionLoading === invoice.id}
-                                            >
-                                                {actionLoading === invoice.id ? (
-                                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                                ) : (
-                                                    <Download className="h-4 w-4 mr-2" />
-                                                )}
-                                                Download
-                                            </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
+                                    <div onClick={(e) => e.stopPropagation()}>
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <button className="p-2 rounded-lg hover:bg-[#2A2A2A] text-[#A0A0A0] hover:text-white transition-colors">
+                                                    <MoreVertical className="h-4 w-4" />
+                                                </button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end" className="bg-[#1A1A1A] border-[#2A2A2A]">
+                                                <DropdownMenuItem
+                                                    onClick={() => handleViewInvoice(invoice)}
+                                                    className="text-white hover:bg-[#2A2A2A] cursor-pointer"
+                                                >
+                                                    <Eye className="h-4 w-4 mr-2" /> View
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
+                                                    onClick={(e) => { e.stopPropagation(); handleSendInvoice(invoice); }}
+                                                    disabled={actionLoading === (invoice.id || invoice._id)}
+                                                    className="text-white hover:bg-[#2A2A2A] cursor-pointer"
+                                                >
+                                                    {actionLoading === (invoice.id || invoice._id) ? (
+                                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                                    ) : (
+                                                        <Send className="h-4 w-4 mr-2" />
+                                                    )}
+                                                    Send
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
+                                                    onClick={(e) => { e.stopPropagation(); handleDownloadInvoice(invoice); }}
+                                                    disabled={actionLoading === (invoice.id || invoice._id)}
+                                                    className="text-white hover:bg-[#2A2A2A] cursor-pointer"
+                                                >
+                                                    {actionLoading === (invoice.id || invoice._id) ? (
+                                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                                    ) : (
+                                                        <Download className="h-4 w-4 mr-2" />
+                                                    )}
+                                                    Download
+                                                </DropdownMenuItem>
+                                                <DropdownMenuSeparator className="bg-[#2A2A2A]" />
+                                                <DropdownMenuItem
+                                                    onClick={(e) => { e.stopPropagation(); handleDeleteInvoice(invoice); }}
+                                                    disabled={actionLoading === (invoice.id || invoice._id)}
+                                                    className="text-red-500 hover:bg-[#CD1C1820] cursor-pointer"
+                                                >
+                                                    <Trash2 className="h-4 w-4 mr-2" /> Delete
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </div>
                                 </div>
-                            </CardHeader>
-
-                            <CardContent>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                                    <div>
-                                        <p className="text-slate-400 mb-1">Amount</p>
-                                        <p className="font-semibold text-base">
-                                            ₹{invoice.total?.toLocaleString("en-IN")}
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <p className="text-slate-400 mb-1">Issue Date</p>
-                                        <p className="font-medium">
-                                            {new Date(invoice.issueDate).toLocaleDateString()}
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <p className="text-slate-400 mb-1">Due Date</p>
-                                        <p className="font-medium">
-                                            {new Date(invoice.dueDate).toLocaleDateString()}
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <p className="text-slate-400 mb-1">Payment</p>
-                                        <p className="font-medium">
-                                            {invoice.paidDate
-                                                ? new Date(invoice.paidDate).toLocaleDateString()
-                                                : "Not paid"}
-                                        </p>
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
+                            </div>
+                        </div>
                     ))}
                 </div>
             )}
