@@ -27,6 +27,7 @@ logger = get_logger(__name__)
 
 # ── Groq client reuse ──────────────────────────────────────────────
 import httpx
+import groq
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = "llama-3.3-70b-versatile"
 
@@ -253,99 +254,206 @@ class MarketAgent(BaseAgent):
 
     # ── Business Context Fetcher ───────────────────────────────────
 
-    async def _get_business_snapshot(self, context) -> Dict[str, Any]:
-        """Fetch all business data in parallel for context injection"""
+    async def _get_business_snapshot(self, context) -> dict:
+        """Fetch live business metrics, clients, invoices from Spring Boot."""
+        org_uuid = getattr(context, 'org_uuid', None) or (context.get("org_uuid", "") if isinstance(context, dict) else "")
+        business_id = getattr(context, 'business_id', None) or (context.get("business_id", 1) if isinstance(context, dict) else 1)
+        user_id = getattr(context, 'user_id', None) or (context.get("user_id", "") if isinstance(context, dict) else "")
+
         try:
-            org_uuid = context.org_uuid if hasattr(context, 'org_uuid') else context.get("org_uuid", "")
-            user_id = context.user_id if hasattr(context, 'user_id') else context.get("user_id", "")
-            business_id = context.business_id if hasattr(context, 'business_id') else context.get("business_id", 1)
-
-            metrics_task = self.backend.get_finance_metrics(business_id, org_uuid, user_id)
-            invoices_task = self.backend._request("GET", "/api/invoices", org_id=org_uuid, user_id=user_id)
-            clients_task = self.backend.get_clients(org_uuid)
-
-            results = await asyncio.gather(
-                metrics_task, invoices_task, clients_task,
-                return_exceptions=True
+            metrics_task = self.backend._request(
+                "GET", "/api/finance-intelligence/metrics",
+                org_id=org_uuid, user_id=user_id,
+                params={"businessId": business_id},
             )
-            
-            metrics_resp = results[0]
-            invoices_resp = results[1]
-            clients = results[2]
+            clients_task = self.backend._request(
+                "GET", "/api/clients",
+                org_id=org_uuid, user_id=user_id,
+                params={"limit": 100},
+            )
+            invoices_task = self.backend._request(
+                "GET", "/api/invoices",
+                org_id=org_uuid, user_id=user_id,
+                params={"limit": 20},
+            )
 
-            m = {}
-            if not isinstance(metrics_resp, Exception) and metrics_resp.success:
-                m = metrics_resp.data or {}
+            metrics_resp, clients_resp, invoices_resp = await asyncio.gather(
+                metrics_task, clients_task, invoices_task,
+                return_exceptions=True,
+            )
+
+            metrics = {}
+            if (
+                metrics_resp
+                and not isinstance(metrics_resp, Exception)
+                and metrics_resp.success
+                and metrics_resp.data
+            ):
+                metrics = metrics_resp.data if isinstance(metrics_resp.data, dict) else {}
+
+            clients = []
+            if (
+                clients_resp
+                and not isinstance(clients_resp, Exception)
+                and clients_resp.success
+            ):
+                clients = clients_resp.data if isinstance(clients_resp.data, list) else []
 
             invoices = []
-            if not isinstance(invoices_resp, Exception) and invoices_resp.success:
-                invoices = invoices_resp.data or []
+            if (
+                invoices_resp
+                and not isinstance(invoices_resp, Exception)
+                and invoices_resp.success
+            ):
+                invoices = invoices_resp.data if isinstance(invoices_resp.data, list) else []
 
-            clients_list = clients if not isinstance(clients, Exception) else []
-
-            overdue = [i for i in invoices if i.get("status") == "OVERDUE"]
-            paid = [i for i in invoices if i.get("status") == "PAID"]
-            pending = [i for i in invoices if i.get("status") in ("DRAFT", "SENT")]
-
-            return {
-                "revenue": m.get("revenue", 0),
-                "expenses": m.get("expenses", 0),
-                "net_profit": m.get("netProfit", 0),
-                "total_clients": len(clients_list or []),
-                "total_invoices": len(invoices),
-                "paid_count": len(paid),
-                "pending_count": len(pending),
-                "overdue_count": len(overdue),
-                "overdue_amount": sum(float(i.get("totalAmount", 0)) for i in overdue),
-                "profit_margin": round(
-                    (m.get("netProfit", 0) / m.get("revenue", 1)) * 100, 1
-                ) if m.get("revenue", 0) > 0 else 0,
+            net_profit = metrics.get("netProfit", 0) or 0
+            revenue = metrics.get("revenue", 0) or 0
+            total_invoices = metrics.get("totalInvoices", 0) or 0
+            paid_count = metrics.get("paidInvoices", 0) or 0
+            
+            snapshot = {
+                "revenue": revenue,
+                "expenses": metrics.get("expenses", 0) or 0,
+                "net_profit": net_profit,
+                "profit_margin": round((net_profit / revenue * 100)) if revenue > 0 else 0,
+                "total_invoices": total_invoices,
+                "paid_count": paid_count,
+                "pending_count": max(0, total_invoices - paid_count),
+                "overdue_count": metrics.get("overdueCount", 0) or 0,
+                "overdue_amount": metrics.get("overdueAmount", 0) or 0,
+                "total_clients": len(clients),
+                "clients": [c.get("name", "") for c in clients[:8] if isinstance(c, dict)],
+                "recent_invoices": [
+                    {
+                        "client": inv.get("clientName") or inv.get("client_name", ""),
+                        "amount": inv.get("amount", 0),
+                        "status": inv.get("status", ""),
+                    }
+                    for inv in invoices[:5]
+                    if isinstance(inv, dict)
+                ],
             }
+
+            logger.info({
+                "event": "business_snapshot_fetched",
+                "org": org_uuid,
+                "revenue": snapshot["revenue"],
+                "total_clients": snapshot["total_clients"],
+                "invoice_count": len(invoices),
+            })
+            return snapshot
+
         except Exception as e:
             logger.error({"event": "business_snapshot_error", "error": str(e)})
-            return {}
-
-    async def handle_market_query(self, text: str, context, conversation_history: list = None) -> AgentResponse:
-        """Main entry point for strategic market queries in voice path"""
-        org_uuid = context.org_uuid if hasattr(context, 'org_uuid') else context.get("org_uuid", "")
-        
-        # Add conversation context to prompt
-        history_str = ""
-        if conversation_history:
-            recent = conversation_history[-4:]  # last 2 turns
-            history_str = "\nCONVERSATION SO FAR:\n" + "\n".join(
-                f"{'User' if t['role'] == 'user' else 'Agent'}: {t['content']}"
-                for t in recent
-            )
-
-        # 1. Start or check background monitor
-        business_id = context.business_id if hasattr(context, 'business_id') else context.get("business_id", 1)
-        self.start_market_monitor(org_uuid, business_id)
-
-        # 2. Get business snapshot
-        snapshot = await self._get_business_snapshot(context)
-
-        # 3. Get cached market data
-        market_data = _market_cache.get(org_uuid, {})
-
-        # 4. Synthesize strategy response
-        prompt = self._build_strategy_prompt(text, snapshot, market_data, history_str)
-
-        # Synthesize via Groq
-        response_text = await _groq_chat(prompt, max_tokens=350)
-
-        return AgentResponse(
-            success=True,
-            message=response_text,
-            agent_type=self.get_agent_type(),
-            ui_event={
-                "type": "market_insight",
-                "variant": "info",
-                "title": "Market Intelligence",
-                "message": "Live market analysis complete",
-                "duration": 5000,
+            return {
+                "revenue": 0, "expenses": 0, "net_profit": 0, "profit_margin": 0,
+                "total_clients": 0, "clients": [], "recent_invoices": [],
+                "total_invoices": 0, "paid_count": 0, "pending_count": 0,
+                "overdue_count": 0, "overdue_amount": 0,
             }
+
+    async def handle_market_query(self, text: str, context, conversation_history=None):
+        from app.agents.base_agent import AgentResponse
+        from app.schemas.intents import AgentType
+
+        # Fetch real data in parallel
+        snapshot_task = self._get_business_snapshot(context)
+        # Also trigger a fresh watchdog fetch if cache is stale/empty
+        org_uuid = getattr(context, 'org_uuid', None) or (context.get("org_uuid", "") if isinstance(context, dict) else "")
+        cached = _market_cache.get(org_uuid, {})
+        snapshot = await snapshot_task
+
+        # Format market data from cache
+        news_data = cached.get("news") or {}
+        news_items = news_data.get("news") or [] # Prepared headline list from NewsAPI
+        news_text = (
+            "\n".join(f"- {n}" for n in news_items[:5])
+            if news_items
+            else news_data.get("answer", "Market watchdog is warming up — first data fetch in progress.")
         )
+
+        comp_data = cached.get("competitors") or {}
+        comp_answer = comp_data.get("competitors_answer", "")
+        comp_moves = comp_data.get("recent_moves", "")
+        comp_text = (
+            f"Analysis: {comp_answer}\nRecent Moves: {comp_moves}"
+            if comp_answer or comp_moves
+            else "Competitor data being fetched."
+        )
+
+        opp_data = cached.get("opportunities") or {}
+        opp_answer = opp_data.get("opportunities", "")
+        opp_text = opp_answer if opp_answer else "Growth opportunity data being fetched."
+
+
+        prompt = f"""You are a sharp strategic advisor for an Indian B2B company.
+
+USER QUESTION: "{text}"
+
+LIVE BUSINESS METRICS (fetched right now from the company's database):
+- Revenue: ₹{snapshot.get('revenue', 0):,}
+- Expenses: ₹{snapshot.get('expenses', 0):,}
+- Net Profit: ₹{snapshot.get('net_profit', 0):,}
+- Total Invoices: {snapshot.get('total_invoices', 0)}
+- Overdue Invoices: {snapshot.get('overdue_count', 0)} (₹{snapshot.get('overdue_amount', 0):,})
+- Active Clients ({snapshot.get('total_clients', 0)}): {', '.join(snapshot.get('clients', [])[:5]) or 'none yet'}
+
+RECENT MARKET NEWS (from Tavily live search, updated every 6 hours):
+{news_text}
+
+COMPETITOR INTELLIGENCE:
+{comp_text}
+
+GROWTH OPPORTUNITIES IDENTIFIED:
+{opp_text}
+
+INDIA REGULATORY CONTEXT (March 2026):
+- GST on services: 18% default
+- MSME 45-day payment rule enforced
+- RBI repo rate: 6.25% (Feb 2026 cut — borrowing cheaper)
+- FAME III EV subsidy active till June 2026
+- SEBI ESG mandate: Top 1000 listed companies by FY27
+
+INSTRUCTIONS:
+- Answer the user's SPECIFIC question using the ACTUAL numbers above
+- Do NOT say you lack data — you have real business metrics and live market news above
+- Be concrete: cite actual revenue figures, name actual clients, reference actual news
+- Keep response under 40 words — this is a voice response
+- No bullet points, no markdown, speak naturally
+- If revenue/clients are 0, say "your account has no data yet, add invoices to get started"
+"""
+
+        try:
+            client = groq.AsyncGroq(api_key=GROQ_API_KEY)
+            response = await client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=150,
+                temperature=0.4,
+            )
+            answer = response.choices[0].message.content.strip()
+            return AgentResponse(
+                success=True,
+                message=answer,
+                agent_type=AgentType.MARKET_AGENT,
+            )
+        except Exception as e:
+            logger.error({"event": "market_query_groq_error", "error": str(e)})
+            # Fallback: answer from snapshot directly without Groq
+            if snapshot["revenue"] > 0:
+                fallback = (
+                    f"Your revenue is ₹{snapshot['revenue']:,} with expenses ₹{snapshot['expenses']:,}, "
+                    f"giving a profit of ₹{snapshot['net_profit']:,}. "
+                    f"You have {snapshot['total_clients']} clients and {snapshot['overdue_count']} overdue invoices."
+                )
+            else:
+                fallback = "No financial data yet — add invoices to start tracking metrics."
+            return AgentResponse(
+                success=True,
+                message=fallback,
+                agent_type=AgentType.MARKET_AGENT,
+            )
 
     def _detect_industry(self, snapshot: Dict, text: str) -> str:
         """Heuristic industry detection from text + business data"""

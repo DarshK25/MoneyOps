@@ -142,8 +142,8 @@ class FinanceAgent(BaseAgent):
 
         if not draft.client_id:
             logger.info({"context_org_uuid": context.org_uuid, "event": "DEBUG_org_context"})
-            clients = await self.backend.get_clients(context.org_uuid)
-            if not clients:
+            resp = await self.backend.get_clients(context.org_uuid)
+            if not resp or not resp.success:
                 return AgentResponse(
                     message="I couldn't load your client list. Please say the client name again.",
                     success=True,
@@ -151,7 +151,14 @@ class FinanceAgent(BaseAgent):
                     agent_type=self.get_agent_type()
                 )
             
-            # Re-check resolution if we have a name
+            clients = resp.data if isinstance(resp.data, list) else []
+            if not clients:
+                 return AgentResponse(
+                    message="You don't have any clients yet. Say 'add a client' to get started.",
+                    success=True,
+                    agent_type=self.get_agent_type()
+                )
+
             # Re-check resolution if we have a name but no ID
             if draft.client_name and not draft.client_id:
                 client = await self._resolve_client(draft.client_name, context.org_uuid)
@@ -162,7 +169,7 @@ class FinanceAgent(BaseAgent):
                     session_manager.save_session(session)
                     # Don't return, fall through to check next missing field (e.g. amount)
                 else:
-                    names = [c.get("name") for c in clients[:6]]
+                    names = [c.get("name") for c in clients[:6] if isinstance(c, dict)]
                     return AgentResponse(
                         message=f"I couldn't find a client called '{draft.client_name}'. Your existing clients are: {', '.join(filter(None, names))}. Which one, or should I create a new one?",
                         success=True,
@@ -171,7 +178,7 @@ class FinanceAgent(BaseAgent):
                     )
             
             if not draft.client_id:
-                names = [c.get("name") for c in clients[:6]]
+                names = [c.get("name") for c in clients[:6] if isinstance(c, dict)]
                 return AgentResponse(
                     message=f"Which client? You have: {', '.join(filter(None, names))}.",
                     success=True,
@@ -308,8 +315,10 @@ class FinanceAgent(BaseAgent):
             return self._build_error_response(str(e))
 
     async def _resolve_client(self, spoken_name: str, org_uuid: str) -> Optional[Dict]:
-        clients = await self.backend.get_clients(org_uuid)
-        if not clients or not spoken_name: return None
+        resp = await self.backend.get_clients(org_uuid)
+        if not resp or not resp.success or not isinstance(resp.data, list):
+            return None
+        clients = resp.data
 
         def normalize(s):
             return re.sub(r'[^a-z0-9]', '', str(s).lower())
