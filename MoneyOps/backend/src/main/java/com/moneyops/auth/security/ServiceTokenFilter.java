@@ -75,25 +75,17 @@ public class ServiceTokenFilter extends OncePerRequestFilter {
                             OrgContext.setUserId(user.getId());
                             if (user.getOrgId() != null) {
                                 OrgContext.setOrgId(user.getOrgId());
-                            } else if (StringUtils.hasText(orgIdHeader) && !orgIdHeader.startsWith("org_")) {
-                                try { OrgContext.setOrgId(UUID.fromString(orgIdHeader)); } catch (IllegalArgumentException ignored) {}
+                            } else if (StringUtils.hasText(orgIdHeader)) {
+                                OrgContext.setOrgId(orgIdHeader);
                             }
                         });
                     } else {
-                        // Standard UUID processing
-                        if (StringUtils.hasText(orgIdHeader) && !orgIdHeader.startsWith("org_")) {
-                            try {
-                                OrgContext.setOrgId(UUID.fromString(orgIdHeader));
-                            } catch (IllegalArgumentException e) {
-                                logger.warn("Invalid X-Org-Id header value: " + orgIdHeader);
-                            }
+                        // Standard processing — we treat all IDs as stable Strings now
+                        if (StringUtils.hasText(orgIdHeader)) {
+                            OrgContext.setOrgId(orgIdHeader);
                         }
                         if (StringUtils.hasText(userIdHeader)) {
-                            try {
-                                OrgContext.setUserId(UUID.fromString(userIdHeader));
-                            } catch (IllegalArgumentException e) {
-                                logger.warn("Invalid X-User-Id header value: " + userIdHeader);
-                            }
+                            OrgContext.setUserId(userIdHeader);
                         }
                     }
 

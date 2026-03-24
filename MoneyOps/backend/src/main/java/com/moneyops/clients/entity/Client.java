@@ -22,7 +22,7 @@ public class Client {
     @Id
     private String id = UUID.randomUUID().toString();
 
-    private UUID orgId;
+    private String orgId;
     private String name;
     private String taxId;       // Client's GST/PAN
     private String email;
@@ -40,8 +40,8 @@ public class Client {
 
     private LocalDateTime createdAt = LocalDateTime.now();
     private LocalDateTime updatedAt = LocalDateTime.now();
-    private UUID createdBy;
-    private UUID updatedBy;
+    private String createdBy;
+    private String updatedBy;
 
     public enum Status {
         ACTIVE, INACTIVE, SUSPENDED

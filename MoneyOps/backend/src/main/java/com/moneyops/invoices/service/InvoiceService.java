@@ -39,7 +39,7 @@ public class InvoiceService {
     private final com.moneyops.audit.service.AuditLogService auditLogService;
     private final com.moneyops.transactions.service.TransactionService transactionService;
 
-    public List<InvoiceDto> getAllInvoices(UUID orgId) {
+    public List<InvoiceDto> getAllInvoices(String orgId) {
         var invoices = invoiceRepository.findAllByOrgId(orgId);
         return populateClientDetails(invoices, orgId);
     }
@@ -48,7 +48,7 @@ public class InvoiceService {
         invoiceValidator.validate(dto);
     }
 
-    public List<InvoiceDto> searchInvoices(UUID orgId, String status, String clientName, String clientId, int limit) {
+    public List<InvoiceDto> searchInvoices(String orgId, String status, String clientName, String clientId, int limit) {
         List<Invoice> allInvoices = invoiceRepository.findAllByOrgId(orgId);
         
         // Use a wrapper or just process sequentially to keep it simple and final-safe
@@ -65,7 +65,7 @@ public class InvoiceService {
         // 2. Filter by clientId if provided
         if (clientId != null && !clientId.trim().isEmpty()) {
             filtered = filtered.stream()
-                    .filter(inv -> inv.getClientId() != null && inv.getClientId().toString().equals(clientId))
+                    .filter(inv -> inv.getClientId() != null && inv.getClientId().equals(clientId))
                     .collect(Collectors.toList());
         }
 
@@ -81,14 +81,14 @@ public class InvoiceService {
                 .collect(Collectors.toSet());
                 
             filtered = filtered.stream()
-                .filter(inv -> inv.getClientId() != null && matchedClientIds.contains(inv.getClientId().toString()))
+                .filter(inv -> inv.getClientId() != null && matchedClientIds.contains(inv.getClientId()))
                 .collect(Collectors.toList());
         }
 
         return populateClientDetails(filtered.stream().limit(limit).collect(Collectors.toList()), orgId);
     }
 
-    public InvoiceDto getInvoiceById(String id, UUID orgId) {
+    public InvoiceDto getInvoiceById(String id, String orgId) {
         try {
             org.slf4j.LoggerFactory.getLogger(InvoiceService.class).info("Fetching invoice with id [{}] for orgId [{}]", id, orgId);
             
@@ -104,7 +104,7 @@ public class InvoiceService {
         }
     }
 
-    public InvoiceDto createInvoice(InvoiceDto dto, UUID orgId, UUID userId) {
+    public InvoiceDto createInvoice(InvoiceDto dto, String orgId, String userId) {
         dto.setId(null); 
         invoiceValidator.validate(dto);
 
@@ -145,7 +145,7 @@ public class InvoiceService {
         return populateClientDetails(saved);
     }
 
-    public InvoiceDto updateInvoice(String id, InvoiceDto dto, UUID orgId) {
+    public InvoiceDto updateInvoice(String id, InvoiceDto dto, String orgId) {
         Invoice existing = invoiceRepository.findByIdAndOrgId(id, orgId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found"));
 
@@ -167,7 +167,7 @@ public class InvoiceService {
         return populateClientDetails(saved);
     }
 
-    public void deleteInvoice(String id, UUID orgId) {
+    public void deleteInvoice(String id, String orgId) {
         Invoice invoice = invoiceRepository.findByIdAndOrgId(id, orgId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found"));
 
@@ -178,7 +178,7 @@ public class InvoiceService {
         invoiceRepository.deleteByIdAndOrgId(id, orgId);
     }
 
-    public InvoiceDto sendInvoice(String id, UUID orgId) {
+    public InvoiceDto sendInvoice(String id, String orgId) {
         Invoice invoice = invoiceRepository.findByIdAndOrgId(id, orgId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found"));
 
@@ -192,7 +192,7 @@ public class InvoiceService {
         return populateClientDetails(saved);
     }
 
-    public InvoiceDto markPaid(String id, UUID orgId) {
+    public InvoiceDto markPaid(String id, String orgId) {
         Invoice invoice = invoiceRepository.findByIdAndOrgId(id, orgId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found"));
 
@@ -207,7 +207,7 @@ public class InvoiceService {
         return populateClientDetails(saved);
     }
 
-    public List<InvoiceDto> getOverdueInvoices(UUID orgId) {
+    public List<InvoiceDto> getOverdueInvoices(String orgId) {
         List<Invoice> overdue = invoiceRepository.findOverdueByOrgId(orgId, LocalDate.now());
         for (Invoice invoice : overdue) {
             invoice.setStatus(InvoiceStatus.OVERDUE);
@@ -217,7 +217,7 @@ public class InvoiceService {
     }
 
     // InvoiceItem operations
-    public InvoiceItemDto addItem(String invoiceId, InvoiceItemDto itemDto, UUID orgId) {
+    public InvoiceItemDto addItem(String invoiceId, InvoiceItemDto itemDto, String orgId) {
         Invoice invoice = invoiceRepository.findByIdAndOrgId(invoiceId, orgId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found"));
 
@@ -254,7 +254,7 @@ public class InvoiceService {
         return invoiceMapper.toItemDto(item);
     }
 
-    public void updateItem(UUID itemId, InvoiceItemDto itemDto, UUID orgId) {
+    public void updateItem(String itemId, InvoiceItemDto itemDto, String orgId) {
         // Need to find which invoice contains this item
         // In MongoDB we usually know the invoice ID, but if only itemId is provided:
         Invoice invoice = invoiceRepository.findAllByOrgId(orgId).stream()
@@ -291,9 +291,9 @@ public class InvoiceService {
         invoiceRepository.save(invoice);
     }
 
-    public void deleteItem(UUID itemId, UUID orgId) {
+    public void deleteItem(String itemId, String orgId) {
         Invoice invoice = invoiceRepository.findAllByOrgId(orgId).stream()
-                .filter(inv -> inv.getItems() != null && inv.getItems().stream().anyMatch(i -> i.getId().equals(itemId)))
+                .filter(inv -> inv.getItems() != null && inv.getItems().stream().anyMatch(i -> i.getId().toString().equals(itemId)))
                 .findFirst()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found in any invoice for this org"));
 
@@ -346,25 +346,25 @@ public class InvoiceService {
         return dto;
     }
 
-    private List<InvoiceDto> populateClientDetails(List<Invoice> invoices, UUID orgId) {
+    private List<InvoiceDto> populateClientDetails(List<Invoice> invoices, String orgId) {
         return invoices.stream()
                 .map(this::populateClientDetails)
                 .collect(Collectors.toList());
     }
 
-    public List<com.moneyops.audit.entity.AuditLog> getInvoiceLogs(String id, UUID orgId) {
+    public List<com.moneyops.audit.entity.AuditLog> getInvoiceLogs(String id, String orgId) {
         // First verify ownership
         getInvoiceById(id, orgId);
         return auditLogService.getAuditLogsByEntityId(id);
     }
 
-    public List<com.moneyops.transactions.dto.TransactionDto> getInvoicePayments(String id, UUID orgId) {
+    public List<com.moneyops.transactions.dto.TransactionDto> getInvoicePayments(String id, String orgId) {
         // First verify ownership
         getInvoiceById(id, orgId);
         return transactionService.getTransactionsByInvoice(id, orgId);
     }
 
-    public com.moneyops.transactions.dto.TransactionDto recordPayment(String id, com.moneyops.transactions.dto.TransactionDto paymentDto, UUID orgId, UUID userId) {
+    public com.moneyops.transactions.dto.TransactionDto recordPayment(String id, com.moneyops.transactions.dto.TransactionDto paymentDto, String orgId, String userId) {
         Invoice invoice = invoiceRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found"));
         

@@ -21,7 +21,7 @@ import java.util.UUID;
 public class BusinessOrganization {
 
     @Id
-    private UUID id = UUID.randomUUID();
+    private String id = UUID.randomUUID().toString();
 
     // ── Step 1: Business Info ──────────────────────────────────────────────────
     private String legalName;           // company's legal name
@@ -79,7 +79,7 @@ public class BusinessOrganization {
     private String preferredLanguage;
 
     // ── Audit ──────────────────────────────────────────────────────────────────
-    private UUID createdBy;
+    private String createdBy;
     private LocalDateTime createdAt = LocalDateTime.now();
     private LocalDateTime updatedAt = LocalDateTime.now();
 }

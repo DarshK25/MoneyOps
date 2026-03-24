@@ -12,10 +12,10 @@ import java.util.UUID;
 public class AuditLog {
 
     @Id
-    private UUID id = UUID.randomUUID();
+    private String id = UUID.randomUUID().toString();
 
-    private UUID orgId;
-    private UUID userId;
+    private String orgId;
+    private String userId;
     private String entityType;  // e.g. "User", "Invoice", "Client"
     private String entityId;    // UUID as string
     private Operation operation;

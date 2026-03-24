@@ -4,12 +4,11 @@ package com.moneyops.transactions.dto;
 import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.UUID;
 
 @Data
 public class TransactionDto {
-    private UUID id;
-    private UUID clientId;
+    private String id;
+    private String clientId;
     private String invoiceId;
     private String type;
     private BigDecimal amount;

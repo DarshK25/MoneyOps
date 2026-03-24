@@ -17,9 +17,9 @@ public class Invoice {
     @Id
     private String id;
 
-    private UUID orgId;
+    private String orgId;
     private String invoiceNumber;
-    private UUID clientId;
+    private String clientId;
     private String clientName;     // Snapshot of client name at time of creation
     private String clientEmail;    // Snapshot of client email
     private String clientCompany;  // Snapshot of client company
@@ -39,5 +39,5 @@ public class Invoice {
 
     private LocalDateTime createdAt = LocalDateTime.now();
     private LocalDateTime updatedAt = LocalDateTime.now();
-    private UUID createdBy;
+    private String createdBy;
 }

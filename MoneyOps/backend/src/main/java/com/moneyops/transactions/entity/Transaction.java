@@ -16,10 +16,10 @@ import java.util.UUID;
 public class Transaction {
 
     @Id
-    private UUID id = UUID.randomUUID();
+    private String id = UUID.randomUUID().toString();
 
-    private UUID orgId;
-    private UUID clientId;      // null if expense unrelated to a client
+    private String orgId;
+    private String clientId;      // null if expense unrelated to a client
     private String invoiceId;   // null if not linked to an invoice
     private TransactionType type;
     private BigDecimal amount;
@@ -36,5 +36,5 @@ public class Transaction {
 
     private LocalDateTime createdAt = LocalDateTime.now();
     private LocalDateTime updatedAt = LocalDateTime.now();
-    private UUID createdBy;
+    private String createdBy;
 }

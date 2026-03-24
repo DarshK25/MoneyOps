@@ -12,18 +12,18 @@ import java.util.UUID;
 public class MoneyOpsDocument {
 
     @Id
-    private UUID id = UUID.randomUUID();
+    private String id = UUID.randomUUID().toString();
 
-    private UUID orgId;
+    private String orgId;
     private String name;
     private String type;
     private Long size;
     private String firebasePath;
     private String downloadUrl;
     private String mimeType;
-    private UUID uploadedBy;
+    private String uploadedBy;
     private String linkedEntityType;
-    private UUID linkedEntityId;
+    private String linkedEntityId;
     private LocalDateTime createdAt = LocalDateTime.now();
     private boolean isConfidential = false;
     private String category;

@@ -6,13 +6,12 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.UUID;
 
 @Data
 public class InvoiceDto {
     private String id;
     private String invoiceNumber;
-    private UUID clientId;
+    private String clientId;
     private String clientName;
     private String clientEmail;
     private String clientCompany;

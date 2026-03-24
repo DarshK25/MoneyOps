@@ -8,7 +8,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/invoices")
@@ -19,8 +18,8 @@ public class InvoiceController {
 
     @PostMapping
     public ResponseEntity<InvoiceDto> createInvoice(@RequestBody InvoiceDto dto) {
-        UUID orgId = OrgContext.getOrgId();
-        UUID userId = OrgContext.getUserId();
+        String orgId = OrgContext.getOrgId();
+        String userId = OrgContext.getUserId();
         
         if (orgId == null) throw new RuntimeException("Organization context missing");
         
@@ -37,7 +36,7 @@ public class InvoiceController {
 
     @PutMapping("/{id}")
     public ResponseEntity<InvoiceDto> updateInvoice(@PathVariable String id, @RequestBody InvoiceDto dto) {
-        UUID orgId = OrgContext.getOrgId();
+        String orgId = OrgContext.getOrgId();
         InvoiceDto updated = invoiceService.updateInvoice(id, dto, orgId);
         return ResponseEntity.ok(updated);
     }
@@ -48,7 +47,7 @@ public class InvoiceController {
             @RequestParam(required = false, name = "client_name") String clientName,
             @RequestParam(required = false, name = "clientId") String clientId,
             @RequestParam(defaultValue = "50") int limit) {
-        UUID orgId = OrgContext.getOrgId();
+        String orgId = OrgContext.getOrgId();
         if (orgId == null) return ResponseEntity.ok(List.of());
         List<InvoiceDto> invoices = invoiceService.searchInvoices(orgId, status, clientName, clientId, limit);
         return ResponseEntity.ok(invoices);
@@ -56,7 +55,7 @@ public class InvoiceController {
 
     @GetMapping("/{id}")
     public ResponseEntity<InvoiceDto> getInvoice(@PathVariable String id) {
-        UUID orgId = OrgContext.getOrgId();
+        String orgId = OrgContext.getOrgId();
         if (orgId == null) {
             return ResponseEntity.status(403).build(); // Forbidden if context is missing
         }
@@ -66,41 +65,41 @@ public class InvoiceController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteInvoice(@PathVariable String id) {
-        UUID orgId = OrgContext.getOrgId();
+        String orgId = OrgContext.getOrgId();
         invoiceService.deleteInvoice(id, orgId);
         return ResponseEntity.noContent().build();
     }
 
     @PatchMapping("/{id}/send")
     public ResponseEntity<InvoiceDto> sendInvoice(@PathVariable String id) {
-        UUID orgId = OrgContext.getOrgId();
+        String orgId = OrgContext.getOrgId();
         InvoiceDto sent = invoiceService.sendInvoice(id, orgId);
         return ResponseEntity.ok(sent);
     }
 
     @PatchMapping("/{id}/mark-paid")
     public ResponseEntity<InvoiceDto> markPaid(@PathVariable String id) {
-        UUID orgId = OrgContext.getOrgId();
+        String orgId = OrgContext.getOrgId();
         InvoiceDto paid = invoiceService.markPaid(id, orgId);
         return ResponseEntity.ok(paid);
     }
 
     @GetMapping("/overdue")
     public ResponseEntity<List<InvoiceDto>> getOverdueInvoices() {
-        UUID orgId = OrgContext.getOrgId();
+        String orgId = OrgContext.getOrgId();
         List<InvoiceDto> overdue = invoiceService.getOverdueInvoices(orgId);
         return ResponseEntity.ok(overdue);
     }
 
     @GetMapping("/{id}/logs")
     public ResponseEntity<List<com.moneyops.audit.entity.AuditLog>> getInvoiceLogs(@PathVariable String id) {
-        UUID orgId = OrgContext.getOrgId();
+        String orgId = OrgContext.getOrgId();
         return ResponseEntity.ok(invoiceService.getInvoiceLogs(id, orgId));
     }
 
     @GetMapping("/{id}/payments")
     public ResponseEntity<List<com.moneyops.transactions.dto.TransactionDto>> getInvoicePayments(@PathVariable String id) {
-        UUID orgId = OrgContext.getOrgId();
+        String orgId = OrgContext.getOrgId();
         return ResponseEntity.ok(invoiceService.getInvoicePayments(id, orgId));
     }
 
@@ -114,8 +113,8 @@ public class InvoiceController {
     public ResponseEntity<com.moneyops.shared.dto.ApiResponse<com.moneyops.transactions.dto.TransactionDto>> recordPayment(
             @PathVariable String id,
             @RequestBody com.moneyops.transactions.dto.TransactionDto paymentDto) {
-        UUID orgId = OrgContext.getOrgId();
-        UUID userId = OrgContext.getUserId();
+        String orgId = OrgContext.getOrgId();
+        String userId = OrgContext.getUserId();
         com.moneyops.transactions.dto.TransactionDto saved = invoiceService.recordPayment(id, paymentDto, orgId, userId);
         return ResponseEntity.ok(com.moneyops.shared.dto.ApiResponse.success("Payment recorded successfully", saved));
     }

@@ -13,9 +13,9 @@ import java.util.UUID;
 public class User {
 
     @Id
-    private UUID id = UUID.randomUUID();
+    private String id = UUID.randomUUID().toString();
 
-    private UUID orgId;
+    private String orgId;
     private String name;
 
     @Indexed(unique = true)
@@ -35,8 +35,8 @@ public class User {
     private LocalDateTime lastLoginAt;
     private LocalDateTime createdAt = LocalDateTime.now();
     private LocalDateTime updatedAt = LocalDateTime.now();
-    private UUID createdBy;
-    private UUID updatedBy;
+    private String createdBy;
+    private String updatedBy;
 
     public enum Role {
         OWNER, ADMIN, MANAGER, STAFF, VIEWER

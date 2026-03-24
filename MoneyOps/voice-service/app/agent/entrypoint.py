@@ -348,8 +348,7 @@ async def entrypoint(ctx: JobContext):
     # Greet the user immediately
     try:
         await session.say(
-            "Hello! MoneyOps AI is ready. You can say things like "
-            "'Create an invoice for Tanoosh Jain for 10,000 rupees'. How can I help?",
+            "Hello! MoneyOps AI is ready.",
             allow_interruptions=True,
         )
     except RuntimeError as e:

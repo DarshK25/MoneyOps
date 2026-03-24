@@ -27,7 +27,7 @@ public class ClientDto {
     private String status;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-    private UUID createdBy;
-    private UUID updatedBy;
+    private String createdBy;
+    private String updatedBy;
     private Double searchScore;
 }
