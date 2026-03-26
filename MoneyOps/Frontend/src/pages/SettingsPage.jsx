@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Save, User, Building, Bell, Shield } from "lucide-react";
-import { useUser, useAuth } from "@clerk/clerk-react";
+import { Save, User, Building, Bell, Shield, BadgeCheck, Globe, Briefcase, MapPin, Hash, Target, Users } from "lucide-react";
+import { useUser } from "@clerk/clerk-react";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 
 const inputStyle = {
@@ -15,6 +15,56 @@ const inputStyle = {
     width: "100%",
     outline: "none",
     transition: "border-color 0.15s ease",
+};
+
+const ENUM_LABELS = {
+    businessType: {
+        sole_proprietorship: "Sole Proprietorship",
+        partnership: "Partnership",
+        llp: "Limited Liability Partnership (LLP)",
+        private_limited: "Private Limited Company",
+        public_limited: "Public Limited Company",
+        opc: "One Person Company (OPC)",
+    },
+    industry: {
+        it_software: "IT & Software",
+        manufacturing: "Manufacturing",
+        retail: "Retail & E-commerce",
+        services: "Professional Services",
+        healthcare: "Healthcare",
+        education: "Education",
+        construction: "Construction & Real Estate",
+        energy_utilities: "Energy & Utilities",
+        finance: "Finance & Banking",
+        hospitality: "Hospitality & Tourism",
+        logistics: "Logistics & Supply Chain",
+        agriculture: "Agriculture & Food",
+        media: "Media & Entertainment",
+        telecom: "Telecommunications",
+        aerospace: "Aerospace & Defence",
+        government: "Government & Public Sector",
+        other: "Other",
+    },
+    annualTurnover: {
+        below_10l: "Below ₹10 Lakhs",
+        "10l_to_1cr": "₹10 Lakhs – ₹1 Crore",
+        "1cr_to_10cr": "₹1 Crore – ₹10 Crores",
+        above_10cr: "Above ₹10 Crores",
+    },
+    targetMarket: {
+        B2B: "B2B (Business to Business)",
+        B2C: "B2C (Business to Consumer)",
+        B2G: "B2G (Business to Government)",
+    },
+    gstFilingFrequency: {
+        monthly: "Monthly",
+        quarterly: "Quarterly",
+    }
+};
+
+const getReadable = (category, value) => {
+    if (!value) return "Not specified";
+    return ENUM_LABELS[category]?.[value] || value.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
 };
 
 export default function SettingsPage() {
@@ -30,14 +80,34 @@ export default function SettingsPage() {
     });
 
     const [business, setBusiness] = useState({
+        id: "",
         companyName: "",
-        gstin: "",
+        tradingName: "",
         businessType: "",
-        address: "",
+        industry: "",
+        registrationDate: "",
+        annualTurnover: "",
+        primaryEmail: "",
+        primaryPhone: "",
         website: "",
-        pincode: "",
+        employeeCount: "",
+        address: "",
         panNumber: "",
         stateOfRegistration: "",
+        gstRegistered: false,
+        gstin: "",
+        gstFilingFrequency: "",
+        tanNumber: "",
+        cin: "",
+        llpin: "",
+        msmeNumber: "",
+        iecCode: "",
+        professionalTaxReg: "",
+        primaryActivity: "",
+        targetMarket: "",
+        keyProducts: [],
+        currentChallenges: [],
+        accountingMethod: "",
     });
 
     const [notifications, setNotifications] = useState({
@@ -76,13 +146,32 @@ export default function SettingsPage() {
                     setBusiness({
                         id: data.id,
                         companyName: data.legalName || "",
-                        gstin: data.gstin || "",
+                        tradingName: data.tradingName || "",
                         businessType: data.businessType || "",
-                        address: data.registeredAddress || "",
+                        industry: data.industry || "",
+                        registrationDate: data.registrationDate || "",
+                        annualTurnover: data.annualTurnover || "",
+                        primaryEmail: data.primaryEmail || "",
+                        primaryPhone: data.primaryPhone || "",
                         website: data.website || "",
-                        pincode: data.pincode || "", 
+                        employeeCount: data.employeeCount || "",
+                        address: data.registeredAddress || "",
                         panNumber: data.panNumber || "",
                         stateOfRegistration: data.stateOfRegistration || "",
+                        gstRegistered: data.gstRegistered || false,
+                        gstin: data.gstin || "",
+                        gstFilingFrequency: data.gstFilingFrequency || "",
+                        tanNumber: data.tanNumber || "",
+                        cin: data.cin || "",
+                        llpin: data.llpin || "",
+                        msmeNumber: data.msmeNumber || "",
+                        iecCode: data.iecCode || "",
+                        professionalTaxReg: data.professionalTaxReg || "",
+                        primaryActivity: data.primaryActivity || "",
+                        targetMarket: data.targetMarket || "",
+                        keyProducts: data.keyProducts || [],
+                        currentChallenges: data.currentChallenges || [],
+                        accountingMethod: data.accountingMethod || "",
                     });
                 }
             } catch (error) {
@@ -95,49 +184,80 @@ export default function SettingsPage() {
         fetchBusinessData();
     }, [user, orgId, userId]);
 
-    const handleSave = async (section) => {
-        try {
-            if (section === "Business" && userId) {
-                // If orgId is not yet available, we can use the 'my' endpoint if the backend supports PUT /my, 
-                // but usually we have an orgId by this point if we loaded data.
-                const targetId = orgId || business.id; 
-                if (!targetId) throw new Error("Organization ID not found");
+    const handleSaveProfile = async () => {
+        toast.info("Profile saving via Clerk is currently browse-only");
+    };
 
-                const response = await fetch(`/api/org/${targetId}`, {
-                    method: "PUT",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "X-User-Id": userId
-                    },
-                    body: JSON.stringify({
-                        legalName: business.companyName,
-                        gstin: business.gstin,
-                        businessType: business.businessType,
-                        registeredAddress: business.address,
-                        website: business.website,
-                        pincode: business.pincode,
-                        panNumber: business.panNumber,
-                        stateOfRegistration: business.stateOfRegistration
-                    })
-                });
-                if (!response.ok) throw new Error("Failed to update business");
-            }
-            toast.success(`${section} settings saved`);
+    const handleSaveBusiness = async () => {
+        setLoading(true);
+        try {
+            const targetId = orgId || business.id; 
+            if (!targetId) throw new Error("Organization ID not found");
+
+            const response = await fetch(`/api/org/${targetId}`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-User-Id": userId
+                },
+                body: JSON.stringify({
+                    legalName: business.companyName,
+                    tradingName: business.tradingName,
+                    businessType: business.businessType,
+                    industry: business.industry,
+                    registrationDate: business.registrationDate,
+                    annualTurnover: business.annualTurnover,
+                    primaryEmail: business.primaryEmail,
+                    primaryPhone: business.primaryPhone,
+                    website: business.website,
+                    employeeCount: business.employeeCount,
+                    registeredAddress: business.address,
+                    panNumber: business.panNumber,
+                    stateOfRegistration: business.stateOfRegistration,
+                    gstRegistered: business.gstRegistered,
+                    gstin: business.gstin,
+                    gstFilingFrequency: business.gstFilingFrequency,
+                    tanNumber: business.tanNumber,
+                    cin: business.cin,
+                    llpin: business.llpin,
+                    msmeNumber: business.msmeNumber,
+                    iecCode: business.iecCode,
+                    professionalTaxReg: business.professionalTaxReg,
+                    primaryActivity: business.primaryActivity,
+                    targetMarket: business.targetMarket,
+                    accountingMethod: business.accountingMethod,
+                })
+            });
+            if (!response.ok) throw new Error("Failed to update business");
+            toast.success("Business settings saved");
         } catch (error) {
             toast.error(error.message);
+        } finally {
+            setLoading(false);
         }
     };
 
+    const StatusBadge = ({ value, category }) => (
+        <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md bg-[#4CBB1720] text-[#4CBB17] border border-[#4CBB1740]">
+            {getReadable(category, value)}
+        </span>
+    );
+
     return (
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-6 max-w-6xl mx-auto w-full pb-10">
             {/* ── Header ──────────────────────────────────────────────────────── */}
-            <div>
-                <h1 className="mo-h1">Settings</h1>
-                <p className="mo-text-secondary mt-1">Manage your account and business preferences</p>
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="mo-h1">Settings</h1>
+                    <p className="mo-text-secondary mt-1">Manage your account and business configuration</p>
+                </div>
+                <div className="hidden md:block">
+                     <Building className="h-10 w-10 text-[#2A2A2A]" />
+                </div>
             </div>
 
-            <Tabs defaultValue="profile" className="flex flex-col gap-4">
-                <TabsList className="bg-[#1A1A1A] border border-[#2A2A2A] h-auto p-1 rounded-xl w-fit flex gap-1">
+            <Tabs defaultValue="profile" className="flex flex-col gap-6">
+                <TabsList className="bg-[#111111] border border-[#2A2A2A] h-auto p-1 rounded-xl w-fit flex gap-1">
                     {[
                         { value: "profile", label: "Profile", icon: User },
                         { value: "business", label: "Business", icon: Building },
@@ -147,29 +267,37 @@ export default function SettingsPage() {
                         <TabsTrigger
                             key={value}
                             value={value}
-                            className="px-4 py-2 rounded-lg text-sm font-medium text-[#A0A0A0] data-[state=active]:bg-[#4CBB17] data-[state=active]:text-black transition-all flex items-center gap-2"
+                            className="px-5 py-2.5 rounded-lg text-sm font-medium text-[#A0A0A0] data-[state=active]:bg-[#4CBB17] data-[state=active]:text-black transition-all flex items-center gap-2"
                         >
-                            <Icon className="h-3.5 w-3.5" />
+                            <Icon className="h-4 w-4" />
                             {label}
                         </TabsTrigger>
                     ))}
                 </TabsList>
 
                 {/* ── Profile Tab ─────────────────────────────────────────────── */}
-                <TabsContent value="profile">
+                <TabsContent value="profile" className="animate-in fade-in duration-300">
                     <div className="mo-card">
-                        <h2 className="mo-h2 mb-1">Profile Information</h2>
-                        <p className="mo-text-secondary mb-6">Update your personal information</p>
-                        <div className="grid gap-4 md:grid-cols-2">
-                            {[
-                                { label: "First Name", id: "settings-first-name", field: "firstName", placeholder: "John" },
-                                { label: "Last Name", id: "settings-last-name", field: "lastName", placeholder: "Doe" },
-                                { label: "Email", id: "settings-email", field: "email", type: "email", placeholder: "john@example.com" },
-                                { label: "Phone", id: "settings-phone", field: "phone", type: "tel", placeholder: "+91 98765 43210" },
-                                { label: "Professional Title", id: "settings-title", field: "professionalTitle", placeholder: "Freelance Consultant", colSpan: true },
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="h-10 w-10 rounded-full bg-[#1A1A1A] flex items-center justify-center border border-[#2A2A2A]">
+                                <User className="h-5 w-5 text-[#4CBB17]" />
+                            </div>
+                            <div>
+                                <h2 className="mo-h2">Personal Information</h2>
+                                <p className="mo-text-secondary text-sm">Update your public profile and contact info</p>
+                            </div>
+                        </div>
+
+                        <div className="grid gap-6 md:grid-cols-2">
+                             {[
+                                { label: "First Name", id: "p-first", field: "firstName", placeholder: "John" },
+                                { label: "Last Name", id: "p-last", field: "lastName", placeholder: "Doe" },
+                                { label: "Email Address", id: "p-email", field: "email", type: "email", placeholder: "john@example.com" },
+                                { label: "Phone Number", id: "p-phone", field: "phone", type: "tel", placeholder: "+91 98765 43210" },
+                                { label: "Professional Title", id: "p-title", field: "professionalTitle", placeholder: "Managing Director", colSpan: true },
                             ].map(({ label, id, field, type, placeholder, colSpan }) => (
                                 <div key={id} className={`grid gap-2 ${colSpan ? "md:col-span-2" : ""}`}>
-                                    <label htmlFor={id} className="text-sm font-medium text-[#A0A0A0]">{label}</label>
+                                    <label htmlFor={id} className="text-xs font-bold text-[#606060] uppercase tracking-wider">{label}</label>
                                     <input
                                         id={id}
                                         type={type || "text"}
@@ -181,62 +309,192 @@ export default function SettingsPage() {
                                 </div>
                             ))}
                         </div>
-                        <div className="mt-6 flex justify-end">
-                            <button
-                                onClick={() => handleSave("Profile")}
-                                className="mo-btn-primary flex items-center gap-2"
-                            >
-                                <Save className="h-4 w-4" /> Save Profile
+                        <div className="mt-8 pt-6 border-t border-[#2A2A2A] flex justify-end">
+                            <button onClick={handleSaveProfile} className="mo-btn-primary flex items-center gap-2">
+                                <Save className="h-4 w-4" /> Save Changes
                             </button>
                         </div>
                     </div>
                 </TabsContent>
 
-                {/* ── Business Tab ─────────────────────────────────────────────── */}
-                <TabsContent value="business">
-                    <div className="mo-card">
-                        <h2 className="mo-h2 mb-1">Business Information</h2>
-                        <p className="mo-text-secondary mb-6">Configure your business details for invoices</p>
-                        <div className="grid gap-4 md:grid-cols-2">
-                            {[
-                                { label: "Company Name", id: "biz-company", field: "companyName", placeholder: "Acme Corp", colSpan: true },
-                                { label: "GST Number", id: "biz-gstin", field: "gstin", placeholder: "22AAAAA0000A1Z5" },
-                                { label: "PAN Number", id: "biz-pan", field: "panNumber", placeholder: "ABCDE1234F" },
-                                { label: "Business Type", id: "biz-type", field: "businessType", placeholder: "Sole Proprietor" },
-                                { label: "State", id: "biz-state", field: "stateOfRegistration", placeholder: "Maharashtra" },
-                                { label: "Business Address", id: "biz-address", field: "address", placeholder: "123 Main St, City", colSpan: true },
-                                { label: "Website", id: "biz-website", field: "website", type: "url", placeholder: "https://yourdomain.com" },
-                                { label: "Pincode", id: "biz-pincode", field: "pincode", placeholder: "400001" },
-                            ].map(({ label, id, field, type, placeholder, colSpan }) => (
-                                <div key={id} className={`grid gap-2 ${colSpan ? "md:col-span-2" : ""}`}>
-                                    <label htmlFor={id} className="text-sm font-medium text-[#A0A0A0]">{label}</label>
-                                    <input
-                                        id={id}
-                                        type={type || "text"}
-                                        value={business[field]}
-                                        onChange={(e) => setBusiness((p) => ({ ...p, [field]: e.target.value }))}
-                                        placeholder={placeholder}
-                                        style={inputStyle}
+                {/* ── Business Tab (DETAILED V2) ────────────────────────────────── */}
+                <TabsContent value="business" className="animate-in fade-in duration-300">
+                    <div className="flex flex-col gap-6">
+                        
+                        {/* 1. Core Identity Section */}
+                        <div className="mo-card">
+                            <div className="flex items-center justify-between mb-6">
+                                <div className="flex items-center gap-3">
+                                    <Globe className="h-5 w-5 text-[#4CBB17]" />
+                                    <h3 className="font-bold text-lg">Core Identity</h3>
+                                </div>
+                                <StatusBadge category="businessType" value={business.businessType} />
+                            </div>
+                            
+                            <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+                                <div className="grid gap-2 md:col-span-2">
+                                    <label className="text-[10px] font-bold text-[#606060] uppercase tracking-wider">Legal Business Name</label>
+                                    <input value={business.companyName} onChange={e => setBusiness({...business, companyName: e.target.value})} style={inputStyle} />
+                                </div>
+                                <div className="grid gap-2">
+                                    <label className="text-[10px] font-bold text-[#606060] uppercase tracking-wider">Trading Name</label>
+                                    <input value={business.tradingName} onChange={e => setBusiness({...business, tradingName: e.target.value})} placeholder="e.g. Acme Stores" style={inputStyle} />
+                                </div>
+                                <div className="grid gap-2">
+                                    <label className="text-[10px] font-bold text-[#606060] uppercase tracking-wider">Industry</label>
+                                    <div className="relative">
+                                        <input value={getReadable('industry', business.industry)} readOnly style={{...inputStyle, cursor: 'default'}} />
+                                        <div className="absolute right-3 top-3"><Briefcase className="h-3.5 w-3.5 text-[#404040]" /></div>
+                                    </div>
+                                </div>
+                                <div className="grid gap-2">
+                                    <label className="text-[10px] font-bold text-[#606060] uppercase tracking-wider">Registration Date</label>
+                                    <input type="date" value={business.registrationDate} onChange={e => setBusiness({...business, registrationDate: e.target.value})} style={inputStyle} />
+                                </div>
+                                <div className="grid gap-2">
+                                    <label className="text-[10px] font-bold text-[#606060] uppercase tracking-wider">Website URL</label>
+                                    <input value={business.website} onChange={e => setBusiness({...business, website: e.target.value})} placeholder="https://" style={inputStyle} />
+                                </div>
+                            </div>
+                        </div>
+
+                         {/* 2. Regulatory & Tax IDs */}
+                         <div className="mo-card">
+                            <div className="flex items-center gap-3 mb-6">
+                                <BadgeCheck className="h-5 w-5 text-[#4CBB17]" />
+                                <h3 className="font-bold text-lg">Regulatory & Compliance</h3>
+                            </div>
+                            
+                            <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+                                <div className="grid gap-2">
+                                    <label className="text-[10px] font-bold text-[#606060] uppercase tracking-wider">PAN Number</label>
+                                    <input value={business.panNumber} onChange={e => setBusiness({...business, panNumber: e.target.value.toUpperCase()})} style={inputStyle} maxLength={10} />
+                                </div>
+                                <div className="grid gap-2">
+                                    <label className="text-[10px] font-bold text-[#606060] uppercase tracking-wider">GSTIN</label>
+                                    <input value={business.gstin} onChange={e => setBusiness({...business, gstin: e.target.value.toUpperCase()})} style={inputStyle} maxLength={15} />
+                                </div>
+                                <div className="grid gap-2">
+                                    <label className="text-[10px] font-bold text-[#606060] uppercase tracking-wider">TAN Number</label>
+                                    <input value={business.tanNumber} onChange={e => setBusiness({...business, tanNumber: e.target.value.toUpperCase()})} style={inputStyle} />
+                                </div>
+                                <div className="grid gap-2">
+                                    <label className="text-[10px] font-bold text-[#606060] uppercase tracking-wider">State of Reg.</label>
+                                    <input value={business.stateOfRegistration} onChange={e => setBusiness({...business, stateOfRegistration: e.target.value})} style={inputStyle} />
+                                </div>
+                                <div className="grid gap-2">
+                                    <label className="text-[10px] font-bold text-[#606060] uppercase tracking-wider">CIN / LLPIN</label>
+                                    <input value={business.cin || business.llpin} onChange={e => setBusiness({...business, cin: e.target.value.toUpperCase()})} style={inputStyle} />
+                                </div>
+                                <div className="grid gap-2">
+                                    <label className="text-[10px] font-bold text-[#606060] uppercase tracking-wider">MSME Number</label>
+                                    <input value={business.msmeNumber} onChange={e => setBusiness({...business, msmeNumber: e.target.value})} style={inputStyle} />
+                                </div>
+                                <div className="grid gap-2">
+                                    <label className="text-[10px] font-bold text-[#606060] uppercase tracking-wider">IEC Code</label>
+                                    <input value={business.iecCode} onChange={e => setBusiness({...business, iecCode: e.target.value})} style={inputStyle} />
+                                </div>
+                                <div className="grid gap-2">
+                                    <label className="text-[10px] font-bold text-[#606060] uppercase tracking-wider">GST Frequency</label>
+                                    <input value={getReadable('gstFilingFrequency', business.gstFilingFrequency)} readOnly style={{...inputStyle, cursor: 'default'}} />
+                                </div>
+                            </div>
+                        </div>
+
+                         {/* 3. Operational Context */}
+                         <div className="mo-card">
+                            <div className="flex items-center gap-3 mb-6">
+                                <Target className="h-5 w-5 text-[#4CBB17]" />
+                                <h3 className="font-bold text-lg">Operations & Context</h3>
+                            </div>
+                            
+                            <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+                                <div className="grid gap-2">
+                                    <label className="text-[10px] font-bold text-[#606060] uppercase tracking-wider">Annual Turnover</label>
+                                    <div className="flex items-center gap-2 p-3 bg-[#111111] border border-[#2A2A2A] rounded-lg">
+                                        <Hash className="h-3.5 w-3.5 text-[#4CBB17]" />
+                                        <span className="text-sm">{getReadable('annualTurnover', business.annualTurnover)}</span>
+                                    </div>
+                                </div>
+                                <div className="grid gap-2">
+                                    <label className="text-[10px] font-bold text-[#606060] uppercase tracking-wider">Target Market</label>
+                                    <div className="flex items-center gap-2 p-3 bg-[#111111] border border-[#2A2A2A] rounded-lg">
+                                        <Users className="h-3.5 w-3.5 text-[#4CBB17]" />
+                                        <span className="text-sm">{getReadable('targetMarket', business.targetMarket)}</span>
+                                    </div>
+                                </div>
+                                <div className="grid gap-2">
+                                    <label className="text-[10px] font-bold text-[#606060] uppercase tracking-wider">Team Size</label>
+                                    <input type="number" value={business.employeeCount} onChange={e => setBusiness({...business, employeeCount: e.target.value})} style={inputStyle} />
+                                </div>
+                                <div className="grid gap-2">
+                                    <label className="text-[10px] font-bold text-[#606060] uppercase tracking-wider">Accounting Method</label>
+                                    <div className="flex items-center gap-2 p-3 bg-[#111111] border border-[#2A2A2A] rounded-lg">
+                                        <BadgeCheck className="h-3.5 w-3.5 text-[#4CBB17]" />
+                                        <span className="text-sm">{business.accountingMethod === 'accrual' ? 'Accrual Basis' : 'Cash Basis'}</span>
+                                    </div>
+                                </div>
+                                <div className="grid gap-2">
+                                    <label className="text-[10px] font-bold text-[#606060] uppercase tracking-wider">FY Start Month</label>
+                                    <input value={business.fyStartMonth || "April"} readOnly style={{...inputStyle, cursor: 'default'}} />
+                                </div>
+                                <div className="grid gap-2 md:col-span-3">
+                                    <label className="text-[10px] font-bold text-[#606060] uppercase tracking-wider">Primary Activity</label>
+                                    <textarea 
+                                        value={business.primaryActivity} 
+                                        onChange={e => setBusiness({...business, primaryActivity: e.target.value})} 
+                                        className="w-full bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg p-3 text-sm text-white focus:outline-none min-h-[80px]" 
                                     />
                                 </div>
-                            ))}
+                            </div>
                         </div>
-                        <div className="mt-6 flex justify-end">
-                            <button
-                                onClick={() => handleSave("Business")}
-                                className="mo-btn-primary flex items-center gap-2"
+
+                         {/* 4. Contact & Location */}
+                         <div className="mo-card">
+                            <div className="flex items-center gap-3 mb-6">
+                                <MapPin className="h-5 w-5 text-[#4CBB17]" />
+                                <h3 className="font-bold text-lg">Contact & Address</h3>
+                            </div>
+                            
+                            <div className="grid gap-5 md:grid-cols-2">
+                                <div className="grid gap-2">
+                                    <label className="text-[10px] font-bold text-[#606060] uppercase tracking-wider">Official Email</label>
+                                    <input value={business.primaryEmail} onChange={e => setBusiness({...business, primaryEmail: e.target.value})} style={inputStyle} />
+                                </div>
+                                <div className="grid gap-2">
+                                    <label className="text-[10px] font-bold text-[#606060] uppercase tracking-wider">Official Phone</label>
+                                    <input value={business.primaryPhone} onChange={e => setBusiness({...business, primaryPhone: e.target.value})} style={inputStyle} />
+                                </div>
+                                <div className="grid gap-2 md:col-span-2">
+                                    <label className="text-[10px] font-bold text-[#606060] uppercase tracking-wider">Registered Address</label>
+                                    <textarea 
+                                        value={business.address} 
+                                        onChange={e => setBusiness({...business, address: e.target.value})} 
+                                        className="w-full bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg p-3 text-sm text-white focus:outline-none min-h-[60px]" 
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end sticky bottom-4 z-10">
+                            <button 
+                                onClick={handleSaveBusiness} 
+                                disabled={loading}
+                                className="mo-btn-primary flex items-center gap-2 shadow-2xl disabled:opacity-50"
                             >
-                                <Save className="h-4 w-4" /> Save Business
+                                <Save className="h-4 w-4" /> Save Business Details
                             </button>
                         </div>
                     </div>
                 </TabsContent>
 
                 {/* ── Notifications Tab ────────────────────────────────────────── */}
-                <TabsContent value="notifications">
+                <TabsContent value="notifications" className="animate-in fade-in duration-300">
                     <div className="mo-card">
-                        <h2 className="mo-h2 mb-1">Notification Preferences</h2>
-                        <p className="mo-text-secondary mb-6">Choose when you want to be notified</p>
+                        <div className="flex items-center gap-3 mb-6">
+                            <Bell className="h-5 w-5 text-[#4CBB17]" />
+                            <h2 className="mo-h2">Communication Preferences</h2>
+                        </div>
                         <div className="space-y-4">
                             {Object.entries(notifications).map(([key, enabled]) => {
                                 const labels = {
@@ -271,28 +529,27 @@ export default function SettingsPage() {
                                 );
                             })}
                         </div>
-                        <div className="mt-6 flex justify-end">
-                            <button
-                                onClick={() => handleSave("Notifications")}
-                                className="mo-btn-primary flex items-center gap-2"
-                            >
-                                <Save className="h-4 w-4" /> Save Preferences
-                            </button>
-                        </div>
                     </div>
                 </TabsContent>
 
                 {/* ── Security Tab ─────────────────────────────────────────────── */}
-                <TabsContent value="security">
+                <TabsContent value="security" className="animate-in fade-in duration-300">
                     <div className="mo-card">
-                        <h2 className="mo-h2 mb-1">Security</h2>
-                        <p className="mo-text-secondary mb-6">Manage your account security settings</p>
-                        <div className="p-4 bg-[#4CBB1710] border border-[#4CBB1730] rounded-xl">
-                            <p className="text-sm text-[#4CBB17] font-medium">Clerk-Managed Authentication</p>
-                            <p className="text-sm text-[#A0A0A0] mt-1">
-                                Your account is secured by Clerk. Password changes and two-factor authentication
-                                are managed through the Clerk user portal.
-                            </p>
+                        <div className="flex items-center gap-3 mb-6">
+                            <Shield className="h-5 w-5 text-[#4CBB17]" />
+                            <h2 className="mo-h2">Account Security</h2>
+                        </div>
+                        <div className="p-6 bg-[#4CBB1708] border border-[#4CBB1715] rounded-2xl flex items-start gap-4">
+                            <div className="p-2 bg-[#4CBB1720] rounded-lg">
+                                <BadgeCheck className="h-5 w-5 text-[#4CBB17]" />
+                            </div>
+                            <div>
+                                <p className="text-sm text-white font-bold">Authenticated by Clerk</p>
+                                <p className="text-sm text-[#A0A0A0] mt-1 leading-relaxed">
+                                    Your session and identity are managed by Clerk's enterprise-grade security. 
+                                    Multi-factor authentication, session management, and password policies are active.
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </TabsContent>
