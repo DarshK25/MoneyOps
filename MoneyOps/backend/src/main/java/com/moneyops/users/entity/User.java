@@ -33,7 +33,6 @@ public class User {
 
     @Indexed(unique = true)
     private String email;
-
     private String phone;
     private Role role = Role.STAFF;
     private Status status = Status.ACTIVE;

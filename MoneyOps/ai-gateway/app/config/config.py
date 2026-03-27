@@ -19,21 +19,21 @@ class Settings(BaseSettings):
     """
     Application settings loaded from environment variables
     """
-    
+
     # Application
     APP_NAME: str = "MoneyOps AI Gateway"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
     ENVIRONMENT: str = "development"
-    
+
     # Server
     HOST: str = "0.0.0.0"
     PORT: int = 8001
-    
+
     # LLM Providers
     GROQ_API_KEY: str
     ANTHROPIC_API_KEY: Optional[str] = None
-    
+
     # LLM Models
     GROQ_MODEL: str = "llama-3.1-8b-instant"  
     GROQ_MODEL_COMPLEX: str = "llama-3.1-8b-instant"  # For complex tasks
@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     LLM_MAX_TOKENS: int = 2000
     LLM_TIMEOUT: int = 30
     LLM_MAX_RETRIES: int = 3
-    
+
     # Backend Services
     BACKEND_BASE_URL: str = "http://127.0.0.1:8000"
     BACKEND_TIMEOUT: int = 30
@@ -62,27 +62,27 @@ class Settings(BaseSettings):
     CACHE_TTL_SHORT: int = 300  # 5 minutes
     CACHE_TTL_MEDIUM: int = 1800  # 30 minutes
     CACHE_TTL_LONG: int = 3600  # 1 hour
-    
+
     # Security
     JWT_SECRET_KEY: str = "your-secret-key-change-in-production"
     JWT_ALGORITHM: str = "HS256"
-    
+
     # Rate Limiting
     RATE_LIMIT_REQUESTS: int = 100
     RATE_LIMIT_WINDOW: int = 60  # seconds
-    
+
     # Logging
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "json"
-    
+
     # Conversation Memory
     MAX_CONVERSATION_HISTORY: int = 10
     CONVERSATION_TTL: int = 3600  # 1 hour
-    
+
     # Agent Settings
     AGENT_TIMEOUT: int = 60
     MAX_TOOL_ITERATIONS: int = 5
-    
+
     # LiveKit
     LIVEKIT_URL: str = "wss://your-project.livekit.cloud"
     LIVEKIT_API_KEY: Optional[str] = None
@@ -115,3 +115,4 @@ def require_groq_key():
 
 # Convenience function
 settings = get_settings()
+

@@ -7,6 +7,8 @@ pom.xml.next
 dependency-reduced-pom.xml
 
 .env
+.env.mysql.local
+env.mysql.local.txt
 
 # H2 database files
 *.mv.db

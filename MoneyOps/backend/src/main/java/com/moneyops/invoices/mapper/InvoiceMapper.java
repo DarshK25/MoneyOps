@@ -102,7 +102,7 @@ public class InvoiceMapper {
         return dto;
     }
 
-    private InvoiceItem toItemEntity(InvoiceItemDto dto, Invoice invoice) {
+    public InvoiceItem toItemEntity(InvoiceItemDto dto, UUID invoiceId) {
         InvoiceItem item = new InvoiceItem();
         item.setType(InvoiceItem.ItemType.valueOf(dto.getType()));
         item.setDescription(dto.getDescription());

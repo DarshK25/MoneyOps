@@ -435,7 +435,6 @@ public class InvoiceService {
         item.setRate(itemDto.getRate());
         item.setGstPercent(itemDto.getGstPercent());
 
-        // Recalculate
         var qty = item.getType() == InvoiceItem.ItemType.SERVICE ? 1 : item.getQuantity();
         var lineSubtotal = item.getRate().multiply(BigDecimal.valueOf(qty));
         var lineGst = lineSubtotal.multiply(item.getGstPercent().divide(BigDecimal.valueOf(100)));
