@@ -10,92 +10,66 @@ MoneyOps is a next-generation financial platform that orchestrates **AI Agents**
 ## 🏗️ System Architecture
 
 ```mermaid
-graph TD
+flowchart TB
+    classDef default font-size:16px,padding:8px;
+    classDef subgraphTitle font-size:18px,font-weight:bold;
+
     subgraph ClientLayer [Client Layer]
+        direction LR
         WebApp[Web App - React]
         LiveKitVoice[Voice Interface - LiveKit]
     end
 
     subgraph APIGatewayLayer [API Gateway - Spring Boot]
-        APIGateway[Cloud Gateway]
-        RateLimiter[Redis Rate Limiter]
-        Auth[JWT / Clerk Auth Validation]
-        APIGateway --> RateLimiter
-        APIGateway --> Auth
+        direction TB
+        APIGateway[Cloud Gateway] --> RateLimiter[Redis Rate Limiter] & Auth[JWT / Clerk Validation]
     end
 
     subgraph VoiceServiceLayer [Voice Service - Python/LiveKit]
-        LiveKitAgent[LiveKit Agent Framework]
-        STT[STT - AssemblyAI / Groq Whisper]
-        VAD[Silero VAD]
-        TTS[TTS - Cartesia / Groq Orpheus]
-        LiveKitAgent --> VAD
-        LiveKitAgent --> STT
-        LiveKitAgent --> TTS
+        direction LR
+        LiveKitAgent[LiveKit Framework] --> VAD[Silero VAD] & STT[AssemblyAI/Groq] & TTS[Cartesia/Groq]
     end
 
     subgraph AIGatewayLayer [AI Gateway - FastAPI]
-        IntentClassifier[Intent Classifier - Llama 3.3]
-        EntityExtractor[Entity Extraction]
-        AgentRouter[Agent Router]
-        SessionMgr[Session Manager - Redis Cache]
-        
-        subgraph Agents
-            FinanceAgent[Finance Agent]
-            SalesCRM[Sales Agent / CRM]
-            ComplianceAgent[Compliance Agent]
-            MarketAgent[Market Agent]
-            Orchestrator[Strategic Orchestrator]
-        end
-        
-        IntentClassifier --> AgentRouter
-        AgentRouter --> Agents
-        Agents -->|Session| SessionMgr
+        direction TB
+        Intent[Intent Classifier] --> AgentRouter[Agent Router] 
+        AgentRouter --> AgentsBox[Agents: Finance, Sales, Compliance, Market, Orchestrator]
+        AgentsBox --> SessionMgr[Session Manager - Redis]
     end
 
     subgraph BackendCoreLayer [Backend Core - Spring Boot]
-        OrgAdmin[Organization & User Admin]
-        InvoiceService[Invoice & Transaction Service]
-        ClientService[Client & Lead Service]
-        FinanceIntelligence[Financial Intelligence Engine]
-        OnboardingService[Onboarding & Demo Data]
-        
-        %% Intelligence
-        ClientService -->|Lead Scoring| BusinessBrain[Founder Intelligence Layer]
+        direction TB
+        CoreServices[OrgAdmin, Invoice, Client, Onboarding Services]
+        Intelligence[Founder Intelligence Layer]
+        CoreServices -->|Lead Scoring| Intelligence
     end
 
     subgraph DataLayer [Data Layer]
+        direction LR
         MongoDB[(MongoDB Atlas)]
         RedisCache[(Redis - Cache/Sessions)]
         KafkaBus{Kafka Event Bus}
     end
 
     subgraph ExternalAPIs [External Integrations]
-        Groq[Groq - LLM]
-        Tavily[Tavily - Search]
-        AssemblyAI[AssemblyAI - STT]
-        Cartesia[Cartesia - TTS]
+        direction LR
+        Groq[Groq LLM]
+        Tavily[Tavily Search]
         LiveKitCloud[LiveKit RTC Cloud]
-        Clerk[Clerk - Identity Provider]
     end
 
-    %% Flows
-    WebApp -->|HTTPS/REST| APIGateway
-    APIGateway -->|Route| BackendCoreLayer
-    APIGateway -->|Route| AIGatewayLayer
+    %% Optimized Cross-Connections to avoid spreading
+    WebApp -->|HTTPS| APIGateway
+    LiveKitVoice -->|WebRTC| LiveKitCloud <--> LiveKitAgent
     
-    LiveKitVoice -->|WebRTC| LiveKitCloud
-    LiveKitCloud <--> LiveKitAgent
+    APIGateway --> BackendCoreLayer & AIGatewayLayer
     LiveKitAgent -->|Intercept| AIGatewayLayer
     
-    Agents -->|Synthesis| Groq
-    MarketAgent -->|Tavily Search| ExternalAPIs
+    AgentsBox -->|Synthesis| Groq
+    AgentsBox -->|Search| Tavily
     
-    BackendCoreLayer --> MongoDB
-    BackendCoreLayer --> RedisCache
+    BackendCoreLayer --> MongoDB & RedisCache & KafkaBus
     AIGatewayLayer --> RedisCache
-    
-    BackendCoreLayer --> KafkaBus
 ```
 
 ---
