@@ -284,6 +284,12 @@ export default function SettingsPage() {
         }
     };
 
+    const StatusBadge = ({ value, category }) => (
+        <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md bg-[#4CBB1720] text-[#4CBB17] border border-[#4CBB1740]">
+            {getReadable(category, value)}
+        </span>
+    );
+
     return (
         <div className="flex flex-col gap-6">
             <div>
@@ -291,8 +297,8 @@ export default function SettingsPage() {
                 <p className="mo-text-secondary mt-1">Manage your account and business preferences</p>
             </div>
 
-            <Tabs defaultValue="profile" className="flex flex-col gap-4">
-                <TabsList className="bg-[#1A1A1A] border border-[#2A2A2A] h-auto p-1 rounded-xl w-fit flex gap-1">
+            <Tabs defaultValue="profile" className="flex flex-col gap-6">
+                <TabsList className="bg-[#111111] border border-[#2A2A2A] h-auto p-1 rounded-xl w-fit flex gap-1">
                     {[
                         { value: "profile", label: "Profile", icon: User },
                         { value: "business", label: "Business", icon: Building },
@@ -302,9 +308,9 @@ export default function SettingsPage() {
                         <TabsTrigger
                             key={value}
                             value={value}
-                            className="px-4 py-2 rounded-lg text-sm font-medium text-[#A0A0A0] data-[state=active]:bg-[#4CBB17] data-[state=active]:text-black transition-all flex items-center gap-2"
+                            className="px-5 py-2.5 rounded-lg text-sm font-medium text-[#A0A0A0] data-[state=active]:bg-[#4CBB17] data-[state=active]:text-black transition-all flex items-center gap-2"
                         >
-                            <Icon className="h-3.5 w-3.5" />
+                            <Icon className="h-4 w-4" />
                             {label}
                         </TabsTrigger>
                     ))}
@@ -323,7 +329,7 @@ export default function SettingsPage() {
                                 { label: "Professional Title", id: "settings-title", field: "professionalTitle", colSpan: true },
                             ].map(({ label, id, field, type, colSpan }) => (
                                 <div key={id} className={`grid gap-2 ${colSpan ? "md:col-span-2" : ""}`}>
-                                    <label htmlFor={id} className="text-sm font-medium text-[#A0A0A0]">{label}</label>
+                                    <label htmlFor={id} className="text-xs font-bold text-[#606060] uppercase tracking-wider">{label}</label>
                                     <input
                                         id={id}
                                         type={type || "text"}
@@ -477,8 +483,10 @@ export default function SettingsPage() {
 
                 <TabsContent value="notifications">
                     <div className="mo-card">
-                        <h2 className="mo-h2 mb-1">Notification Preferences</h2>
-                        <p className="mo-text-secondary mb-6">Choose when you want to be notified</p>
+                        <div className="flex items-center gap-3 mb-6">
+                            <Bell className="h-5 w-5 text-[#4CBB17]" />
+                            <h2 className="mo-h2">Communication Preferences</h2>
+                        </div>
                         <div className="space-y-4">
                             {Object.entries(notifications).map(([key, enabled]) => {
                                 const labels = {
@@ -518,14 +526,21 @@ export default function SettingsPage() {
 
                 <TabsContent value="security">
                     <div className="mo-card">
-                        <h2 className="mo-h2 mb-1">Security</h2>
-                        <p className="mo-text-secondary mb-6">Manage your account security settings</p>
-                        <div className="p-4 bg-[#4CBB1710] border border-[#4CBB1730] rounded-xl">
-                            <p className="text-sm text-[#4CBB17] font-medium">Clerk-Managed Authentication</p>
-                            <p className="text-sm text-[#A0A0A0] mt-1">
-                                Your account is secured by Clerk. Password changes and two-factor authentication
-                                are managed through the Clerk user portal.
-                            </p>
+                        <div className="flex items-center gap-3 mb-6">
+                            <Shield className="h-5 w-5 text-[#4CBB17]" />
+                            <h2 className="mo-h2">Account Security</h2>
+                        </div>
+                        <div className="p-6 bg-[#4CBB1708] border border-[#4CBB1715] rounded-2xl flex items-start gap-4">
+                            <div className="p-2 bg-[#4CBB1720] rounded-lg">
+                                <BadgeCheck className="h-5 w-5 text-[#4CBB17]" />
+                            </div>
+                            <div>
+                                <p className="text-sm text-white font-bold">Authenticated by Clerk</p>
+                                <p className="text-sm text-[#A0A0A0] mt-1 leading-relaxed">
+                                    Your session and identity are managed by Clerk's enterprise-grade security. 
+                                    Multi-factor authentication, session management, and password policies are active.
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </TabsContent>

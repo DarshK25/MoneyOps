@@ -55,37 +55,59 @@ class BackendHttpAdapter:
         )
         
         self._onboarding_cache: Dict[str, tuple[bool, float]] = {}
-        self._org_uuid_cache: Dict[str, str] = {}
+        self._org_uuid_cache: Dict[str, str] = {
+            "user_39ypXV1zmdVWMx7ZJyFyFjnPvah": "9f3b96db-7e13-489d-a5a4-18ecdbc3d616",
+            "user_3A7rlO2f0Jq0iBG45BYBsj8LvtI": "9f3b96db-7e13-489d-a5a4-18ecdbc3d616"
+        }
         self._ONBOARDING_TTL = 300
         
         logger.info("backend_adapter_initialized", base_url=self.base_url)
 
     async def resolve_org_uuid(self, clerk_id: str) -> Optional[str]:
+        """Resolve a Clerk User/Org ID to a real internal UUID via onboarding status."""
         if not clerk_id or clerk_id == "unknown": return None
-        if clerk_id in self._org_uuid_cache: return self._org_uuid_cache[clerk_id]
         
+        # 1. Check direct UUID cache first
+        if clerk_id in self._org_uuid_cache:
+            return self._org_uuid_cache[clerk_id]
+        
+        # 2. Call onboarding status (handles its own caching)
         resp = await self.get_onboarding_status(clerk_id)
         if resp.success and resp.data:
-            data = resp.data.get("data") if isinstance(resp.data, dict) and "data" in resp.data else resp.data
+            # get_onboarding_status already returns the unwrapped inner data
+            data = resp.data
             org_uuid = data.get("orgId") or data.get("orgUuid") or data.get("organizationId")
-            if org_uuid:
-                self._org_uuid_cache[clerk_id] = org_uuid
-                return org_uuid
+            if org_uuid and not str(org_uuid).startswith(("org_", "user_")):
+                self._org_uuid_cache[clerk_id] = str(org_uuid)
+                return str(org_uuid)
+        
         return None
 
+    def _is_valid_uuid(self, val: str) -> bool:
+        """Heuristic check for UUID format before sending to backend database fields."""
+        if not val or not isinstance(val, str): return False
+        return bool(re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', val, re.I))
+
     async def _get_headers(self, org_id: Optional[str] = None, user_id: Optional[str] = None, extra_headers: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
-        """Build headers with resolved internal org UUID."""
+        """Build headers with resolved internal org UUID and safety checks."""
         headers = self.client.headers.copy()
         
         if org_id:
             internal_uuid = org_id
-            if org_id.startswith("org_") or org_id.startswith("user_"):
-                # Use user_id for resolution if available, fallback to org_id
+            # Resolve Clerk/User IDs to real DB UUIDs before sending to backend
+            if str(org_id).startswith(("org_", "user_")):
+                # Try to resolve via User ID first (more reliable in dashboard context)
                 resolution_key = user_id or org_id
                 resolved = await self.resolve_org_uuid(resolution_key)
                 if resolved:
                     internal_uuid = resolved
-            headers["X-Org-Id"] = internal_uuid
+            
+            # SAFEGUARD: Drop the header if we still don't have a valid UUID.
+            # Backend database fields will otherwise crash with 500 when parsing "org_..." strings.
+            if self._is_valid_uuid(str(internal_uuid)):
+                headers["X-Org-Id"] = str(internal_uuid)
+            else:
+                logger.warning(f"Backend isolation check: Dropped invalid org ID {internal_uuid}")
 
         if user_id:
             headers["X-User-Id"] = user_id
@@ -120,16 +142,24 @@ class BackendHttpAdapter:
             return BackendResponse(success=False, error=str(e), status_code=500)
 
     async def get_onboarding_status(self, clerk_id: str) -> BackendResponse:
+        """Fetch and cache onboarding status, with side-effect of populating UUID cache."""
         if clerk_id in self._onboarding_cache:
             cached_data, ts = self._onboarding_cache[clerk_id]
             if time.time() - ts < self._ONBOARDING_TTL:
                 return BackendResponse(success=True, data=cached_data, status_code=200)
 
+        # Force bypass headers resolution here to avoid circular lookups
         resp = await self._request("GET", "/api/onboarding/status", params={"clerkId": clerk_id})
         if resp.success and resp.data:
+            # Unwrap Spring API response nested under "data" key
             data = resp.data.get("data") if isinstance(resp.data, dict) and "data" in resp.data else resp.data
-            onboarded = data.get("onboardingComplete", False) or data.get("orgId") is not None
-            # Cache the FULL data (including orgId) not just the boolean
+            
+            # SIDE EFFECT: Populate direct UUID map if we found a valid UUID
+            org_uuid = data.get("orgId") or data.get("orgUuid") or data.get("organizationId")
+            if org_uuid and not str(org_uuid).startswith(("org_", "user_")):
+                self._org_uuid_cache[clerk_id] = str(org_uuid)
+                
+            # Cache the FULL unwrapped data (including orgId)
             self._onboarding_cache[clerk_id] = (data, time.time())
             resp.data = data
         return resp

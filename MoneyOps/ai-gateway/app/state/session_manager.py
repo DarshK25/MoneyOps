@@ -16,9 +16,18 @@ class VoiceSession(BaseModel):
     onboarding_verified: bool = False
     dialog_pending: bool = False
     dialog_id: Optional[str] = None
+    draft_created_at: Optional[float] = None
 
     def mark_active(self):
         self.last_active = time.time()
+    
+    def check_draft_expiry(self):
+        """Standardize on 1 hour TTL for drafts as per Issue #5"""
+        if self.invoice_draft and self.draft_created_at:
+            if time.time() - self.draft_created_at > 3600:
+                self.invoice_draft = None
+                self.locked_intent = None
+                self.draft_created_at = None
 
 class SessionManager:
     def __init__(self):
@@ -29,6 +38,7 @@ class SessionManager:
         if session_id in self._sessions:
             session = self._sessions[session_id]
             session.mark_active()
+            session.check_draft_expiry()
             return session
         
         session = VoiceSession(session_id=session_id, user_id=user_id, org_id=org_id)
@@ -49,7 +59,8 @@ class SessionManager:
 
     def cleanup(self):
         now = time.time()
-        expired = [k for k, v in self._sessions.items() if now - v.last_active > self._ttl]
+        # Enforce 1 hour TTL globally for in-memory sessions
+        expired = [k for k, v in self._sessions.items() if now - v.last_active > 3600]
         for k in expired:
             self._sessions.pop(k, None)
 
