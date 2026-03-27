@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     # External APIs
     ASSEMBLYAI_API_KEY: Optional[str] = None
     CARTESIA_API_KEY: Optional[str] = None
+    TTS_PROVIDER: str = "cartesia"  # Options: "cartesia", "groq"
 
     # VAD (Voice Activity Detection) — tuned for natural conversation
     # min_speech_duration LOW  → picks up speech quickly (no missed start-of-turn)
