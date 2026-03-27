@@ -1,58 +1,90 @@
-// src/main/java/com/moneyops/clients/entity/Client.java
 package com.moneyops.clients.entity;
 
-import jakarta.persistence.*;
 import lombok.Data;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
+import org.springframework.data.mongodb.core.mapping.MongoId;
+
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-@Entity
-@Table(name = "clients")
+import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedBy;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
+import jakarta.annotation.PostConstruct;
+
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+@Document(collection = "clients")
 @Data
 public class Client {
+
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
+    private String id;
 
-    @Column(nullable = false)
-    private UUID orgId;
-
-    @Column(nullable = false)
+    @Indexed
+    private String orgId;      // 🔗 Tenant isolation (String ID)
     private String name;
-
-    private String taxId; // Client's GST/PAN
-
-    @Column(nullable = false)
+    private String gstin;      // ✨ WAS taxId, NOW gstin as per schema
     private String email;
-
     private String phoneNumber;
-
-    private String address;
-    private String city;
-    private String state;
-    private String country;
-    private String postalCode;
-
-    // Financial info
-    private String paymentTerms; // e.g., "Net 30", "Net 60"
+    
+    // ✨ Schema-v2: Expanded address structure
+    private Address billingAddress;
+    private Address shippingAddress;
+    
+    private Integer paymentTerms; // WAS String, NOW Integer (Days) as per schema
     private String currency = "INR";
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    private String company;
+    private String notes;
     private Status status = Status.ACTIVE;
 
-    @Column(nullable = false)
-    private LocalDateTime createdAt = LocalDateTime.now();
+    // ✨ Audit Fields (Auto-populated by @EnableMongoAuditing)
+    @CreatedDate
+    private LocalDateTime createdAt;
+    
+    @LastModifiedDate
+    private LocalDateTime updatedAt;
+    
+    @CreatedBy
+    private String createdBy;  // Clerk userId (String)
 
-    @Column(nullable = false)
-    private LocalDateTime updatedAt = LocalDateTime.now();
+    // Extra creator metadata for protected actions/auditability
+    private String createdByEmail;
+    private String createdByRole;
+    private String source; // MANUAL / AI / VOICE
+    
+    @LastModifiedBy
+    private String updatedBy;
+    
+    private LocalDateTime deletedAt; // ✨ Soft delete support
+    
+    @Indexed(unique = true, partialFilter = "{'idempotencyKey': {$exists: true}}")
+    private String idempotencyKey; // ✨ From AI Gateway
 
-    @Column(nullable = false)
-    private UUID createdBy;
-
-    private UUID updatedBy;
+    @PostConstruct
+    public void generateId() {
+        if (this.id == null) {
+            this.id = UUID.randomUUID().toString();
+        }
+    }
 
     public enum Status {
         ACTIVE, INACTIVE, SUSPENDED
+    }
+
+    @Data
+    public static class Address {
+        private String line1;
+        private String line2;
+        private String city;
+        private String state;
+        private String country;
+        private String pincode;
     }
 }

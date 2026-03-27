@@ -1,6 +1,6 @@
 package com.moneyops.documents.service;
 
-import com.moneyops.documents.entity.Document;
+import com.moneyops.documents.entity.MoneyOpsDocument;
 import com.moneyops.documents.repository.DocumentRepository;
 import com.moneyops.shared.dto.PageResponse;
 import com.moneyops.shared.exceptions.NotFoundException;
@@ -13,7 +13,6 @@ import org.springframework.data.domain.PageRequest;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -21,33 +20,41 @@ public class DocumentService {
 
     private final DocumentRepository documentRepository;
 
-    public List<Document> getDocumentsByOrg(UUID orgId) {
-        return documentRepository.findByOrgId(orgId);
+    public List<MoneyOpsDocument> getDocumentsByOrg(String orgId) {
+        return documentRepository.findByOrgIdAndDeletedAtIsNull(orgId);
     }
 
-    public Document getDocumentById(UUID id) {
+    public List<MoneyOpsDocument> getVisibleDocuments(String orgId, String userId, boolean showPrivate) {
+        if (showPrivate) {
+            return documentRepository.findByOrgIdAndUploadedByAndIsConfidentialAndDeletedAtIsNull(orgId, userId, true);
+        } else {
+            return documentRepository.findByOrgIdAndIsConfidentialAndDeletedAtIsNull(orgId, false);
+        }
+    }
+
+    public MoneyOpsDocument getDocumentById(String id) {
         return documentRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Document not found with ID: " + id));
     }
 
     @Transactional
-    public Document createDocumentMetadata(Document document) {
-        document.setCreatedAt(LocalDateTime.now());
+    public MoneyOpsDocument createDocumentMetadata(MoneyOpsDocument document) {
         if (document.getId() == null) {
-            document.setId(UUID.randomUUID());
+            document.setId(java.util.UUID.randomUUID().toString());
         }
         return documentRepository.save(document);
     }
 
-    public List<Document> getDocumentsByEntity(String entityType, UUID entityId) {
-        return documentRepository.findByLinkedEntityTypeAndLinkedEntityId(entityType, entityId);
+    public List<MoneyOpsDocument> getDocumentsByEntity(String entityType, String entityId) {
+        return documentRepository.findByLinkedEntityTypeAndLinkedEntityIdAndDeletedAtIsNull(entityType, entityId);
     }
 
     @Transactional
-    public void deleteDocument(UUID id) {
-        if (!documentRepository.existsById(id)) {
-            throw new NotFoundException("Document not found with ID: " + id);
-        }
-        documentRepository.deleteById(id);
+    public void deleteDocument(String id) {
+        MoneyOpsDocument document = documentRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Document not found with ID: " + id));
+        
+        document.setDeletedAt(LocalDateTime.now());
+        documentRepository.save(document);
     }
 }

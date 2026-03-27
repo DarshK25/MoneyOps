@@ -1,4 +1,3 @@
-// src/main/java/com/moneyops/organizations/mapper/OrganizationMapper.java
 package com.moneyops.organizations.mapper;
 
 import com.moneyops.organizations.dto.BusinessOrganizationDto;
@@ -11,50 +10,90 @@ import org.springframework.stereotype.Component;
 public class OrganizationMapper {
 
     public BusinessOrganizationDto toDto(BusinessOrganization org) {
+        if (org == null) return null;
+        
         BusinessOrganizationDto dto = new BusinessOrganizationDto();
         dto.setId(org.getId());
+        dto.setTeamSecurityCodeConfigured(org.getTeamActionCodeHash() != null && !org.getTeamActionCodeHash().isBlank());
         dto.setLegalName(org.getLegalName());
         dto.setTradingName(org.getTradingName());
-        dto.setBusinessType(org.getBusinessType() != null ? org.getBusinessType().name() : null);
-        dto.setIndustry(org.getIndustry() != null ? org.getIndustry().name() : null);
+        dto.setBusinessType(org.getBusinessType());
+        dto.setIndustry(org.getIndustry());
         dto.setRegistrationDate(org.getRegistrationDate());
-        dto.setAnnualTurnoverRange(org.getAnnualTurnoverRange() != null ? org.getAnnualTurnoverRange().name() : null);
+        dto.setAnnualTurnoverRange(org.getAnnualTurnover());
         dto.setPrimaryEmail(org.getPrimaryEmail());
         dto.setPrimaryPhone(org.getPrimaryPhone());
         dto.setWebsite(org.getWebsite());
         dto.setEmployeeCount(org.getEmployeeCount());
         dto.setRegisteredAddress(org.getRegisteredAddress());
-        dto.setFinancialYearStartMonth(org.getFinancialYearStartMonth() != null ? org.getFinancialYearStartMonth().name() : null);
+        dto.setPincode(org.getPincode());
+        dto.setFinancialYearStartMonth(org.getFyStartMonth() != null ? String.valueOf(org.getFyStartMonth()) : null);
         dto.setPreferredLanguage(org.getPreferredLanguage());
         dto.setPrimaryActivity(org.getPrimaryActivity());
-        dto.setTargetMarket(org.getTargetMarket() != null ? org.getTargetMarket().name() : null);
-        dto.setAccountingMethod(org.getAccountingMethod() != null ? org.getAccountingMethod().name() : null);
+        dto.setTargetMarket(org.getTargetMarket());
+        dto.setAccountingMethod(org.getAccountingMethod());
+        dto.setKeyProducts(org.getKeyProducts());
+        dto.setCurrentChallenges(org.getCurrentChallenges());
+
+        // Mapping regulatory fields from BusinessOrganization entity to DTO
+        dto.setPanNumber(org.getPanNumber());
+        dto.setStateOfRegistration(org.getStateOfRegistration());
+        dto.setGstRegistered(org.getGstRegistered());
+        dto.setGstin(org.getGstin());
+        dto.setGstFilingFrequency(org.getGstFilingFrequency());
+        dto.setTanNumber(org.getTanNumber());
+        dto.setCin(org.getCin());
+        dto.setLlpin(org.getLlpin());
+        dto.setMsmeNumber(org.getMsmeNumber());
+        dto.setIecCode(org.getIecCode());
+        dto.setProfessionalTaxReg(org.getProfessionalTaxReg());
+        
         return dto;
     }
 
     public BusinessOrganization toEntity(BusinessOrganizationDto dto) {
+        if (dto == null) return null;
+
         BusinessOrganization org = new BusinessOrganization();
         org.setId(dto.getId());
         org.setLegalName(dto.getLegalName());
         org.setTradingName(dto.getTradingName());
-        org.setBusinessType(dto.getBusinessType() != null ? BusinessOrganization.BusinessType.valueOf(dto.getBusinessType()) : null);
-        org.setIndustry(dto.getIndustry() != null ? BusinessOrganization.Industry.valueOf(dto.getIndustry()) : null);
+        org.setBusinessType(dto.getBusinessType());
+        org.setIndustry(dto.getIndustry());
         org.setRegistrationDate(dto.getRegistrationDate());
-        org.setAnnualTurnoverRange(dto.getAnnualTurnoverRange() != null ? BusinessOrganization.TurnoverRange.valueOf(dto.getAnnualTurnoverRange()) : null);
+        org.setAnnualTurnover(dto.getAnnualTurnoverRange());
         org.setPrimaryEmail(dto.getPrimaryEmail());
         org.setPrimaryPhone(dto.getPrimaryPhone());
         org.setWebsite(dto.getWebsite());
         org.setEmployeeCount(dto.getEmployeeCount());
         org.setRegisteredAddress(dto.getRegisteredAddress());
-        org.setFinancialYearStartMonth(dto.getFinancialYearStartMonth() != null ? BusinessOrganization.Month.valueOf(dto.getFinancialYearStartMonth()) : null);
+        org.setPincode(dto.getPincode());
+        org.setFyStartMonth(dto.getFinancialYearStartMonth() != null ? Integer.valueOf(dto.getFinancialYearStartMonth()) : null);
         org.setPreferredLanguage(dto.getPreferredLanguage());
         org.setPrimaryActivity(dto.getPrimaryActivity());
-        org.setTargetMarket(dto.getTargetMarket() != null ? BusinessOrganization.TargetMarket.valueOf(dto.getTargetMarket()) : null);
-        org.setAccountingMethod(dto.getAccountingMethod() != null ? BusinessOrganization.AccountingMethod.valueOf(dto.getAccountingMethod()) : null);
+        org.setTargetMarket(dto.getTargetMarket());
+        org.setAccountingMethod(dto.getAccountingMethod());
+        org.setKeyProducts(dto.getKeyProducts());
+        org.setCurrentChallenges(dto.getCurrentChallenges());
+
+        // Mapping regulatory fields from DTO to BusinessOrganization entity
+        org.setPanNumber(dto.getPanNumber());
+        org.setStateOfRegistration(dto.getStateOfRegistration());
+        org.setGstRegistered(dto.getGstRegistered());
+        org.setGstin(dto.getGstin());
+        org.setGstFilingFrequency(dto.getGstFilingFrequency());
+        org.setTanNumber(dto.getTanNumber());
+        org.setCin(dto.getCin());
+        org.setLlpin(dto.getLlpin());
+        org.setMsmeNumber(dto.getMsmeNumber());
+        org.setIecCode(dto.getIecCode());
+        org.setProfessionalTaxReg(dto.getProfessionalTaxReg());
+
         return org;
     }
 
     public RegulatoryProfileDto toRegulatoryDto(RegulatoryProfile profile) {
+        if (profile == null) return null;
         RegulatoryProfileDto dto = new RegulatoryProfileDto();
         dto.setPanNumber(profile.getPanNumber());
         dto.setStateOfRegistration(profile.getStateOfRegistration());
@@ -68,8 +107,9 @@ public class OrganizationMapper {
     }
 
     public RegulatoryProfile toRegulatoryEntity(RegulatoryProfileDto dto, BusinessOrganization org) {
+        if (dto == null) return null;
         RegulatoryProfile profile = new RegulatoryProfile();
-        profile.setOrganization(org);
+        profile.setOrgId(org.getId());
         profile.setPanNumber(dto.getPanNumber());
         profile.setStateOfRegistration(dto.getStateOfRegistration());
         profile.setGstRegistered(dto.getGstRegistered());

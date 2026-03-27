@@ -1,9 +1,18 @@
 """
 Configuration management for AI Gateway
 """
-from pydantic_settings import BaseSettings
-from typing import Optional
+from pathlib import Path
 from functools import lru_cache
+from typing import Optional
+
+# Load the shared root .env FIRST — before pydantic-settings reads env vars.
+# This matches the pattern used by voice-service and ensures LiveKit credentials
+# are always present regardless of the CWD when uvicorn is started.
+from dotenv import load_dotenv as _load_dotenv
+_ROOT_ENV = Path(__file__).resolve().parents[2] / ".env"
+_load_dotenv(dotenv_path=_ROOT_ENV, override=True)
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -19,16 +28,15 @@ class Settings(BaseSettings):
     
     # Server
     HOST: str = "0.0.0.0"
-    PORT: int = 8081
+    PORT: int = 8001
     
     # LLM Providers
     GROQ_API_KEY: str
     ANTHROPIC_API_KEY: Optional[str] = None
     
     # LLM Models
-    GROQ_MODEL: str = "groq/compound"  
-    GROQ_MODEL_COMPLEX: str = "groq/compound"  # For complex tasks
-    CLAUDE_MODEL: str = "claude-3-5-sonnet-20241022"  # Backup
+    GROQ_MODEL: str = "llama-3.1-8b-instant"  
+    GROQ_MODEL_COMPLEX: str = "llama-3.1-8b-instant"  # For complex tasks
     
     # LLM Settings
     LLM_TEMPERATURE: float = 0.3
@@ -37,14 +45,18 @@ class Settings(BaseSettings):
     LLM_MAX_RETRIES: int = 3
     
     # Backend Services
-    BACKEND_BASE_URL: str = "http://localhost:8080"
+    BACKEND_BASE_URL: str = "http://127.0.0.1:8000"
     BACKEND_TIMEOUT: int = 30
+    # Shared secret for service-to-service auth (AI-Gateway → Spring Boot backend)
+    INTERNAL_SERVICE_TOKEN: str = "moneyops-internal-ai-gateway-service-secret-2024"
+
     
     # Redis
-    REDIS_HOST: str = "localhost"
+    REDIS_HOST: str = "127.0.0.1"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
     REDIS_PASSWORD: Optional[str] = None
+    REDIS_TLS: bool = False  # Set True for Upstash / cloud Redis
     
     # Cache TTL (seconds)
     CACHE_TTL_SHORT: int = 300  # 5 minutes
@@ -71,10 +83,17 @@ class Settings(BaseSettings):
     AGENT_TIMEOUT: int = 60
     MAX_TOOL_ITERATIONS: int = 5
     
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = True
+    # LiveKit
+    LIVEKIT_URL: str = "wss://your-project.livekit.cloud"
+    LIVEKIT_API_KEY: Optional[str] = None
+    LIVEKIT_API_SECRET: Optional[str] = None
+    
+    model_config = SettingsConfigDict(
+        env_file=str(_ROOT_ENV),
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+        extra="ignore",  # silently skip VITE_*, MONGODB_URI, etc. from the shared .env
+    )
 
 
 @lru_cache()
@@ -84,6 +103,14 @@ def get_settings() -> Settings:
     Returns the same instance on subsequent calls
     """
     return Settings()
+
+
+def require_groq_key():
+    """
+    Ensure GROQ_API_KEY is present
+    """
+    if not settings.GROQ_API_KEY:
+        raise RuntimeError("GROQ_API_KEY is required")
 
 
 # Convenience function

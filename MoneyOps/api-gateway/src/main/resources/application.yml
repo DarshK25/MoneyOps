@@ -2,26 +2,8 @@ spring:
   application:
     name: api-gateway
 
-  # Redis Configuration
-  data:
-    redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
-      timeout: 2000ms
-      lettuce:
-        pool:
-          max-active: 8
-          max-idle: 8
-          min-idle: 2
-
-  # Lifecycle Configuration
-  lifecycle:
-    timeout-per-shutdown-phase: 20s
-  
   cloud:
     gateway:
-      # Global CORS configuration
       globalcors:
         cors-configurations:
           '[/**]':
@@ -36,12 +18,13 @@ spring:
             allowedHeaders: "*"
             allowCredentials: true
             maxAge: 3600
-      
-      # Route definitions
+
+      redis-rate-limiter:
+        replenish-rate: 10
+        burst-capacity: 20
+        requested-tokens: 1
+
       routes:
-        # ============================================
-        # AUTH ROUTES (Public - No JWT validation)
-        # ============================================
         - id: auth-login
           uri: ${backend.core.url}
           predicates:
@@ -50,8 +33,11 @@ spring:
           filters:
             - name: RequestRateLimiter
               args:
+                redis-rate-limiter.replenishRate: 5
+                redis-rate-limiter.burstCapacity: 10
+                redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@ipKeyResolver}"
-        
+
         - id: auth-register
           uri: ${backend.core.url}
           predicates:
@@ -60,18 +46,24 @@ spring:
           filters:
             - name: RequestRateLimiter
               args:
+                redis-rate-limiter.replenishRate: 2
+                redis-rate-limiter.burstCapacity: 5
+                redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@ipKeyResolver}"
-        
-        # Token refresh requires valid JWT
+
         - id: auth-refresh
           uri: ${backend.core.url}
           predicates:
             - Path=/api/auth/refresh
             - Method=POST
-        
-        # ============================================
-        # USER ROUTES (Authenticated)
-        # ============================================
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 10
+                redis-rate-limiter.burstCapacity: 20
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@userKeyResolver}"
+
         - id: users-routes
           uri: ${backend.core.url}
           predicates:
@@ -79,11 +71,11 @@ spring:
           filters:
             - name: RequestRateLimiter
               args:
+                redis-rate-limiter.replenishRate: 50
+                redis-rate-limiter.burstCapacity: 100
+                redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@userKeyResolver}"
-        
-        # ============================================
-        # ORGANIZATION ROUTES (Authenticated + Tenant)
-        # ============================================
+
         - id: organizations-routes
           uri: ${backend.core.url}
           predicates:
@@ -91,11 +83,11 @@ spring:
           filters:
             - name: RequestRateLimiter
               args:
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 40
+                redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@orgKeyResolver}"
-        
-        # ============================================
-        # CLIENT ROUTES (Authenticated + Tenant)
-        # ============================================
+
         - id: clients-routes
           uri: ${backend.core.url}
           predicates:
@@ -103,11 +95,11 @@ spring:
           filters:
             - name: RequestRateLimiter
               args:
+                redis-rate-limiter.replenishRate: 30
+                redis-rate-limiter.burstCapacity: 60
+                redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@orgKeyResolver}"
-        
-        # ============================================
-        # INVOICE ROUTES (Authenticated + Tenant)
-        # ============================================
+
         - id: invoices-routes
           uri: ${backend.core.url}
           predicates:
@@ -115,11 +107,11 @@ spring:
           filters:
             - name: RequestRateLimiter
               args:
+                redis-rate-limiter.replenishRate: 30
+                redis-rate-limiter.burstCapacity: 60
+                redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@orgKeyResolver}"
-        
-        # ============================================
-        # TRANSACTION ROUTES (Authenticated + Tenant)
-        # ============================================
+
         - id: transactions-routes
           uri: ${backend.core.url}
           predicates:
@@ -127,11 +119,11 @@ spring:
           filters:
             - name: RequestRateLimiter
               args:
+                redis-rate-limiter.replenishRate: 30
+                redis-rate-limiter.burstCapacity: 60
+                redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@orgKeyResolver}"
-        
-        # ============================================
-        # DOCUMENT ROUTES (Authenticated + Tenant)
-        # ============================================
+
         - id: documents-routes
           uri: ${backend.core.url}
           predicates:
@@ -139,11 +131,11 @@ spring:
           filters:
             - name: RequestRateLimiter
               args:
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 40
+                redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@orgKeyResolver}"
-        
-        # ============================================
-        # AI GATEWAY ROUTES (Authenticated + Tenant)
-        # ============================================
+
         - id: ai-chat-routes
           uri: ${ai.gateway.url}
           predicates:
@@ -151,8 +143,11 @@ spring:
           filters:
             - name: RequestRateLimiter
               args:
+                redis-rate-limiter.replenishRate: 5
+                redis-rate-limiter.burstCapacity: 10
+                redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@orgKeyResolver}"
-        
+
         - id: ai-voice-routes
           uri: ${ai.gateway.url}
           predicates:
@@ -160,11 +155,11 @@ spring:
           filters:
             - name: RequestRateLimiter
               args:
+                redis-rate-limiter.replenishRate: 3
+                redis-rate-limiter.burstCapacity: 6
+                redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@orgKeyResolver}"
-        
-        # ============================================
-        # VOICE SERVICE ROUTES (Authenticated + Tenant)
-        # ============================================
+
         - id: voice-service-routes
           uri: ${voice.service.url}
           predicates:
@@ -172,11 +167,26 @@ spring:
           filters:
             - name: RequestRateLimiter
               args:
+                redis-rate-limiter.replenishRate: 5
+                redis-rate-limiter.burstCapacity: 10
+                redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@orgKeyResolver}"
 
-# ============================================
-# DOWNSTREAM SERVICE URLs
-# ============================================
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
+
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
 backend:
   core:
     url: http://localhost:8000
@@ -187,42 +197,37 @@ ai:
 
 voice:
   service:
-    url: http://localhost:8002
+    url: http://localhost:8003
 
-# ============================================
-# JWT CONFIGURATION
-# ============================================
 jwt:
   secret: ${JWT_SECRET:your-256-bit-secret-your-256-bit-secret-your-256-bit-secret-your-256-bit-secret}
-  expiration: 86400000  # 24 hours in milliseconds
+  expiration: 86400000
 
-# ============================================
-# GATEWAY CONFIGURATION
-# ============================================
 gateway:
-  # Public endpoints (no JWT validation)
   public-endpoints: /api/auth/login,/api/auth/register,/actuator/health,/actuator/ready
-  
-  # Tenant isolation configuration
   tenant:
     enforce-isolation: true
     required-paths: /api/clients/**,/api/invoices/**,/api/transactions/**,/api/documents/**,/api/organizations/**
-  
-  # Request logging
   logging:
     enabled: true
-    log-request-body: false  # Security: Don't log sensitive data
+    log-request-body: false
     log-response-body: false
-    slow-request-threshold-ms: 3000  # Log requests slower than 3 seconds
+    slow-request-threshold-ms: 3000
+  rate-limit:
+    enabled: true
+    fail-open: true
+    presets:
+      strict: 2
+      normal: 10
+      relaxed: 50
+      ai: 5
+    defaults:
+      public-endpoints: 10
+      authenticated-endpoints: 50
+      tenant-endpoints: 30
+      ai-endpoints: 5
+      voice-endpoints: 3
 
-# ============================================
-# REDIS CONFIGURATION (for Rate Limiting - Phase 3)
-# ============================================
-# Redis configuration moved to top
-
-# ============================================
-# ACTUATOR (Health Checks)
-# ============================================
 management:
   endpoints:
     web:
@@ -235,16 +240,11 @@ management:
       probes:
         enabled: true
   health:
-    redis:
-      enabled: false # "TO-DO":Install Redis to enable this
     readiness-state:
       enabled: true
     liveness-state:
       enabled: true
 
-# ============================================
-# LOGGING CONFIGURATION
-# ============================================
 logging:
   level:
     root: INFO
@@ -254,17 +254,11 @@ logging:
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
 
-# ============================================
-# SERVER CONFIGURATION
-# ============================================
 server:
-  port: ${PORT:8003}
+  port: ${PORT:8080}
   shutdown: graceful
   error:
     include-message: always
     include-binding-errors: always
     include-stacktrace: never
     include-exception: false
-
-# Graceful shutdown timeout
-# Lifecycle configuration moved to top

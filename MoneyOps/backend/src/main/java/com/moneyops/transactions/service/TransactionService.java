@@ -8,8 +8,10 @@ import com.moneyops.transactions.mapper.TransactionMapper;
 import com.moneyops.transactions.repository.TransactionRepository;
 import com.moneyops.transactions.validator.TransactionValidator;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -28,75 +30,107 @@ public class TransactionService {
     private final TransactionMapper transactionMapper;
     private final TransactionValidator transactionValidator;
 
-    public List<TransactionDto> getAllTransactions(UUID orgId) {
-        return transactionRepository.findAllByOrgId(orgId).stream()
+    public List<TransactionDto> getAllTransactions(String orgId) {
+        if (orgId == null || orgId.isBlank()) throw new com.moneyops.shared.exceptions.UnauthorizedException("Missing organization context");
+        return transactionRepository.findAllByOrgIdAndDeletedAtIsNull(orgId).stream()
                 .map(transactionMapper::toDto)
                 .collect(Collectors.toList());
     }
 
-    public TransactionDto getTransactionById(UUID id, UUID orgId) {
-        Transaction transaction = transactionRepository.findByIdAndOrgId(id, orgId)
-                .orElseThrow(() -> new RuntimeException("Transaction not found"));
+    public TransactionDto getTransactionById(String id, String orgId) {
+        Transaction transaction = transactionRepository.findByIdAndOrgIdAndDeletedAtIsNull(id, orgId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Transaction not found"));
         return transactionMapper.toDto(transaction);
     }
 
-    public TransactionDto createTransaction(TransactionDto dto, UUID orgId, UUID userId) {
+    public TransactionDto createTransaction(TransactionDto dto, String orgId, String userId) {
+        if (orgId == null || orgId.isBlank()) throw new com.moneyops.shared.exceptions.UnauthorizedException("Missing organization context");
+        
+        // ✨ Idempotency check
+        if (dto.getIdempotencyKey() != null) {
+            // Note: In a production app, we'd query an idempotency_keys collection
+            // but for now we'll check if a transaction with this key exists
+            var existing = transactionRepository.findAllByOrgIdAndDeletedAtIsNull(orgId).stream()
+                .filter(t -> dto.getIdempotencyKey().equals(t.getIdempotencyKey()))
+                .findFirst();
+            if (existing.isPresent()) return transactionMapper.toDto(existing.get());
+        }
+
         transactionValidator.validate(dto);
 
         Transaction transaction = transactionMapper.toEntity(dto);
         transaction.setOrgId(orgId);
-        transaction.setCreatedBy(userId);
-        transaction.setCreatedAt(LocalDateTime.now());
-        transaction.setUpdatedAt(LocalDateTime.now());
+        
+        if (transaction.getTransactionDate() == null) {
+            transaction.setTransactionDate(LocalDate.now());
+        }
+        if (transaction.getCurrency() == null) {
+            transaction.setCurrency("INR");
+        }
 
         Transaction saved = transactionRepository.save(transaction);
         return transactionMapper.toDto(saved);
     }
 
-    public TransactionDto updateTransaction(UUID id, TransactionDto dto, UUID orgId) {
-        Transaction existing = transactionRepository.findByIdAndOrgId(id, orgId)
-                .orElseThrow(() -> new RuntimeException("Transaction not found"));
+    public TransactionDto updateTransaction(String id, TransactionDto dto, String orgId) {
+        Transaction existing = transactionRepository.findByIdAndOrgIdAndDeletedAtIsNull(id, orgId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Transaction not found"));
 
         transactionValidator.validate(dto);
 
-        Transaction updated = transactionMapper.toEntity(dto);
-        updated.setId(id);
-        updated.setOrgId(orgId);
-        updated.setCreatedAt(existing.getCreatedAt());
-        updated.setCreatedBy(existing.getCreatedBy());
-        updated.setUpdatedAt(LocalDateTime.now());
+        existing.setClientId(dto.getClientId());
+        existing.setInvoiceId(dto.getInvoiceId());
+        existing.setType(TransactionType.valueOf(dto.getType().toUpperCase()));
+        existing.setAmount(dto.getAmount());
+        existing.setCurrency(dto.getCurrency() != null ? dto.getCurrency() : "INR");
+        existing.setTransactionDate(dto.getTransactionDate());
+        existing.setCategory(dto.getCategory());
+        existing.setDescription(dto.getDescription());
+        existing.setPaymentMethod(dto.getPaymentMethod());
+        existing.setReferenceNumber(dto.getReferenceNumber());
 
-        Transaction saved = transactionRepository.save(updated);
+        Transaction saved = transactionRepository.save(existing);
         return transactionMapper.toDto(saved);
     }
 
-    public void deleteTransaction(UUID id, UUID orgId) {
-        transactionRepository.deleteByIdAndOrgId(id, orgId);
+    public void deleteTransaction(String id, String orgId) {
+        Transaction transaction = transactionRepository.findByIdAndOrgIdAndDeletedAtIsNull(id, orgId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Transaction not found"));
+        
+        // ✨ Soft Delete
+        transaction.setDeletedAt(LocalDateTime.now());
+        transactionRepository.save(transaction);
     }
 
-    public List<TransactionDto> getTransactionsByClient(UUID clientId, UUID orgId) {
-        return transactionRepository.findByOrgIdAndClientId(orgId, clientId).stream()
+    public List<TransactionDto> getTransactionsByClient(String clientId, String orgId) {
+        return transactionRepository.findByOrgIdAndClientIdAndDeletedAtIsNull(orgId, clientId).stream()
                 .map(transactionMapper::toDto)
                 .collect(Collectors.toList());
     }
 
-    public List<TransactionDto> getTransactionsByDateRange(UUID orgId, LocalDate startDate, LocalDate endDate) {
-        return transactionRepository.findByOrgIdAndDateRange(orgId, startDate, endDate).stream()
+    public List<TransactionDto> getTransactionsByInvoice(String invoiceId, String orgId) {
+        return transactionRepository.findByOrgIdAndInvoiceIdAndDeletedAtIsNull(orgId, invoiceId).stream()
                 .map(transactionMapper::toDto)
                 .collect(Collectors.toList());
     }
 
-    public BigDecimal getTotalIncome(UUID orgId) {
-        BigDecimal total = transactionRepository.getTotalByOrgIdAndType(orgId, TransactionType.INCOME);
-        return total != null ? total : BigDecimal.ZERO;
+    public List<TransactionDto> getTransactionsByDateRange(String orgId, LocalDate startDate, LocalDate endDate) {
+        return transactionRepository.findByOrgIdAndTransactionDateBetweenAndDeletedAtIsNull(orgId, startDate, endDate).stream()
+                .map(transactionMapper::toDto)
+                .collect(Collectors.toList());
     }
 
-    public BigDecimal getTotalExpense(UUID orgId) {
-        BigDecimal total = transactionRepository.getTotalByOrgIdAndType(orgId, TransactionType.EXPENSE);
-        return total != null ? total : BigDecimal.ZERO;
+    public BigDecimal getTotalIncome(String orgId) {
+        var result = transactionRepository.getTotalByOrgIdAndType(orgId, TransactionType.INCOME);
+        return (result != null && result.total() != null) ? BigDecimal.valueOf(result.total()) : BigDecimal.ZERO;
     }
 
-    public Map<String, BigDecimal> getFinancialSummary(UUID orgId) {
+    public BigDecimal getTotalExpense(String orgId) {
+        var result = transactionRepository.getTotalByOrgIdAndType(orgId, TransactionType.EXPENSE);
+        return (result != null && result.total() != null) ? BigDecimal.valueOf(result.total()) : BigDecimal.ZERO;
+    }
+
+    public Map<String, BigDecimal> getFinancialSummary(String orgId) {
         BigDecimal income = getTotalIncome(orgId);
         BigDecimal expense = getTotalExpense(orgId);
         return Map.of(

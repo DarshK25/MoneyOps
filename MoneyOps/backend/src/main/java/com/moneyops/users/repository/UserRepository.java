@@ -1,10 +1,7 @@
-// src/main/java/com/moneyops/users/repository/UserRepository.java
 package com.moneyops.users.repository;
 
 import com.moneyops.users.entity.User;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
+import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -12,26 +9,23 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Repository
-public interface UserRepository extends JpaRepository<User, UUID> {
+public interface UserRepository extends MongoRepository<User, String> {
+    Optional<User> findByIdAndDeletedAtIsNull(String id);
+    Optional<User> findByIdAndOrgIdAndDeletedAtIsNull(String id, String orgId);
+    List<User> findAllByOrgIdAndDeletedAtIsNull(String orgId);
+    boolean existsByIdAndOrgIdAndDeletedAtIsNull(String id, String orgId);
+    void deleteByIdAndOrgId(String id, String orgId); // Note: still keep method for hard delete if needed, or remove
 
-    Optional<User> findByIdAndOrgId(UUID id, UUID orgId);
+    Optional<User> findByEmailAndOrgIdAndDeletedAtIsNull(String email, String orgId);
+    Optional<User> findByEmailAndDeletedAtIsNull(String email);
+    Optional<User> findByClerkIdAndDeletedAtIsNull(String clerkId);
 
-    List<User> findAllByOrgId(UUID orgId);
+    boolean existsByEmailAndOrgIdAndDeletedAtIsNull(String email, String orgId);
+    boolean existsByEmailAndDeletedAtIsNull(String email);
 
-    boolean existsByIdAndOrgId(UUID id, UUID orgId);
+    List<User> findAllByOrgIdAndRoleAndDeletedAtIsNull(String orgId, User.Role role);
+    List<User> findAllByOrgIdAndStatusAndDeletedAtIsNull(String orgId, User.Status status);
 
-    void deleteByIdAndOrgId(UUID id, UUID orgId);
-
-    Optional<User> findByEmailAndOrgId(String email, UUID orgId);
-
-    boolean existsByEmailAndOrgId(String email, UUID orgId);
-
-    @Query("SELECT u FROM User u WHERE u.orgId = :orgId AND " +
-           "(LOWER(u.name) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
-           "LOWER(u.email) LIKE LOWER(CONCAT('%', :search, '%')))")
-    List<User> searchByOrgIdWithFilters(@Param("orgId") UUID orgId, @Param("search") String search);
-
-    List<User> findAllByOrgIdAndRole(UUID orgId, String role);
-
-    List<User> findAllByOrgIdAndStatus(UUID orgId, String status);
+    @org.springframework.data.mongodb.repository.Query("{ 'orgId': ?0, 'deletedAt': null, $or: [ { 'name': { $regex: ?1, $options: 'i' } }, { 'email': { $regex: ?1, $options: 'i' } } ] }")
+    List<User> searchByOrgIdWithFilters(String orgId, String query);
 }

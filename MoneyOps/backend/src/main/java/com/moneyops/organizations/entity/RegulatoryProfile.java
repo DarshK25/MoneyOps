@@ -1,35 +1,39 @@
-// src/main/java/com/moneyops/organizations/entity/RegulatoryProfile.java
 package com.moneyops.organizations.entity;
 
-import jakarta.persistence.*;
+import jakarta.annotation.PostConstruct;
 import lombok.Data;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
+
+import java.time.LocalDateTime;
 import java.util.UUID;
 
-@Entity
-@Table(name = "regulatory_profiles")
+@Document(collection = "regulatory_profiles")
 @Data
 public class RegulatoryProfile {
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
 
-    @OneToOne
-    @JoinColumn(name = "org_id", nullable = false, unique = true)
-    private BusinessOrganization organization;
+    @Id
+    private String id;
+
+    @Indexed
+    private String orgId; // 🔗 Tenant isolation
 
     private String panNumber;
-
     private String stateOfRegistration;
-
     private Boolean gstRegistered;
-
     private String gstNumber;
-
     private String tanNumber;
-
     private String cinOrLlpIn;
-
     private String msmeNumber;
-
     private String iecCode;
+
+    private LocalDateTime deletedAt; // ✨ Soft delete support
+
+    @PostConstruct
+    public void generateId() {
+        if (this.id == null) {
+            this.id = UUID.randomUUID().toString();
+        }
+    }
 }

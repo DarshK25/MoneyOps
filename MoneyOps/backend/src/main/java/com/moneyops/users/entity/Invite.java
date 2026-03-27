@@ -1,46 +1,43 @@
-// src/main/java/com/moneyops/users/entity/Invite.java
 package com.moneyops.users.entity;
 
-import jakarta.persistence.*;
+import jakarta.annotation.PostConstruct;
 import lombok.Data;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
+
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-@Entity
-@Table(name = "invites")
+@Document(collection = "invites")
 @Data
 public class Invite {
+
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
+    private String id;
 
-    @Column(nullable = false)
-    private UUID orgId;
-
-    @Column(nullable = false)
+    @Indexed
+    private String orgId;      // 🔗 Tenant isolation
+    
+    @Indexed
     private String email;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    
     private User.Role role;
-
-    @Column(nullable = false)
     private String token;
-
-    @Column(nullable = false)
     private LocalDateTime expiresAt;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
     private InviteStatus status = InviteStatus.PENDING;
-
-    @Column(nullable = false)
-    private LocalDateTime createdAt = LocalDateTime.now();
-
+    
+    private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private String createdBy;
+    private LocalDateTime deletedAt; // ✨ Soft delete support
 
-    @Column(nullable = false)
-    private UUID createdBy;
+    @PostConstruct
+    public void generateId() {
+        if (this.id == null) {
+            this.id = UUID.randomUUID().toString();
+        }
+    }
 
     public enum InviteStatus {
         PENDING, ACCEPTED, EXPIRED

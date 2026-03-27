@@ -3,11 +3,10 @@ package com.moneyops.organizations.controller;
 
 import com.moneyops.organizations.dto.RegulatoryProfileDto;
 import com.moneyops.organizations.service.OrganizationService;
+import com.moneyops.shared.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/org/{orgId}/regulatory")
@@ -17,34 +16,33 @@ public class RegulatoryController {
     private final OrganizationService organizationService;
 
     @PostMapping
-    public ResponseEntity<RegulatoryProfileDto> createRegulatoryProfile(@PathVariable UUID orgId,
-                                                                         @RequestBody RegulatoryProfileDto dto,
-                                                                         @RequestHeader("X-User-Id") UUID userId) {
+    public ResponseEntity<ApiResponse<RegulatoryProfileDto>> createRegulatoryProfile(@PathVariable String orgId,
+                                                                          @RequestBody RegulatoryProfileDto dto,
+                                                                          @RequestHeader("X-User-Id") String userId) {
         RegulatoryProfileDto created = organizationService.createRegulatoryProfile(orgId, dto, userId);
-        return ResponseEntity.ok(created);
+        return ResponseEntity.ok(ApiResponse.success(created));
     }
 
     @PutMapping
-    public ResponseEntity<RegulatoryProfileDto> updateRegulatoryProfile(@PathVariable UUID orgId,
-                                                                         @RequestBody RegulatoryProfileDto dto,
-                                                                         @RequestHeader("X-User-Id") UUID userId) {
+    public ResponseEntity<ApiResponse<RegulatoryProfileDto>> updateRegulatoryProfile(@PathVariable String orgId,
+                                                                          @RequestBody RegulatoryProfileDto dto,
+                                                                          @RequestHeader("X-User-Id") String userId) {
         RegulatoryProfileDto updated = organizationService.updateRegulatoryProfile(orgId, dto, userId);
-        return ResponseEntity.ok(updated);
+        return ResponseEntity.ok(ApiResponse.success(updated));
     }
 
     @PatchMapping
-    public ResponseEntity<RegulatoryProfileDto> partialUpdateRegulatoryProfile(@PathVariable UUID orgId,
-                                                                                @RequestBody RegulatoryProfileDto dto,
-                                                                                @RequestHeader("X-User-Id") UUID userId) {
-        // For partial update
+    public ResponseEntity<ApiResponse<RegulatoryProfileDto>> partialUpdateRegulatoryProfile(@PathVariable String orgId,
+                                                                                 @RequestBody RegulatoryProfileDto dto,
+                                                                                 @RequestHeader("X-User-Id") String userId) {
         RegulatoryProfileDto updated = organizationService.updateRegulatoryProfile(orgId, dto, userId);
-        return ResponseEntity.ok(updated);
+        return ResponseEntity.ok(ApiResponse.success(updated));
     }
 
     @GetMapping
-    public ResponseEntity<RegulatoryProfileDto> getRegulatoryProfile(@PathVariable UUID orgId,
-                                                                     @RequestHeader("X-User-Id") UUID userId) {
+    public ResponseEntity<ApiResponse<RegulatoryProfileDto>> getRegulatoryProfile(@PathVariable String orgId,
+                                                                     @RequestHeader("X-User-Id") String userId) {
         RegulatoryProfileDto profile = organizationService.getRegulatoryProfile(orgId, userId);
-        return ResponseEntity.ok(profile);
+        return ResponseEntity.ok(ApiResponse.success(profile));
     }
 }

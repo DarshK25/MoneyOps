@@ -12,6 +12,8 @@ from app.utils.logger import get_logger
 from app.api.v1 import health
 
 logger = get_logger(__name__)
+# Trigger reload for env update
+
 
 
 @asynccontextmanager
@@ -26,14 +28,24 @@ async def lifespan(app: FastAPI):
         version=settings.APP_VERSION,
         environment=settings.ENVIRONMENT,
     )
-    
-    # TODO: Initialize connections (Redis, etc.)
-    
+
+    # Connect to Redis
+    try:
+        from app.integrations.redis_client import get_redis
+        await get_redis()
+        logger.info("redis_ready")
+    except Exception as e:
+        logger.warning("redis_unavailable", error=str(e), note="Continuing without cache")
+
     yield
-    
-    # Shutdown
+
+    # Shutdown — close Redis
+    try:
+        from app.integrations.redis_client import close_redis
+        await close_redis()
+    except Exception:
+        pass
     logger.info("shutting_down_ai_gateway")
-    # TODO: Cleanup connections
 
 
 # Create FastAPI app
@@ -114,9 +126,19 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Include routers
 app.include_router(health.router, prefix="/api/v1", tags=["Health"])
 
+# Voice router (production endpoint)
+from app.api.v1 import voice
+from app.routes.market import router as market_router
+from app.routes.compliance import router as compliance_router
+app.include_router(voice.router, prefix="/api/v1", tags=["Voice"])
+app.include_router(market_router)
+app.include_router(compliance_router, prefix="/api/v1")
+
 # Test routers
 if settings.ENVIRONMENT != "production":
+    from app.api.v1 import test_agents
     from app.api.v1 import test_llm
+    app.include_router(test_agents.router, prefix="/api/v1", tags=["Test Agents"])
     app.include_router(test_llm.router, prefix="/api/v1", tags=["Test LLM"])
 # Root endpoint
 @app.get("/")

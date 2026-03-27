@@ -1,35 +1,29 @@
-// src/main/java/com/moneyops/clients/repository/ClientRepository.java
 package com.moneyops.clients.repository;
 
 import com.moneyops.clients.entity.Client;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
+import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 
 @Repository
-public interface ClientRepository extends JpaRepository<Client, UUID> {
+public interface ClientRepository extends MongoRepository<Client, String> {
 
-    Optional<Client> findByIdAndOrgId(UUID id, UUID orgId);
+    boolean existsByEmailAndDeletedAtIsNull(String email);
 
-    List<Client> findAllByOrgId(UUID orgId);
+    Optional<Client> findByIdAndOrgIdAndDeletedAtIsNull(String id, String orgId);
 
-    boolean existsByIdAndOrgId(UUID id, UUID orgId);
+    List<Client> findAllByOrgIdAndDeletedAtIsNull(String orgId);
 
-    void deleteByIdAndOrgId(UUID id, UUID orgId);
+    boolean existsByIdAndOrgIdAndDeletedAtIsNull(String id, String orgId);
 
-    Optional<Client> findByEmailAndOrgId(String email, UUID orgId);
+    Optional<Client> findByEmailAndOrgIdAndDeletedAtIsNull(String email, String orgId);
 
-    boolean existsByEmailAndOrgId(String email, UUID orgId);
+    boolean existsByEmailAndOrgIdAndDeletedAtIsNull(String email, String orgId);
 
-    @Query("SELECT c FROM Client c WHERE c.orgId = :orgId AND " +
-           "(LOWER(c.name) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
-           "LOWER(c.email) LIKE LOWER(CONCAT('%', :search, '%')))")
-    List<Client> searchByOrgIdWithFilters(@Param("orgId") UUID orgId, @Param("search") String search);
+    List<Client> findAllByOrgIdAndStatusAndDeletedAtIsNull(String orgId, Client.Status status);
 
-    List<Client> findAllByOrgIdAndStatus(UUID orgId, Client.Status status);
+    @org.springframework.data.mongodb.repository.Query("{ 'orgId': ?0, 'deletedAt': null, $or: [ { 'name': { $regex: ?1, $options: 'i' } }, { 'email': { $regex: ?1, $options: 'i' } } ] }")
+    List<Client> searchByOrgIdWithFilters(String orgId, String query);
 }

@@ -1,67 +1,103 @@
-// src/main/java/com/moneyops/invoices/entity/Invoice.java
 package com.moneyops.invoices.entity;
 
-import jakarta.persistence.*;
 import lombok.Data;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.UUID;
 import java.util.List;
+import java.util.UUID;
 
-@Entity
-@Table(name = "invoices")
+import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedBy;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
+import jakarta.annotation.PostConstruct;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.UUID;
+
+@Document(collection = "invoices")
 @Data
 public class Invoice {
+
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
+    private String id;
 
-    @Column(nullable = false)
-    private UUID orgId;
-
-    @Column(nullable = false, unique = true)
-    private String invoiceNumber;
-
-    @Column(nullable = false)
-    private UUID clientId;
-
-    @Column(nullable = false)
+    @Indexed
+    private String orgId;      // 🔗 Tenant isolation
+    
+    @Indexed
+    private String invoiceNumber; // Unique per org
+    
+    @Indexed
+    private String clientId;   // 🔗 WAS UUID, NOW String
+    
+    private String clientName;
+    private String clientEmail;
+    private String clientCompany;
+    private String clientPhone;
+    
     private LocalDate issueDate;
-
-    @Column(nullable = false)
     private LocalDate dueDate;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
     private InvoiceStatus status = InvoiceStatus.DRAFT;
-
-    @Column(nullable = false, precision = 19, scale = 2)
+    
     private BigDecimal subtotal;
-
-    @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal gstTotal;
-
-    @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal totalAmount;
-
-    @Column(nullable = false)
+    private BigDecimal amountPaid = BigDecimal.ZERO;  // ✨ New
+    private BigDecimal balanceDue;                     // ✨ New
+    
     private String currency = "INR";
-
     private LocalDate paymentDate;
-
-    @Column(columnDefinition = "TEXT")
     private String notes;
+    private String termsAndConditions; // ✨ New
 
-    @Column(nullable = false)
-    private LocalDateTime createdAt = LocalDateTime.now();
-
-    @Column(nullable = false)
-    private LocalDateTime updatedAt = LocalDateTime.now();
-
-    @Column(nullable = false)
-    private UUID createdBy;
-
-    @OneToMany(mappedBy = "invoice", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<InvoiceItem> items;
+
+    // ✨ Voice Context Metadata
+    private VoiceContext voiceContext;
+
+    @CreatedDate
+    private LocalDateTime createdAt;
+    
+    @LastModifiedDate
+    private LocalDateTime updatedAt;
+    
+    @CreatedBy
+    private String createdBy;
+
+    // Extra creator metadata for protected actions/auditability
+    private String createdByEmail;
+    private String createdByRole;
+    private String source; // MANUAL / AI / VOICE
+    
+    @LastModifiedBy
+    private String updatedBy;
+    
+    private LocalDateTime deletedAt;
+
+    @Indexed(unique = true, partialFilter = "{'idempotencyKey': {$exists: true}}")
+    private String idempotencyKey;
+
+    @PostConstruct
+    public void generateId() {
+        if (this.id == null) {
+            this.id = UUID.randomUUID().toString();
+        }
+    }
+
+    @Data
+    public static class VoiceContext {
+        private String sessionId;
+        private boolean createdViaVoice;
+        private String transcript;
+    }
 }

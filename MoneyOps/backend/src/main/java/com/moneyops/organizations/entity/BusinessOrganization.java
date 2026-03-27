@@ -1,91 +1,101 @@
-// src/main/java/com/moneyops/organizations/entity/BusinessOrganization.java
 package com.moneyops.organizations.entity;
 
-import jakarta.persistence.*;
 import lombok.Data;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+
+import java.util.List;
 import java.util.UUID;
 
-@Entity
-@Table(name = "business_organizations")
+/**
+ * MongoDB collection: "business_organizations"
+ *
+ * All fields are stored as plain strings so they match exactly
+ * what the frontend form sends — no enum conversion needed.
+ */
+import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedBy;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.mongodb.core.mapping.Document;
+import jakarta.annotation.PostConstruct;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.UUID;
+
+@Document(collection = "business_organizations")
 @Data
 public class BusinessOrganization {
+
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
+    private String id;
 
-    @Column(nullable = false)
+    /**
+     * Shared team security code for sensitive actions (create client/invoice).
+     * Stored as BCrypt hash; raw code is never persisted.
+     */
+    private String teamActionCodeHash;
+
+    // ── Step 1: Business Info ──────────────────────────────────────────────────
     private String legalName;
-
     private String tradingName;
-
-    @Enumerated(EnumType.STRING)
-    private BusinessType businessType;
-
-    @Enumerated(EnumType.STRING)
-    private Industry industry;
-
+    private String businessType;
+    private String industry;
     private LocalDate registrationDate;
-
-    @Enumerated(EnumType.STRING)
-    private TurnoverRange annualTurnoverRange;
-
+    private String annualTurnover;
     private String primaryEmail;
-
     private String primaryPhone;
-
     private String website;
-
     private Integer employeeCount;
-
-    @Column(columnDefinition = "TEXT")
     private String registeredAddress;
+    private String pincode;
 
-    @Enumerated(EnumType.STRING)
-    private Month financialYearStartMonth;
+    // ── Step 2: Regulatory Info ────────────────────────────────────────────────
+    private String panNumber;
+    private String stateOfRegistration;
+    private Boolean gstRegistered;
+    private String gstin;
+    private String gstFilingFrequency;
+    private String tanNumber;
+    private String cin;
+    private String llpin;
+    private String msmeNumber;
+    private String iecCode;
+    private String professionalTaxReg;
 
+    // ── Step 3: Business Context ───────────────────────────────────────────────
+    private String primaryActivity;
+    private String targetMarket;
+    private List<String> keyProducts;
+    private List<String> currentChallenges;
+    private String accountingMethod;
+    private Integer fyStartMonth;
     private String preferredLanguage;
 
-    private String primaryActivity;
+    // ── Audit ──────────────────────────────────────────────────────────────────
+    @CreatedDate
+    private LocalDateTime createdAt;
+    
+    @LastModifiedDate
+    private LocalDateTime updatedAt;
+    
+    @CreatedBy
+    private String createdBy;
+    
+    @LastModifiedBy
+    private String updatedBy;
+    
+    private LocalDateTime deletedAt;
 
-    @Enumerated(EnumType.STRING)
-    private TargetMarket targetMarket;
-
-    @Enumerated(EnumType.STRING)
-    private AccountingMethod accountingMethod;
-
-    @Column(nullable = false)
-    private LocalDateTime createdAt = LocalDateTime.now();
-
-    @Column(nullable = false)
-    private LocalDateTime updatedAt = LocalDateTime.now();
-
-    @Column(nullable = false)
-    private UUID createdBy;
-
-    // Enums
-    public enum BusinessType {
-        Proprietorship, Partnership, LLP, PvtLtd, PublicLtd, NGO, Other
-    }
-
-    public enum Industry {
-        IT, Manufacturing, Retail, Healthcare, Education, Finance, Hospitality, Construction, Other
-    }
-
-    public enum TurnoverRange {
-        LESS_THAN_10L, TEN_TO_50L, FIFTY_TO_2CR, TWO_TO_10CR, MORE_THAN_10CR
-    }
-
-    public enum Month {
-        JAN, FEB, MAR, APR, MAY, JUN, JUL, AUG, SEP, OCT, NOV, DEC
-    }
-
-    public enum TargetMarket {
-        Local, National, International
-    }
-
-    public enum AccountingMethod {
-        Cash, Accrual
+    @PostConstruct
+    public void generateId() {
+        if (this.id == null) {
+            this.id = UUID.randomUUID().toString();
+        }
     }
 }

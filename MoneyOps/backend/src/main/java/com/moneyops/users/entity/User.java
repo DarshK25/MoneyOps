@@ -1,54 +1,71 @@
-// src/main/java/com/moneyops/users/entity/User.java
 package com.moneyops.users.entity;
 
-import jakarta.persistence.*;
 import lombok.Data;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
+
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-@Entity
-@Table(name = "users")
+import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedBy;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
+import jakarta.annotation.PostConstruct;
+
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+@Document(collection = "users")
 @Data
 public class User {
+
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
+    private String id;
 
-    @Column(nullable = false)
-    private UUID orgId;
-
-    @Column(nullable = false)
+    @Indexed
+    private String orgId;      // 🔗 Tenant isolation
+    
     private String name;
 
-    @Column(nullable = false, unique = true)
+    @Indexed(unique = true)
     private String email;
 
     private String phone;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
     private Role role = Role.STAFF;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
     private Status status = Status.ACTIVE;
 
-    @Column(nullable = false)
-    private String passwordHash;
+    // Clerk user ID — stored so we can look up a user by their Clerk token
+    @Indexed(unique = true)
+    private String clerkId;
+
+    private boolean onboardingComplete = false;
 
     private LocalDateTime lastLoginAt;
+    
+    @CreatedDate
+    private LocalDateTime createdAt;
+    
+    @LastModifiedDate
+    private LocalDateTime updatedAt;
+    
+    @CreatedBy
+    private String createdBy;
+    
+    @LastModifiedBy
+    private String updatedBy;
+    
+    private LocalDateTime deletedAt;
 
-    @Column(nullable = false)
-    private LocalDateTime createdAt = LocalDateTime.now();
-
-    @Column(nullable = false)
-    private LocalDateTime updatedAt = LocalDateTime.now();
-
-    @Column(nullable = false)
-    private UUID createdBy;
-
-    @Column(nullable = false)
-    private UUID updatedBy;
+    @PostConstruct
+    public void generateId() {
+        if (this.id == null) {
+            this.id = UUID.randomUUID().toString();
+        }
+    }
 
     public enum Role {
         OWNER, ADMIN, MANAGER, STAFF, VIEWER

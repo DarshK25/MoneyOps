@@ -14,7 +14,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -45,7 +44,13 @@ public class AuditLogService {
         try {
             AuditLog auditLog = new AuditLog();
             auditLog.setOrgId(OrgContext.getOrgId());
-            auditLog.setUserId(SecurityUtil.getCurrentUserId());
+            // For AI/voice service calls, Spring Security principal may be the service name.
+            // We must attribute actions to the real user via OrgContext.
+            String currentUserId = OrgContext.getUserId();
+            if (currentUserId == null || currentUserId.isBlank()) {
+                currentUserId = SecurityUtil.getCurrentUserId();
+            }
+            auditLog.setUserId(currentUserId);
             auditLog.setEntityType(entityType);
             auditLog.setEntityId(entityId);
             auditLog.setOperation(operation);
@@ -95,7 +100,7 @@ public class AuditLogService {
         return auditLogRepository.findByOrgIdAndEntityIdOrderByTimestampDesc(OrgContext.getOrgId(), entityId);
     }
 
-    public List<AuditLog> getAuditLogsByUserId(UUID userId) {
+    public List<AuditLog> getAuditLogsByUserId(String userId) {
         return auditLogRepository.findByOrgIdAndUserIdOrderByTimestampDesc(OrgContext.getOrgId(), userId);
     }
 

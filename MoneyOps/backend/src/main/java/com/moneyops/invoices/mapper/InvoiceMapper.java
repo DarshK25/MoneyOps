@@ -9,6 +9,7 @@ import com.moneyops.invoices.entity.InvoiceStatus;
 
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.util.stream.Collectors;
 
 @Component
@@ -17,17 +18,30 @@ public class InvoiceMapper {
     public InvoiceDto toDto(Invoice invoice) {
         InvoiceDto dto = new InvoiceDto();
         dto.setId(invoice.getId());
+        dto.setOrgId(invoice.getOrgId());
         dto.setInvoiceNumber(invoice.getInvoiceNumber());
         dto.setClientId(invoice.getClientId());
+        dto.setClientName(invoice.getClientName());
+        dto.setClientEmail(invoice.getClientEmail());
+        dto.setClientCompany(invoice.getClientCompany());
+        dto.setClientPhone(invoice.getClientPhone());
         dto.setIssueDate(invoice.getIssueDate());
         dto.setDueDate(invoice.getDueDate());
         dto.setStatus(invoice.getStatus().name());
         dto.setSubtotal(invoice.getSubtotal());
         dto.setGstTotal(invoice.getGstTotal());
         dto.setTotalAmount(invoice.getTotalAmount());
+        dto.setAmountPaid(invoice.getAmountPaid());
+        dto.setBalanceDue(invoice.getBalanceDue());
         dto.setCurrency(invoice.getCurrency());
         dto.setPaymentDate(invoice.getPaymentDate());
         dto.setNotes(invoice.getNotes());
+        dto.setTermsAndConditions(invoice.getTermsAndConditions());
+        dto.setIdempotencyKey(invoice.getIdempotencyKey());
+        dto.setVoiceContext(invoice.getVoiceContext());
+        dto.setCreatedByEmail(invoice.getCreatedByEmail());
+        dto.setCreatedByRole(invoice.getCreatedByRole());
+        dto.setSource(invoice.getSource());
         if (invoice.getItems() != null) {
             dto.setItems(invoice.getItems().stream()
                     .map(this::toItemDto)
@@ -38,18 +52,35 @@ public class InvoiceMapper {
 
     public Invoice toEntity(InvoiceDto dto) {
         Invoice invoice = new Invoice();
-        invoice.setId(dto.getId());
+        if (dto.getId() != null) {
+            invoice.setId(dto.getId());
+        }
+        invoice.setOrgId(dto.getOrgId());
         invoice.setInvoiceNumber(dto.getInvoiceNumber());
         invoice.setClientId(dto.getClientId());
+        invoice.setClientName(dto.getClientName());
+        invoice.setClientEmail(dto.getClientEmail());
+        invoice.setClientCompany(dto.getClientCompany());
+        invoice.setClientPhone(dto.getClientPhone());
         invoice.setIssueDate(dto.getIssueDate());
         invoice.setDueDate(dto.getDueDate());
-        invoice.setStatus(InvoiceStatus.valueOf(dto.getStatus()));
+        if (dto.getStatus() != null) {
+            invoice.setStatus(InvoiceStatus.valueOf(dto.getStatus()));
+        }
         invoice.setSubtotal(dto.getSubtotal());
         invoice.setGstTotal(dto.getGstTotal());
         invoice.setTotalAmount(dto.getTotalAmount());
+        invoice.setAmountPaid(dto.getAmountPaid() != null ? dto.getAmountPaid() : BigDecimal.ZERO);
+        invoice.setBalanceDue(dto.getBalanceDue());
         invoice.setCurrency(dto.getCurrency());
         invoice.setPaymentDate(dto.getPaymentDate());
         invoice.setNotes(dto.getNotes());
+        invoice.setTermsAndConditions(dto.getTermsAndConditions());
+        invoice.setIdempotencyKey(dto.getIdempotencyKey());
+        invoice.setVoiceContext(dto.getVoiceContext());
+        if (dto.getCreatedByEmail() != null) invoice.setCreatedByEmail(dto.getCreatedByEmail());
+        if (dto.getCreatedByRole() != null) invoice.setCreatedByRole(dto.getCreatedByRole());
+        if (dto.getSource() != null) invoice.setSource(dto.getSource());
         if (dto.getItems() != null) {
             invoice.setItems(dto.getItems().stream()
                     .map(itemDto -> toItemEntity(itemDto, invoice))
@@ -73,7 +104,6 @@ public class InvoiceMapper {
 
     private InvoiceItem toItemEntity(InvoiceItemDto dto, Invoice invoice) {
         InvoiceItem item = new InvoiceItem();
-        item.setInvoice(invoice);
         item.setType(InvoiceItem.ItemType.valueOf(dto.getType()));
         item.setDescription(dto.getDescription());
         item.setQuantity(dto.getQuantity());

@@ -3,12 +3,12 @@ package com.moneyops.organizations.controller;
 
 import com.moneyops.organizations.dto.BusinessOrganizationDto;
 import com.moneyops.organizations.service.OrganizationService;
+import com.moneyops.shared.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/org")
@@ -18,52 +18,51 @@ public class BusinessController {
     private final OrganizationService organizationService;
 
     @PostMapping
-    public ResponseEntity<BusinessOrganizationDto> createOrganization(@RequestBody BusinessOrganizationDto dto,
-                                                                       @RequestHeader("X-User-Id") UUID userId) {
+    public ResponseEntity<ApiResponse<BusinessOrganizationDto>> createOrganization(@RequestBody BusinessOrganizationDto dto,
+                                                                        @RequestHeader("X-User-Id") String userId) {
         BusinessOrganizationDto created = organizationService.createOrganization(dto, userId);
-        return ResponseEntity.ok(created);
+        return ResponseEntity.ok(ApiResponse.success(created));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<BusinessOrganizationDto> updateOrganization(@PathVariable UUID id,
-                                                                       @RequestBody BusinessOrganizationDto dto,
-                                                                       @RequestHeader("X-User-Id") UUID userId) {
+    public ResponseEntity<ApiResponse<BusinessOrganizationDto>> updateOrganization(@PathVariable String id,
+                                                                        @RequestBody BusinessOrganizationDto dto,
+                                                                        @RequestHeader("X-User-Id") String userId) {
         BusinessOrganizationDto updated = organizationService.updateOrganization(id, dto, userId);
-        return ResponseEntity.ok(updated);
+        return ResponseEntity.ok(ApiResponse.success(updated));
     }
 
     @PatchMapping("/{id}")
-    public ResponseEntity<BusinessOrganizationDto> partialUpdateOrganization(@PathVariable UUID id,
-                                                                              @RequestBody BusinessOrganizationDto dto,
-                                                                              @RequestHeader("X-User-Id") UUID userId) {
-        // For partial update, implement field-by-field update if needed
+    public ResponseEntity<ApiResponse<BusinessOrganizationDto>> partialUpdateOrganization(@PathVariable String id,
+                                                                               @RequestBody BusinessOrganizationDto dto,
+                                                                               @RequestHeader("X-User-Id") String userId) {
         BusinessOrganizationDto updated = organizationService.updateOrganization(id, dto, userId);
-        return ResponseEntity.ok(updated);
+        return ResponseEntity.ok(ApiResponse.success(updated));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<BusinessOrganizationDto> getOrganization(@PathVariable UUID id,
-                                                                    @RequestHeader("X-User-Id") UUID userId) {
+    public ResponseEntity<ApiResponse<BusinessOrganizationDto>> getOrganization(@PathVariable String id,
+                                                                     @RequestHeader("X-User-Id") String userId) {
         BusinessOrganizationDto org = organizationService.getOrganizationById(id, userId);
-        return ResponseEntity.ok(org);
+        return ResponseEntity.ok(ApiResponse.success(org));
     }
 
     @GetMapping("/my")
-    public ResponseEntity<BusinessOrganizationDto> getMyOrganization(@RequestHeader("X-User-Id") UUID userId) {
+    public ResponseEntity<ApiResponse<BusinessOrganizationDto>> getMyOrganization(@RequestHeader("X-User-Id") String userId) {
         BusinessOrganizationDto org = organizationService.getMyOrganization(userId);
-        return ResponseEntity.ok(org);
+        return ResponseEntity.ok(ApiResponse.success(org));
     }
 
     @GetMapping
-    public ResponseEntity<List<BusinessOrganizationDto>> getAllOrganizations(@RequestHeader("X-User-Id") UUID userId) {
+    public ResponseEntity<ApiResponse<List<BusinessOrganizationDto>>> getAllOrganizations(@RequestHeader("X-User-Id") String userId) {
         List<BusinessOrganizationDto> orgs = organizationService.getAllOrganizations(userId);
-        return ResponseEntity.ok(orgs);
+        return ResponseEntity.ok(ApiResponse.success(orgs));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteOrganization(@PathVariable UUID id,
-                                                   @RequestHeader("X-User-Id") UUID userId) {
+    public ResponseEntity<ApiResponse<Void>> deleteOrganization(@PathVariable String id,
+                                                   @RequestHeader("X-User-Id") String userId) {
         organizationService.deleteOrganization(id, userId);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(ApiResponse.success(null));
     }
 }

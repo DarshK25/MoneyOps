@@ -1,6 +1,6 @@
 package com.moneyops.documents.controller;
 
-import com.moneyops.documents.entity.Document;
+import com.moneyops.documents.entity.MoneyOpsDocument;
 import com.moneyops.documents.service.DocumentService;
 import com.moneyops.shared.dto.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -10,7 +10,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/documents")
@@ -20,35 +19,49 @@ public class DocumentController {
 
     private final DocumentService documentService;
 
+    @GetMapping
+    @Operation(summary = "Get filtered documents (shared or private)")
+    public ResponseEntity<ApiResponse<java.util.Map<String, List<MoneyOpsDocument>>>> getVisibleDocuments(
+            @RequestParam String businessId,
+            @RequestParam(defaultValue = "false") boolean showPrivate) {
+        
+        String effectiveOrgId = com.moneyops.shared.utils.OrgContext.getOrgId() != null 
+                ? com.moneyops.shared.utils.OrgContext.getOrgId() : businessId;
+        String effectiveUserId = com.moneyops.shared.utils.OrgContext.getUserId();
+
+        List<MoneyOpsDocument> docs = documentService.getVisibleDocuments(effectiveOrgId, effectiveUserId, showPrivate);
+        return ResponseEntity.ok(ApiResponse.success(java.util.Map.of("documents", docs)));
+    }
+
     @GetMapping("/org/{orgId}")
     @Operation(summary = "Get all documents for an organization")
-    public ResponseEntity<ApiResponse<List<Document>>> getDocumentsByOrg(@PathVariable UUID orgId) {
+    public ResponseEntity<ApiResponse<List<MoneyOpsDocument>>> getDocumentsByOrg(@PathVariable String orgId) {
         return ResponseEntity.ok(ApiResponse.success(documentService.getDocumentsByOrg(orgId)));
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "Get document by ID")
-    public ResponseEntity<ApiResponse<Document>> getDocumentById(@PathVariable UUID id) {
+    public ResponseEntity<ApiResponse<MoneyOpsDocument>> getDocumentById(@PathVariable String id) {
         return ResponseEntity.ok(ApiResponse.success(documentService.getDocumentById(id)));
     }
 
     @PostMapping
     @Operation(summary = "Create document metadata")
-    public ResponseEntity<ApiResponse<Document>> createDocument(@RequestBody Document document) {
+    public ResponseEntity<ApiResponse<MoneyOpsDocument>> createDocument(@RequestBody MoneyOpsDocument document) {
         return ResponseEntity.ok(ApiResponse.success(documentService.createDocumentMetadata(document)));
     }
 
     @GetMapping("/entity/{entityType}/{entityId}")
     @Operation(summary = "Get documents linked to a specific entity")
-    public ResponseEntity<ApiResponse<List<Document>>> getDocumentsByEntity(
+    public ResponseEntity<ApiResponse<List<MoneyOpsDocument>>> getDocumentsByEntity(
             @PathVariable String entityType,
-            @PathVariable UUID entityId) {
+            @PathVariable String entityId) {
         return ResponseEntity.ok(ApiResponse.success(documentService.getDocumentsByEntity(entityType, entityId)));
     }
 
     @DeleteMapping("/{id}")
     @Operation(summary = "Delete document")
-    public ResponseEntity<ApiResponse<Void>> deleteDocument(@PathVariable UUID id) {
+    public ResponseEntity<ApiResponse<Void>> deleteDocument(@PathVariable String id) {
         documentService.deleteDocument(id);
         return ResponseEntity.ok(ApiResponse.success(null));
     }

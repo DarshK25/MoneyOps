@@ -1,61 +1,90 @@
-// src/main/java/com/moneyops/transactions/entity/Transaction.java
 package com.moneyops.transactions.entity;
 
-import jakarta.persistence.*;
 import lombok.Data;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.mapping.Document;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-@Entity
-@Table(name = "transactions")
+import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedBy;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
+import jakarta.annotation.PostConstruct;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+@Document(collection = "transactions")
+@CompoundIndex(name = "org_type_idx", def = "{'orgId': 1, 'type': 1, 'deletedAt': 1}")
 @Data
 public class Transaction {
+
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
+    private String id;
 
-    @Column(nullable = false)
-    private UUID orgId;
-
-    private UUID clientId; // null if expense
-
-    private UUID invoiceId; // null if not related to invoice
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private TransactionType type; // INCOME or EXPENSE
-
-    @Column(nullable = false, precision = 19, scale = 2)
+    @Indexed
+    private String orgId;      // 🔗 Tenant isolation
+    
+    @Indexed
+    private String clientId;   // 🔗 WAS UUID, NOW String
+    
+    @Indexed
+    private String invoiceId;  // 🔗 Ref to invoices (String)
+    
+    private TransactionType type;
     private BigDecimal amount;
-
-    @Column(nullable = false)
     private String currency = "INR";
-
-    @Column(nullable = false)
     private LocalDate transactionDate;
-
-    @Column(nullable = false)
-    private String category; // e.g., "Payment Received", "Office Rent", "Salary"
-
-    @Column(columnDefinition = "TEXT")
+    private String category;
     private String description;
-
-    private String paymentMethod; // e.g., "Bank Transfer", "Cash", "UPI"
-
-    private String referenceNumber; // Transaction ID, Check number, etc.
+    private String paymentMethod;
+    private String referenceNumber;
 
     // AI classification
-    private String aiCategory; // AI suggested category
-    private Float aiConfidence; // 0.0 to 1.0
+    private String aiCategory;
+    private Float aiConfidence;
 
-    @Column(nullable = false)
-    private LocalDateTime createdAt = LocalDateTime.now();
+    // ✨ Voice Context Metadata
+    private VoiceContext voiceContext;
 
-    @Column(nullable = false)
-    private LocalDateTime updatedAt = LocalDateTime.now();
+    @CreatedDate
+    private LocalDateTime createdAt;
+    
+    @LastModifiedDate
+    private LocalDateTime updatedAt;
+    
+    @CreatedBy
+    private String createdBy;
+    
+    @LastModifiedBy
+    private String updatedBy;
+    
+    private LocalDateTime deletedAt;
 
-    @Column(nullable = false)
-    private UUID createdBy;
+    @Indexed(unique = true, partialFilter = "{'idempotencyKey': {$exists: true}}")
+    private String idempotencyKey;
+
+    @PostConstruct
+    public void generateId() {
+        if (this.id == null) {
+            this.id = UUID.randomUUID().toString();
+        }
+    }
+
+    @Data
+    public static class VoiceContext {
+        private String sessionId;
+        private boolean recordedViaVoice;
+        private String transcript;
+    }
 }
