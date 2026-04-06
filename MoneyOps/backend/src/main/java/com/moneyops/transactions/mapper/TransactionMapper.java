@@ -21,6 +21,9 @@ public class TransactionMapper {
         dto.setTransactionDate(transaction.getTransactionDate());
         dto.setCategory(transaction.getCategory());
         dto.setDescription(transaction.getDescription());
+        dto.setVendor(transaction.getVendor());
+        dto.setGstAmount(transaction.getGstAmount());
+        dto.setSource(transaction.getSource());
         dto.setPaymentMethod(transaction.getPaymentMethod());
         dto.setReferenceNumber(transaction.getReferenceNumber());
         dto.setAiCategory(transaction.getAiCategory());
@@ -39,13 +42,16 @@ public class TransactionMapper {
         transaction.setClientId(dto.getClientId());
         transaction.setInvoiceId(dto.getInvoiceId());
         if (dto.getType() != null) {
-            transaction.setType(TransactionType.valueOf(dto.getType()));
+            transaction.setType(TransactionType.valueOf(dto.getType().toUpperCase()));
         }
         transaction.setAmount(dto.getAmount());
         transaction.setCurrency(dto.getCurrency());
         transaction.setTransactionDate(dto.getTransactionDate());
         transaction.setCategory(dto.getCategory());
         transaction.setDescription(dto.getDescription());
+        transaction.setVendor(dto.getVendor());
+        transaction.setGstAmount(dto.getGstAmount());
+        transaction.setSource(dto.getSource());
         transaction.setPaymentMethod(dto.getPaymentMethod());
         transaction.setReferenceNumber(dto.getReferenceNumber());
         transaction.setAiCategory(dto.getAiCategory());

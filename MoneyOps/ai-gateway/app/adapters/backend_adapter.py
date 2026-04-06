@@ -164,6 +164,20 @@ class BackendHttpAdapter:
     async def get_financial_summary(self, org_id: str, user_id: Optional[str] = None) -> BackendResponse:
         return await self._request("GET", "/api/transactions/summary", org_id=org_id, user_id=user_id)
 
+    async def get_documents(self, org_id: str, user_id: Optional[str] = None, show_private: bool = False) -> List[Dict[str, Any]]:
+        resp = await self._request(
+            "GET",
+            "/api/documents",
+            params={"businessId": org_id, "showPrivate": str(show_private).lower()},
+            org_id=org_id,
+            user_id=user_id,
+        )
+        if resp.success and resp.data:
+            if isinstance(resp.data, dict):
+                data = resp.data.get("data", resp.data)
+                return data.get("documents", [])
+        return []
+
     def set_auth_token(self, token: str):
         self.auth_token = token
         self.client.headers["Authorization"] = f"Bearer {token}"

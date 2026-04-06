@@ -28,6 +28,19 @@ export function useVoiceEvents() {
           console.log("[VoiceEvents] Handling nested UI event from gateway_results");
           dispatchUIEvent(message.ui_event, navigate);
         }
+
+        if (
+          topic === "gateway_results" &&
+          message.response_text &&
+          (message.intent === "DOCUMENT_QUERY" || message.ui_event?.type === "document_answer")
+        ) {
+          window.dispatchEvent(new CustomEvent("voice:agent_text", {
+            detail: {
+              responseText: message.response_text,
+              intent: message.intent,
+            },
+          }));
+        }
       } catch (err) {
         console.warn("[VoiceEvents] Malformed payload", err);
       }
@@ -49,10 +62,12 @@ export function useVoiceEvents() {
 }
 
 function dispatchUIEvent(event, navigate) {
+  if (!event || typeof event !== "object") return;
   const { type, variant, title, message, duration, actions } = event;
   
   // Custom deep-link handler for invoice creation
   if (type === "invoice_created") {
+    window.dispatchEvent(new CustomEvent("voice:invoice-created", { detail: event }));
     toast.success(
       <div className="flex flex-col gap-1">
         <span className="font-semibold text-sm">Invoice Created ✓</span>
@@ -103,20 +118,28 @@ function dispatchUIEvent(event, navigate) {
     }
   }
 
-  if (type === "confirmation") {
-    window.dispatchEvent(new CustomEvent("voice:confirmation", { detail: event }));
+  if (type === "open_client_picker") {
+    window.dispatchEvent(new CustomEvent("voice:open_client_picker", { detail: event }));
   }
 
   if (type === "open_input_dialog") {
     window.dispatchEvent(new CustomEvent("voice:open_input_dialog", { detail: event }));
   }
 
-  if (type === "open_client_picker") {
-    window.dispatchEvent(new CustomEvent("voice:open_client_picker", { detail: event }));
+  if (type === "invoice_draft_update") {
+    window.dispatchEvent(new CustomEvent("voice:invoice_draft_update", { detail: event.invoice_draft || event }));
+  }
+
+  if (type === "confirmation") {
+    window.dispatchEvent(new CustomEvent("voice:confirmation", { detail: event }));
   }
 
   if (type === "client_created") {
     window.dispatchEvent(new CustomEvent("voice:client-created", { detail: event }));
+  }
+
+  if (type === "document_answer") {
+    window.dispatchEvent(new CustomEvent("voice:document-answer", { detail: event }));
   }
 
   if (event.badge) {

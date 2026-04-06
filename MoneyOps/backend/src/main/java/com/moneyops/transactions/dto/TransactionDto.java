@@ -1,12 +1,15 @@
 // src/main/java/com/moneyops/transactions/dto/TransactionDto.java
 package com.moneyops.transactions.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
 
 @Data
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class TransactionDto {
     private String id;
     private String orgId;
@@ -15,9 +18,13 @@ public class TransactionDto {
     private String type;
     private BigDecimal amount;
     private String currency;
+    @JsonAlias("date")
     private LocalDate transactionDate;
     private String category;
     private String description;
+    private String vendor;
+    private BigDecimal gstAmount;
+    private String source;
     private String paymentMethod;
     private String referenceNumber;
     private String aiCategory;

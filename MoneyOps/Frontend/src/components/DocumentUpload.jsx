@@ -12,9 +12,11 @@ import { Upload, File, X, Loader2, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 
 export function DocumentUpload({ businessId, onUploadComplete }) {
     const { getToken } = useAuth();
+    const { userId, orgId } = useOnboardingStatus();
     const [isDragging, setIsDragging] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
@@ -78,33 +80,38 @@ export function DocumentUpload({ businessId, onUploadComplete }) {
             const response = await fetch("/api/documents/upload", {
                 method: "POST",
                 body: formData,
-                headers: { "Authorization": `Bearer ${token}` }
+                headers: {
+                    "Authorization": `Bearer ${token}`,
+                    "X-User-Id": userId,
+                    "X-Org-Id": orgId || businessId,
+                }
             });
 
             clearInterval(progressInterval);
 
-            if (!response.ok) {
-                // Fallback for demo if backend is not ready
-                if (response.status === 404) {
-                    console.warn("Upload endpoint not found, simulating success for demo.");
-                    // proceed as success
-                } else {
-                    throw new Error("Upload failed");
-                }
+            const data = await response.json().catch(() => null);
+            if (!response.ok || data?.success === false) {
+                throw new Error(data?.message || "Upload failed");
             }
-
-            const data = response.ok ? await response.json() : { success: true }; // Mock success
             setUploadProgress(100);
 
             toast.success(`File "${selectedFile.name}" uploaded successfully!`);
             toast.info("AI is analyzing your document in the background...");
+            window.dispatchEvent(new CustomEvent("voice:document-uploaded", {
+                detail: data?.data || { name: selectedFile.name, category: "FILE" },
+            }));
+            window.dispatchEvent(new CustomEvent("voice:manual_agent_response", {
+                detail: {
+                    responseText: `Uploaded ${selectedFile.name}. You can now ask me questions about this document.`,
+                },
+            }));
 
             setSelectedFile(null);
             setIsConfidential(false);
-            onUploadComplete?.();
+            onUploadComplete?.(data?.data);
         } catch (error) {
             console.error("Upload error:", error);
-            toast.error("Failed to upload file");
+            toast.error(error.message || "Failed to upload file");
         } finally {
             setTimeout(() => {
                 setUploading(false);

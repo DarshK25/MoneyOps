@@ -3,7 +3,6 @@ import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
   BarChart3,
-  CreditCard,
   FileText,
   Home,
   Users,
@@ -13,20 +12,14 @@ import {
   Search,
   Shield,
   GitMerge,
-  Brain,
-  Heart,
-  Rocket,
-  Cog,
-  Bell,
+  Folder,
+  Receipt,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarRail,
 } from "@/components/ui/sidebar";
@@ -118,6 +111,11 @@ export function AppSidebar(props) {
       icon: <Users className="h-4 w-4" />,
     },
     {
+      href: "/transactions",
+      title: "Transactions",
+      icon: <Receipt className="h-4 w-4" />,
+    },
+    {
       href: "/cashflow",
       title: "Cash Flow",
       icon: <BarChart3 className="h-4 w-4" />,
@@ -125,7 +123,7 @@ export function AppSidebar(props) {
     {
       href: "/documents",
       title: "Documents",
-      icon: <FileText className="h-4 w-4" />,
+      icon: <Folder className="h-4 w-4" />,
     },
   ];
 

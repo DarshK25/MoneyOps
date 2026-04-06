@@ -21,7 +21,7 @@ export default function ClientInputDialog({ dialog, onSubmit, onClose }) {
       });
       const data = await res.json();
       if (data.ui_event) {
-        window.dispatchEvent(new CustomEvent("voice:" + data.ui_event.type.replace('_', '-'), { detail: data.ui_event }));
+        window.dispatchEvent(new CustomEvent("voice:manual_ui_event", { detail: data.ui_event }));
       }
       onSubmit(data);
       onClose();

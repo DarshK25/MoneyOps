@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { useAuth, useUser } from "@clerk/clerk-react";
+import { useAuth } from "@clerk/clerk-react";
 import {
     FileText,
     Lock,
@@ -17,11 +17,18 @@ import {
 import { DocumentUpload } from "@/components/DocumentUpload";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 
-const DEFAULT_BUSINESS_ID = 1;
+const normalizeDocuments = (payload) => {
+    const docs = payload?.data?.documents || payload?.documents || [];
+    return docs.map((doc) => ({
+        ...doc,
+        url: doc.url || doc.downloadUrl || `/api/documents/${doc.id}/download`,
+        uploadedAt: doc.uploadedAt || doc.createdAt || doc.updatedAt,
+        analyzedAt: doc.analyzedAt || (doc.contentSummary ? doc.updatedAt || doc.createdAt : null),
+    }));
+};
 
 export default function DocumentsPage() {
     const { getToken } = useAuth();
-    const { user } = useUser();
     const { userId: internalUserId, orgId: internalOrgId } = useOnboardingStatus();
     const [loading, setLoading] = useState(true);
     const [sharedDocuments, setSharedDocuments] = useState([]);
@@ -53,10 +60,10 @@ export default function DocumentsPage() {
                     }
                 }).catch(() => null),
             ]);
-            const sharedData = sharedRes?.ok ? await sharedRes.json() : { documents: [] };
-            const privateData = privateRes?.ok ? await privateRes.json() : { documents: [] };
-            setSharedDocuments(sharedData.documents || []);
-            setPrivateDocuments(privateData.documents || []);
+            const sharedData = sharedRes?.ok ? await sharedRes.json() : { data: { documents: [] } };
+            const privateData = privateRes?.ok ? await privateRes.json() : { data: { documents: [] } };
+            setSharedDocuments(normalizeDocuments(sharedData));
+            setPrivateDocuments(normalizeDocuments(privateData));
         } catch (e) {
             console.error("Error fetching documents", e);
             toast.error("Failed to refresh documents");
@@ -73,7 +80,8 @@ export default function DocumentsPage() {
                 method: "DELETE",
                 headers: {
                     "Authorization": `Bearer ${token}`,
-                    "X-User-Id": internalUserId
+                    "X-User-Id": internalUserId,
+                    "X-Org-Id": internalOrgId,
                 }
             });
             if (!res.ok) throw new Error("Delete failed");
@@ -113,7 +121,7 @@ export default function DocumentsPage() {
                     <div className="flex items-center gap-3 mt-1.5 text-xs text-[#A0A0A0]">
                         <span className="flex items-center gap-1">
                             <Clock className="h-3 w-3" />
-                            {new Date(doc.uploadedAt).toLocaleDateString()}
+                            {doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString() : "Just now"}
                         </span>
                         {doc.category && (
                             <span className="px-1.5 py-0.5 rounded bg-[#2A2A2A] text-xs">{doc.category}</span>

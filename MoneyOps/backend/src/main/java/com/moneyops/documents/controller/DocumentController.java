@@ -6,8 +6,12 @@ import com.moneyops.shared.dto.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -51,6 +55,25 @@ public class DocumentController {
         return ResponseEntity.ok(ApiResponse.success(documentService.createDocumentMetadata(document)));
     }
 
+    @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Upload a document and persist metadata")
+    public ResponseEntity<ApiResponse<MoneyOpsDocument>> uploadDocument(
+            @RequestPart("file") MultipartFile file,
+            @RequestParam(required = false) String businessId,
+            @RequestParam(defaultValue = "false") boolean isConfidential
+    ) throws java.io.IOException {
+        String orgId = com.moneyops.shared.utils.OrgContext.getOrgId() != null
+                ? com.moneyops.shared.utils.OrgContext.getOrgId()
+                : businessId;
+        String userId = com.moneyops.shared.utils.OrgContext.getUserId();
+        if (orgId == null || orgId.isBlank()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("Missing organization context"));
+        }
+
+        MoneyOpsDocument created = documentService.uploadDocument(file, orgId, userId, isConfidential, businessId);
+        return ResponseEntity.ok(ApiResponse.success("Document uploaded successfully", created));
+    }
+
     @GetMapping("/entity/{entityType}/{entityId}")
     @Operation(summary = "Get documents linked to a specific entity")
     public ResponseEntity<ApiResponse<List<MoneyOpsDocument>>> getDocumentsByEntity(
@@ -64,5 +87,16 @@ public class DocumentController {
     public ResponseEntity<ApiResponse<Void>> deleteDocument(@PathVariable String id) {
         documentService.deleteDocument(id);
         return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @GetMapping("/{id}/download")
+    @Operation(summary = "Download an uploaded document")
+    public ResponseEntity<Resource> downloadDocument(@PathVariable String id) {
+        MoneyOpsDocument document = documentService.getDocumentById(id);
+        Resource resource = documentService.loadDocumentResource(id);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + document.getName() + "\"")
+                .contentType(MediaType.parseMediaType(document.getMimeType() != null ? document.getMimeType() : MediaType.APPLICATION_OCTET_STREAM_VALUE))
+                .body(resource);
     }
 }

@@ -62,6 +62,12 @@ export default function InvoicesPage() {
         }
     }, [internalUserId, internalOrgId]);
 
+    useEffect(() => {
+        const handleVoiceInvoiceCreated = () => fetchInvoices();
+        window.addEventListener("voice:invoice-created", handleVoiceInvoiceCreated);
+        return () => window.removeEventListener("voice:invoice-created", handleVoiceInvoiceCreated);
+    }, [internalUserId, internalOrgId]);
+
     const fetchInvoices = async () => {
         try {
             setLoading(true);

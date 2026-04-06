@@ -1,6 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useUser } from "@clerk/clerk-react";
-import { Button } from "@/components/ui/button";
 import { X, Phone, PhoneOff } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -16,6 +15,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useVoiceEvents } from "@/hooks/useVoiceEvents";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 import ClientInputDialog from "./ClientInputDialog";
+import LiveInvoicePreview from "./LiveInvoicePreview";
+import LiveDocumentPreview from "./LiveDocumentPreview";
 
 export function VoiceCallAgent({ agentType = "orchestrator" }) {
     const { user, isLoaded } = useUser();
@@ -27,6 +28,8 @@ export function VoiceCallAgent({ agentType = "orchestrator" }) {
     const [isProcessing, setIsProcessing] = useState(false);
     const [activeDialog, setActiveDialog] = useState(null);
     const [activeClientPicker, setActiveClientPicker] = useState(null);
+    const [invoiceDraft, setInvoiceDraft] = useState(null);
+    const [documentInsight, setDocumentInsight] = useState(null);
 
     const handleClientPick = async (client) => {
         if (!activeClientPicker?.session_id) return;
@@ -121,16 +124,38 @@ export function VoiceCallAgent({ agentType = "orchestrator" }) {
         setToken("");
         setIsProcessing(false);
         setActiveDialog(null);
+        setActiveClientPicker(null);
+        setInvoiceDraft(null);
+        setDocumentInsight(null);
     }, []);
 
     useEffect(() => {
         const handleOpenDialog = (e) => setActiveDialog(e.detail);
         const handleOpenClientPicker = (e) => setActiveClientPicker(e.detail);
+        const handleInvoiceDraftUpdate = (e) => setInvoiceDraft(e.detail);
+        const handleDocumentAnswer = (e) => setDocumentInsight(e.detail);
+        const handleDocumentUploaded = (e) => {
+            if (!e.detail) return;
+            setDocumentInsight({
+                title: e.detail.name || "Document Ready",
+                document_name: e.detail.name || "Uploaded document",
+                document_category: e.detail.category || e.detail.type || "FILE",
+                message: "Your document is uploaded and ready for voice questions. Ask for a summary, dates, totals, clauses, or vendor details.",
+                snippet: e.detail.contentSummary || "",
+                download_url: e.detail.downloadUrl || e.detail.url || (e.detail.id ? `/api/documents/${e.detail.id}/download` : null),
+            });
+        };
         window.addEventListener("voice:open_input_dialog", handleOpenDialog);
         window.addEventListener("voice:open_client_picker", handleOpenClientPicker);
+        window.addEventListener("voice:invoice_draft_update", handleInvoiceDraftUpdate);
+        window.addEventListener("voice:document-answer", handleDocumentAnswer);
+        window.addEventListener("voice:document-uploaded", handleDocumentUploaded);
         return () => {
             window.removeEventListener("voice:open_input_dialog", handleOpenDialog);
             window.removeEventListener("voice:open_client_picker", handleOpenClientPicker);
+            window.removeEventListener("voice:invoice_draft_update", handleInvoiceDraftUpdate);
+            window.removeEventListener("voice:document-answer", handleDocumentAnswer);
+            window.removeEventListener("voice:document-uploaded", handleDocumentUploaded);
         };
     }, []);
 
@@ -263,6 +288,13 @@ export function VoiceCallAgent({ agentType = "orchestrator" }) {
                             </div>
                         </div>
                     )}
+
+                    {documentInsight && (
+                        <LiveDocumentPreview
+                            insight={documentInsight}
+                            onClose={() => setDocumentInsight(null)}
+                        />
+                    )}
                 </div>
 
             </motion.div>
@@ -276,6 +308,38 @@ export function VoiceCallAgent({ agentType = "orchestrator" }) {
                             setActiveClientPicker(null);
                         }}
                         onClose={() => setActiveDialog(null)}
+                    />
+                )}
+
+                {invoiceDraft && (
+                    <LiveInvoicePreview
+                        draft={invoiceDraft}
+                        onClose={() => setInvoiceDraft(null)}
+                        onUpdate={setInvoiceDraft}
+                        onConfirm={async () => {
+                            if (!invoiceDraft.awaiting_confirmation) return;
+                            window.dispatchEvent(new CustomEvent("voice:manual_agent_response", {
+                                detail: { responseText: "Confirming and generating this invoice now..." }
+                            }));
+
+                            try {
+                                const sessionToken = await window.Clerk?.session?.getToken();
+                                await fetch("/api/v1/voice/dialog-response", {
+                                    method: "POST",
+                                    headers: {
+                                        "Content-Type": "application/json",
+                                        "Authorization": `Bearer ${sessionToken}`,
+                                    },
+                                    body: JSON.stringify({
+                                        session_id: invoiceDraft.session_id || "current",
+                                        dialog_id: "confirm_invoice",
+                                        fields: { confirmed: true },
+                                    }),
+                                });
+                            } catch (error) {
+                                console.error(error);
+                            }
+                        }}
                     />
                 )}
             </AnimatePresence>
@@ -341,6 +405,24 @@ function AgentContent({ onDisconnect }) {
 
         window.addEventListener("voice:manual_agent_response", speakManualResponse);
         return () => window.removeEventListener("voice:manual_agent_response", speakManualResponse);
+    }, []);
+
+    useEffect(() => {
+        const appendAgentText = (event) => {
+            const responseText = event?.detail?.responseText?.trim();
+            if (!responseText) return;
+            setTranscript((prev) => [
+                ...prev.slice(-20),
+                {
+                    id: `gateway-${Date.now()}`,
+                    role: "agent",
+                    text: responseText,
+                },
+            ]);
+        };
+
+        window.addEventListener("voice:agent_text", appendAgentText);
+        return () => window.removeEventListener("voice:agent_text", appendAgentText);
     }, []);
 
     // Auto-scroll transcript to bottom

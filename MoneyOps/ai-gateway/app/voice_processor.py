@@ -1,6 +1,8 @@
 import uuid
+import re
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
+from datetime import datetime
 
 from app.orchestration.intent_classifier import intent_classifier
 from app.orchestration.entity_extractor import entity_extractor
@@ -226,8 +228,29 @@ class VoiceProcessor:
             "CUSTOMER_RETENTION",
         }
 
+        document_keywords = {
+            "document", "documents", "file", "files", "upload", "uploaded", "receipt", "contract",
+            "agreement", "report", "pdf", "statement", "clause", "page", "invoice", "summary",
+        }
+        document_followup_words = {
+            "this", "that", "it", "there", "here", "what", "when", "who", "which", "where",
+            "amount", "total", "date", "due", "vendor", "client", "payment", "gst",
+        }
+        lower_text = text.lower()
+        should_route_to_documents = (
+            intent == "DOCUMENT_QUERY"
+            or (intent == "GENERAL_QUERY" and any(keyword in lower_text for keyword in document_keywords))
+            or (
+                intent in {"GENERAL_QUERY", "FOLLOWUP_QUESTION", "CLARIFICATION_REQUEST"}
+                and session.last_document_id is not None
+                and any(word in lower_text for word in document_followup_words)
+            )
+        )
+
         if intent == "INVOICE_CREATE":
             result = await self.finance_agent.handle_invoice_create(context)
+        elif should_route_to_documents:
+            result = await self._handle_document_query(text, context, session=session)
         elif intent == "CLIENT_CREATE":
             session.locked_intent = "CLIENT_CREATE"
             # Keep existing draft if we are just entering context again
@@ -285,6 +308,162 @@ class VoiceProcessor:
             "intent": intent,
             "ui_event": result.ui_event if hasattr(result, 'ui_event') else None,
         }
+
+    async def _handle_document_query(self, text: str, context: VoiceContext, session=None):
+        from app.agents.base_agent import AgentResponse
+        from app.schemas.intents import AgentType
+
+        shared_docs = await self.backend.get_documents(context.org_uuid, user_id=context.user_id, show_private=False)
+        private_docs = await self.backend.get_documents(context.org_uuid, user_id=context.user_id, show_private=True)
+        documents = self._dedupe_documents([*private_docs, *shared_docs])
+
+        if not documents:
+            return AgentResponse(
+                success=True,
+                message="I could not find any uploaded documents yet. Upload one in Document Intelligence and ask me again.",
+                agent_type=AgentType.FINANCE_AGENT,
+            )
+
+        query_terms = self._extract_document_terms(text)
+        ranked = [self._rank_document(doc, query_terms, session) for doc in documents]
+        ranked.sort(key=lambda item: item["score"], reverse=True)
+        top_match = ranked[0]
+
+        if top_match["score"] <= 0 and session and session.last_document_id:
+            remembered = next((doc for doc in documents if doc.get("id") == session.last_document_id), None)
+            if remembered:
+                top_match = self._rank_document(remembered, query_terms, session, remembered=True)
+
+        if top_match["score"] <= 0:
+            names = ", ".join(doc.get("name", "Untitled") for doc in documents[:3])
+            return AgentResponse(
+                success=True,
+                message=f"I found uploaded documents, including {names}. Ask about a title, amount, date, clause, summary, or say 'tell me about the last uploaded document'.",
+                agent_type=AgentType.FINANCE_AGENT,
+                ui_event={
+                    "type": "document_answer",
+                    "title": "Document Intelligence",
+                    "message": "I found documents but need a more specific question.",
+                    "document_count": len(documents),
+                    "documents": [
+                        {"id": doc.get("id"), "name": doc.get("name"), "category": doc.get("category")}
+                        for doc in documents[:5]
+                    ],
+                },
+            )
+
+        top_doc = top_match["document"]
+        snippet = self._extract_relevant_snippet(top_doc, query_terms)
+        if not snippet:
+            snippet = top_doc.get("contentSummary") or "This file is uploaded, but I could not extract readable text from it yet."
+        answer = self._build_document_answer(top_doc, snippet, query_terms)
+
+        if session is not None:
+            session.last_document_id = top_doc.get("id")
+            session.last_document_name = top_doc.get("name")
+            session.last_document_query = text
+            self.state_manager.save_session(session)
+
+        return AgentResponse(
+            success=True,
+            message=answer,
+            agent_type=AgentType.FINANCE_AGENT,
+            ui_event={
+                "type": "document_answer",
+                "title": top_doc.get("name", "Document Intelligence"),
+                "message": answer,
+                "document_id": top_doc.get("id"),
+                "document_name": top_doc.get("name"),
+                "document_category": top_doc.get("category"),
+                "question": text,
+                "snippet": snippet,
+                "download_url": top_doc.get("downloadUrl"),
+                "matched_terms": query_terms[:8],
+            },
+        )
+
+    def _dedupe_documents(self, documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        seen = {}
+        for document in sorted(documents, key=self._document_sort_key, reverse=True):
+            doc_id = document.get("id") or document.get("name")
+            if doc_id and doc_id not in seen:
+                seen[doc_id] = document
+        return list(seen.values())
+
+    def _document_sort_key(self, document: Dict[str, Any]):
+        for field in ("updatedAt", "createdAt"):
+            raw = document.get(field)
+            if raw:
+                try:
+                    return datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+                except ValueError:
+                    continue
+        return datetime.min
+
+    def _extract_document_terms(self, text: str) -> List[str]:
+        stopwords = {
+            "the", "and", "for", "with", "that", "this", "from", "about", "into", "have", "what",
+            "when", "where", "which", "tell", "show", "give", "does", "document", "file", "uploaded",
+            "upload", "please", "could", "would", "there", "their", "them", "your", "just",
+        }
+        return [
+            term for term in re.findall(r"[a-zA-Z0-9]+", text.lower())
+            if len(term) > 2 and term not in stopwords
+        ]
+
+    def _rank_document(self, document: Dict[str, Any], query_terms: List[str], session=None, remembered: bool = False):
+        name = str(document.get("name", "")).lower()
+        category = str(document.get("category", "")).lower()
+        summary = str(document.get("contentSummary", "")).lower()
+        extracted = str(document.get("extractedText", "")).lower()
+        corpus = " ".join([name, category, summary, extracted])
+        score = 0
+
+        for term in query_terms:
+            score += name.count(term) * 8
+            score += category.count(term) * 3
+            score += summary.count(term) * 4
+            score += extracted.count(term) * 2
+
+        if remembered:
+            score += 12
+        if session and document.get("id") == getattr(session, "last_document_id", None):
+            score += 10
+        if not query_terms:
+            score += 2
+
+        return {"score": score, "document": document, "corpus": corpus}
+
+    def _extract_relevant_snippet(self, document: Dict[str, Any], query_terms: List[str]) -> str:
+        text = str(document.get("extractedText") or document.get("contentSummary") or "")
+        compact = re.sub(r"\s+", " ", text).strip()
+        if not compact:
+            return ""
+        if not query_terms:
+            return compact[:360] + ("..." if len(compact) > 360 else "")
+
+        lowered = compact.lower()
+        for term in query_terms:
+            idx = lowered.find(term)
+            if idx >= 0:
+                start = max(0, idx - 120)
+                end = min(len(compact), idx + 240)
+                snippet = compact[start:end].strip()
+                if start > 0:
+                    snippet = "..." + snippet
+                if end < len(compact):
+                    snippet = snippet + "..."
+                return snippet
+
+        return compact[:360] + ("..." if len(compact) > 360 else "")
+
+    def _build_document_answer(self, document: Dict[str, Any], snippet: str, query_terms: List[str]) -> str:
+        doc_name = document.get("name", "your document")
+        if not snippet:
+            return f"I found {doc_name}, but I could not extract readable text from it yet. Try a PDF or text-based document for deeper analysis."
+        if query_terms:
+            return f"From {doc_name}, here is the most relevant part I found: {snippet}"
+        return f"Here is a summary from {doc_name}: {snippet}"
 
     def _infer_industry(self, text: str) -> str:
         text = text.lower()

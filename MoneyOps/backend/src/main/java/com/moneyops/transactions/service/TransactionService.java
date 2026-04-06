@@ -67,6 +67,12 @@ public class TransactionService {
         if (transaction.getCurrency() == null) {
             transaction.setCurrency("INR");
         }
+        if (transaction.getSource() == null || transaction.getSource().isBlank()) {
+            transaction.setSource("MANUAL");
+        }
+        if (transaction.getGstAmount() == null) {
+            transaction.setGstAmount(BigDecimal.ZERO);
+        }
 
         Transaction saved = transactionRepository.save(transaction);
         return transactionMapper.toDto(saved);
@@ -86,6 +92,9 @@ public class TransactionService {
         existing.setTransactionDate(dto.getTransactionDate());
         existing.setCategory(dto.getCategory());
         existing.setDescription(dto.getDescription());
+        existing.setVendor(dto.getVendor());
+        existing.setGstAmount(dto.getGstAmount() != null ? dto.getGstAmount() : BigDecimal.ZERO);
+        existing.setSource(dto.getSource() != null ? dto.getSource() : existing.getSource());
         existing.setPaymentMethod(dto.getPaymentMethod());
         existing.setReferenceNumber(dto.getReferenceNumber());
 

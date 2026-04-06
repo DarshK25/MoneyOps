@@ -16,6 +16,9 @@ class VoiceSession(BaseModel):
     onboarding_verified: bool = False
     dialog_pending: bool = False
     dialog_id: Optional[str] = None
+    last_document_id: Optional[str] = None
+    last_document_name: Optional[str] = None
+    last_document_query: Optional[str] = None
 
     def mark_active(self):
         self.last_active = time.time()

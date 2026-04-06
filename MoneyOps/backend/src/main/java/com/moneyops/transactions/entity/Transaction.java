@@ -47,6 +47,9 @@ public class Transaction {
     private LocalDate transactionDate;
     private String category;
     private String description;
+    private String vendor;
+    private BigDecimal gstAmount;
+    private String source;
     private String paymentMethod;
     private String referenceNumber;
 

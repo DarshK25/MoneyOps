@@ -57,6 +57,7 @@ public class MoneyOpsDocument {
     private boolean isConfidential = false;
     private String category;
     private String contentSummary;
+    private String extractedText;
     private java.util.List<String> detectedDeadlines;
 
     @PostConstruct
