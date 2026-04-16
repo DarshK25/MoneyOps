@@ -1,6 +1,7 @@
 """
 Configuration management for AI Gateway
 """
+
 from pathlib import Path
 from functools import lru_cache
 from typing import Optional
@@ -9,10 +10,12 @@ from typing import Optional
 # This matches the pattern used by voice-service and ensures LiveKit credentials
 # are always present regardless of the CWD when uvicorn is started.
 from dotenv import load_dotenv as _load_dotenv
+
 _ROOT_ENV = Path(__file__).resolve().parents[2] / ".env"
 _load_dotenv(dotenv_path=_ROOT_ENV, override=True)
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import model_validator
 
 
 class Settings(BaseSettings):
@@ -32,12 +35,16 @@ class Settings(BaseSettings):
 
     # LLM Providers
     GROQ_API_KEY: str
+    GROQ_API_KEY_FAST: Optional[str] = None
     ANTHROPIC_API_KEY: Optional[str] = None
+    TAVILY_API_KEY: Optional[str] = None
+    NEWS_API_KEY: Optional[str] = None
+    SERPAPI_KEY: Optional[str] = None
 
     # LLM Models
-    GROQ_MODEL: str = "llama-3.1-8b-instant"  
+    GROQ_MODEL: str = "llama-3.1-8b-instant"
     GROQ_MODEL_COMPLEX: str = "llama-3.1-8b-instant"  # For complex tasks
-    
+
     # LLM Settings
     LLM_TEMPERATURE: float = 0.3
     LLM_MAX_TOKENS: int = 2000
@@ -45,19 +52,31 @@ class Settings(BaseSettings):
     LLM_MAX_RETRIES: int = 3
 
     # Backend Services
-    BACKEND_BASE_URL: str = "http://127.0.0.1:8000"
+    BACKEND_BASE_URL: str = "http://127.0.0.1:8002"
     BACKEND_TIMEOUT: int = 30
     # Shared secret for service-to-service auth (AI-Gateway → Spring Boot backend)
     INTERNAL_SERVICE_TOKEN: str = "moneyops-internal-ai-gateway-service-secret-2024"
 
-    
+    @model_validator(mode="after")
+    def validate_service_token(self) -> "Settings":
+        import os
+
+        env = os.environ.get("ENVIRONMENT", os.environ.get("NODE_ENV", "development"))
+        default = "moneyops-internal-ai-gateway-service-secret-2024"
+        if self.INTERNAL_SERVICE_TOKEN == default and env == "production":
+            raise ValueError(
+                "INTERNAL_SERVICE_TOKEN must be set to a non-default value in production. "
+                "Generate a secure token and set it in your environment variables."
+            )
+        return self
+
     # Redis
     REDIS_HOST: str = "127.0.0.1"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
     REDIS_PASSWORD: Optional[str] = None
     REDIS_TLS: bool = False  # Set True for Upstash / cloud Redis
-    
+
     # Cache TTL (seconds)
     CACHE_TTL_SHORT: int = 300  # 5 minutes
     CACHE_TTL_MEDIUM: int = 1800  # 30 minutes
@@ -87,7 +106,7 @@ class Settings(BaseSettings):
     LIVEKIT_URL: str = "wss://your-project.livekit.cloud"
     LIVEKIT_API_KEY: Optional[str] = None
     LIVEKIT_API_SECRET: Optional[str] = None
-    
+
     model_config = SettingsConfigDict(
         env_file=str(_ROOT_ENV),
         env_file_encoding="utf-8",
@@ -115,4 +134,3 @@ def require_groq_key():
 
 # Convenience function
 settings = get_settings()
-
