@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { useAuth } from "@clerk/clerk-react";
+import { useAuth } from "@/contexts/AuthContext";
 import {
     Card,
     CardContent,

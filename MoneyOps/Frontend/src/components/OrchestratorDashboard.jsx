@@ -14,7 +14,8 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
-import { useAuth, useUser } from "@clerk/clerk-react";
+import { api } from "@/lib/api";
+import { useUser } from "@/contexts/AuthContext";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 import { listVoiceSessions } from "@/lib/agentWorkspaceStorage";
 
@@ -58,6 +59,7 @@ function formatDateTime(value) {
 
 function normalizeCollection(payload) {
   if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.content)) return payload.content;
   if (Array.isArray(payload?.data)) return payload.data;
   if (Array.isArray(payload?.items)) return payload.items;
   if (Array.isArray(payload?.activities)) return payload.activities;
@@ -212,7 +214,6 @@ function normalizeVoiceSession(session, index) {
 }
 
 export function OrchestratorDashboard({ businessId = 1 }) {
-  const { getToken } = useAuth();
   const { user } = useUser();
   const { userId: internalUserId, orgId: internalOrgId } = useOnboardingStatus();
   const resolvedBusinessId = businessId || 1;
@@ -237,31 +238,9 @@ export function OrchestratorDashboard({ businessId = 1 }) {
     }
   }, [internalOrgId, user?.id]);
 
-  async function fetchJson(url, headers) {
-    const response = await fetch(url, { headers });
-    if (!response.ok) throw new Error(`Failed to fetch ${url}`);
-    return response.json();
-  }
-
-  async function fetchOptionalJson(url, headers, emptyValue) {
-    try {
-      const response = await fetch(url, { headers });
-      if (!response.ok) return emptyValue;
-      return await response.json();
-    } catch {
-      return emptyValue;
-    }
-  }
-
   async function fetchOrchestratorData() {
     try {
       setLoading(true);
-      const token = await getToken();
-      const headers = {
-        Authorization: `Bearer ${token}`,
-        "X-User-Id": internalUserId || user?.id,
-        "X-Org-Id": internalOrgId,
-      };
 
       const [
         orgRes,
@@ -273,14 +252,14 @@ export function OrchestratorDashboard({ businessId = 1 }) {
         conversationsRes,
         memoryRes,
       ] = await Promise.all([
-        fetchJson("/api/org/my", headers),
-        fetchJson("/api/clients", headers),
-        fetchJson("/api/invoices", headers),
-        fetchJson("/api/transactions", headers),
-        fetchOptionalJson(`/api/finance-intelligence/metrics?businessId=${resolvedBusinessId}`, headers, null),
-        fetchOptionalJson(`/api/orchestrator/activities?businessId=${resolvedBusinessId}`, headers, { activities: [] }),
-        fetchOptionalJson(`/api/orchestrator/conversations?businessId=${resolvedBusinessId}`, headers, { conversations: [] }),
-        fetchOptionalJson(`/api/memory/${internalOrgId}?limit=60`, headers, []),
+        api.get("/api/org/my"),
+        api.get("/api/clients"),
+        api.get("/api/invoices"),
+        api.get("/api/transactions"),
+        api.get("/api/finance-intelligence/metrics", { businessId: resolvedBusinessId }).catch(() => null),
+        api.get("/api/orchestrator/activities", { businessId: resolvedBusinessId }).catch(() => ({ activities: [] })),
+        api.get("/api/orchestrator/conversations", { businessId: resolvedBusinessId }).catch(() => ({ conversations: [] })),
+        api.get(`/api/memory/${internalOrgId}`, { limit: 60 }).catch(() => []),
       ]);
 
       setOrgProfile(orgRes?.data || orgRes || null);

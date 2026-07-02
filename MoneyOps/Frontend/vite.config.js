@@ -5,31 +5,47 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// https://vitejs.dev/config/
 export default defineConfig({
-    envDir: "../",
+    envDir: ".",
     plugins: [react()],
     resolve: {
         alias: {
             "@": path.resolve(__dirname, "./src"),
         },
     },
+    build: {
+        rollupOptions: {
+            output: {
+                manualChunks: {
+                    vendor: ["react", "react-dom", "react-router-dom"],
+                    ui: [
+                        "@radix-ui/react-dialog",
+                        "@radix-ui/react-dropdown-menu",
+                        "@radix-ui/react-select",
+                        "@radix-ui/react-tabs",
+                        "@radix-ui/react-tooltip",
+                        "@radix-ui/react-avatar",
+                        "@radix-ui/react-checkbox",
+                        "@radix-ui/react-label",
+                        "@radix-ui/react-scroll-area",
+                        "@radix-ui/react-separator",
+                        "@radix-ui/react-switch",
+                        "@radix-ui/react-slot",
+                    ],
+                    charts: ["recharts", "lucide-react"],
+                    utils: ["clsx", "tailwind-merge", "date-fns", "class-variance-authority"],
+                },
+            },
+        },
+        chunkSizeWarningLimit: 1000,
+    },
     server: {
         port: 3000,
-        open: true,
         proxy: {
-            // Compatibility route for older compliance UI calls.
-            "/api/v1/compliance/status": {
-                target: "http://127.0.0.1:8000",
-                changeOrigin: true,
-                rewrite: (path) => path.replace("/api/v1/compliance/status", "/api/compliance/status"),
-            },
-            // Proxy /api/v1 to AI Gateway (port 8001)
             "/api/v1": {
-                target: "http://127.0.0.1:8001",
+                target: "http://127.0.0.1:8005",
                 changeOrigin: true,
             },
-            // Proxy general /api to Spring Boot Backend (port 8000)
             "/api": {
                 target: "http://127.0.0.1:8000",
                 changeOrigin: true,

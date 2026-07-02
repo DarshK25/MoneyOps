@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, Trash, ArrowLeft, Loader2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
-import { useAuth, useUser } from "@clerk/clerk-react";
+import { api } from "@/lib/api";
+import { useUser } from "@/contexts/AuthContext";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 import { getRememberedTeamSecurityCode, rememberTeamSecurityCode } from "@/lib/teamSecurityCode";
 
@@ -45,7 +46,6 @@ function DarkInput({ ...props }) {
 }
 
 export default function NewInvoicePage() {
-    const { getToken } = useAuth();
     const { user } = useUser();
     const { userId: internalUserId, orgId: internalOrgId } = useOnboardingStatus();
     const navigate = useNavigate();
@@ -178,16 +178,8 @@ export default function NewInvoicePage() {
 
     const fetchClients = async () => {
         try {
-            const token = await getToken();
-            const res = await fetch("/api/clients", {
-                headers: {
-                    "Authorization": `Bearer ${token}`,
-                    "X-User-Id": internalUserId,
-                    "X-Org-Id": internalOrgId
-                }
-            });
-            const data = await res.json();
-            setClients(Array.isArray(data) ? data : []);
+            const data = await api.get("/api/clients");
+            setClients(Array.isArray(data) ? data : data?.content || []);
         } catch { setClients([]); }
         finally { setLoadingClients(false); }
     };
@@ -197,19 +189,7 @@ export default function NewInvoicePage() {
         if (!newClientData.teamActionCode?.trim()) { toast.error("Team security code is required"); return; }
         setSavingClient(true);
         try {
-            const token = await getToken();
-            const res = await fetch("/api/clients", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${token}`,
-                    "X-User-Id": internalUserId,
-                    "X-Org-Id": internalOrgId
-                },
-                body: JSON.stringify(newClientData),
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.message || "Failed to create client");
+            const data = await api.post("/api/clients", newClientData);
             toast.success("Client created successfully");
             rememberTeamSecurityCode(internalOrgId, newClientData.teamActionCode);
             setClientDialogOpen(false);
@@ -262,33 +242,21 @@ export default function NewInvoicePage() {
         if (!formData.clientId) { toast.error("Please select or create a client first"); return; }
         setLoading(true);
         try {
-            const token = await getToken();
             const payload = {
                 clientId: formData.clientId,
                 issueDate: formData.date,
                 dueDate: formData.dueDate,
                 items: buildLineItems()
             };
-            const res = await fetch("/api/invoices/preview", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${token}`,
-                    "X-User-Id": internalUserId,
-                    "X-Org-Id": internalOrgId
-                },
-                body: JSON.stringify(payload),
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.message || "Failed to preview");
-            // Since backend is returning the DTO back for now, we simulate the breakdown
-            const subtotal = parseFloat(liveCalculation.subtotal);
-            const gst = parseFloat(liveCalculation.gstTotal);
+            const data = await api.post("/api/invoices/preview", payload);
+            const subtotal = Number(data.subtotal ?? liveCalculation.subtotal ?? 0);
+            const gst = Number(data.gstTotal ?? liveCalculation.gstTotal ?? 0);
+            const total = Number(data.totalAmount ?? subtotal + gst);
             setPreviewData({
                 subtotal,
                 cgst: gst / 2,
                 sgst: gst / 2,
-                total: subtotal + gst,
+                total,
                 riskFlags: []
             });
         } catch (error) { toast.error(error?.message || "Preview failed"); }
@@ -300,7 +268,6 @@ export default function NewInvoicePage() {
         if (!teamActionCode.trim()) { toast.error("Team security code is required"); return; }
         setLoading(true);
         try {
-            const token = await getToken();
             const payload = {
                 clientId: formData.clientId,
                 issueDate: formData.date,
@@ -311,18 +278,7 @@ export default function NewInvoicePage() {
                 teamActionCode,
                 source: "MANUAL"
             };
-            const res = await fetch("/api/invoices", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${token}`,
-                    "X-User-Id": internalUserId,
-                    "X-Org-Id": internalOrgId
-                },
-                body: JSON.stringify(payload),
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.message || "Failed to create invoice");
+            await api.post("/api/invoices", payload);
             toast.success("Invoice created successfully");
             rememberTeamSecurityCode(internalOrgId, teamActionCode);
             navigate("/invoices");

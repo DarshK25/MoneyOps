@@ -29,7 +29,8 @@ import {
     Hash
 } from "lucide-react";
 import { toast } from "sonner";
-import { useAuth, useUser } from "@clerk/clerk-react";
+import { api } from "@/lib/api";
+import { useUser } from "@/contexts/AuthContext";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 import {
     DropdownMenu,
@@ -71,7 +72,6 @@ const CLIENT_PREVIEW_EMPTY_STATE = {
 };
 
 export default function ClientsPage() {
-    const { getToken } = useAuth();
     const { user } = useUser();
     const { userId: internalUserId, orgId: internalOrgId } = useOnboardingStatus();
     const [clients, setClients] = useState([]);
@@ -199,17 +199,8 @@ export default function ClientsPage() {
     const fetchClients = async () => {
         try {
             setLoading(true);
-            const token = await getToken();
-            const res = await fetch("/api/clients", {
-                headers: {
-                    "Authorization": `Bearer ${token}`,
-                    "X-User-Id": internalUserId,
-                    "X-Org-Id": internalOrgId
-                }
-            });
-            if (!res.ok) throw new Error("Failed to fetch");
-            const data = await res.json();
-            setClients(Array.isArray(data) ? data : []);
+            const data = await api.get("/api/clients");
+            setClients(Array.isArray(data) ? data : data?.content || []);
         } catch {
             toast.error("Failed to load clients");
             setClients([]);
@@ -229,19 +220,7 @@ export default function ClientsPage() {
         }
         setSaving(true);
         try {
-            const token = await getToken();
-            const res = await fetch("/api/clients", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${token}`,
-                    "X-User-Id": internalUserId,
-                    "X-Org-Id": internalOrgId
-                },
-                body: JSON.stringify(formData),
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.message || "Failed to create client");
+            const data = await api.post("/api/clients", formData);
             toast.success("Client created successfully");
             rememberTeamSecurityCode(internalOrgId, formData.teamActionCode);
             setDialogOpen(false);
@@ -265,16 +244,7 @@ export default function ClientsPage() {
 
         setSaving(true);
         try {
-            const token = await getToken();
-            const res = await fetch(`/api/clients/${id}`, {
-                method: "DELETE",
-                headers: {
-                    "Authorization": `Bearer ${token}`,
-                    "X-User-Id": internalUserId,
-                    "X-Org-Id": internalOrgId
-                }
-            });
-            if (!res.ok) throw new Error("Failed to delete client");
+            await api.delete(`/api/clients/${id}`);
             toast.success("Client deleted successfully");
             setSelectedClient(null);
             fetchClients();

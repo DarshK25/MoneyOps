@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { useAuth, useUser } from "@clerk/clerk-react";
+import { api } from "@/lib/api";
+import { useUser } from "@/contexts/AuthContext";
 import {
     FileText,
     Lock,
@@ -20,7 +21,6 @@ import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 const DEFAULT_BUSINESS_ID = 1;
 
 export default function DocumentsPage() {
-    const { getToken } = useAuth();
     const { user } = useUser();
     const { userId: internalUserId, orgId: internalOrgId } = useOnboardingStatus();
     const [loading, setLoading] = useState(true);
@@ -36,25 +36,10 @@ export default function DocumentsPage() {
 
     async function fetchDocuments(bId) {
         try {
-            const token = await getToken();
-            const [sharedRes, privateRes] = await Promise.all([
-                fetch(`/api/documents?businessId=${bId}&showPrivate=false`, {
-                    headers: {
-                        "Authorization": `Bearer ${token}`,
-                        "X-User-Id": internalUserId,
-                        "X-Org-Id": bId
-                    }
-                }).catch(() => null),
-                fetch(`/api/documents?businessId=${bId}&showPrivate=true`, {
-                    headers: {
-                        "Authorization": `Bearer ${token}`,
-                        "X-User-Id": internalUserId,
-                        "X-Org-Id": bId
-                    }
-                }).catch(() => null),
+            const [sharedData, privateData] = await Promise.all([
+                api.get("/api/documents", { businessId: bId, showPrivate: false }).catch(() => ({ documents: [] })),
+                api.get("/api/documents", { businessId: bId, showPrivate: true }).catch(() => ({ documents: [] })),
             ]);
-            const sharedData = sharedRes?.ok ? await sharedRes.json() : { documents: [] };
-            const privateData = privateRes?.ok ? await privateRes.json() : { documents: [] };
             setSharedDocuments(sharedData.documents || []);
             setPrivateDocuments(privateData.documents || []);
         } catch (e) {
@@ -68,15 +53,7 @@ export default function DocumentsPage() {
     async function handleDelete(docId) {
         if (!window.confirm("Are you sure you want to delete this document?")) return;
         try {
-            const token = await getToken();
-            const res = await fetch(`/api/documents/${docId}`, {
-                method: "DELETE",
-                headers: {
-                    "Authorization": `Bearer ${token}`,
-                    "X-User-Id": internalUserId
-                }
-            });
-            if (!res.ok) throw new Error("Delete failed");
+            await api.delete(`/api/documents/${docId}`);
             toast.success("Document deleted");
             await fetchDocuments(internalOrgId);
         } catch {

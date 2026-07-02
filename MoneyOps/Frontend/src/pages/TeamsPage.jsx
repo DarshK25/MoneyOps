@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Users, Plus, Mail, UserCheck, Crown, MoreHorizontal, Search, Copy, Check, Loader2, Send, CheckCircle2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
-import { useUser } from "@clerk/clerk-react";
+import { api } from "@/lib/api";
+import { useUser } from "@/contexts/AuthContext";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 import { getRememberedTeamSecurityCode, rememberTeamSecurityCode } from "@/lib/teamSecurityCode";
 
@@ -43,32 +44,19 @@ export default function TeamsPage() {
         try {
             if (!internalOrgId) return;
 
-            // Fetch Members
-            const memRes = await fetch("/api/users?orgId=" + internalOrgId, {
-                headers: {
-                    "X-Org-Id": internalOrgId,
-                    "X-User-Id": internalUserId
-                }
-            });
-            const memData = await memRes.json();
-            setMembers(memData);
+            const memData = await api.get("/api/users", { orgId: internalOrgId });
+            const membersList = Array.isArray(memData) ? memData : (memData.content || memData.data || []);
+            setMembers(membersList);
 
-            // Find current user and set their role
-            const currentUser = memData.find(m => m.id === internalUserId);
+            const currentUser = membersList.find(m => m.id === internalUserId);
             if (currentUser) {
                 setCurrentUserRole(currentUser.role);
             }
 
-            // Fetch Org Name
-            const orgRes = await fetch(`/api/org/${internalOrgId}`, {
-                headers: { "X-User-Id": internalUserId }
-            });
-            if (orgRes.ok) {
-                const result = await orgRes.json();
-                const orgData = result.data;
-                setOrgName(orgData.legalName || "Organization");
-                setTeamCodeConfigured(Boolean(orgData.teamSecurityCodeConfigured));
-            }
+            const result = await api.get(`/api/org/${internalOrgId}`);
+            const orgData = result.data;
+            setOrgName(orgData.legalName || "Organization");
+            setTeamCodeConfigured(Boolean(orgData.teamSecurityCodeConfigured));
         } catch (error) {
             console.error("Failed to fetch data:", error);
         } finally {
@@ -106,24 +94,11 @@ export default function TeamsPage() {
         });
 
         try {
-            const response = await fetch("/api/invites", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-Org-Id": internalOrgId,
-                    "X-User-Id": internalUserId
-                },
-                body: JSON.stringify({
-                    email: inviteEmail,
-                    role: "STAFF",
-                    teamActionCode
-                })
+            const data = await api.post("/api/invites", {
+                email: inviteEmail,
+                role: "STAFF",
+                teamActionCode
             });
-
-            const data = await response.json().catch(() => ({}));
-            if (!response.ok) {
-                throw new Error(data?.message || "Failed to send invite");
-            }
 
             setGeneratedCode(data.token);
             setInviteFeedback({
@@ -155,19 +130,10 @@ export default function TeamsPage() {
         }
         setSavingTeamCode(true);
         try {
-            const response = await fetch(`/api/org/${internalOrgId}/team-security-code`, {
-                method: "PUT",
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-User-Id": internalUserId
-                },
-                body: JSON.stringify({
-                    teamActionCode: teamCodeToSet,
-                    oldTeamActionCode: oldTeamCode
-                })
+            const data = await api.put(`/api/org/${internalOrgId}/team-security-code`, {
+                teamActionCode: teamCodeToSet,
+                oldTeamActionCode: oldTeamCode
             });
-            const data = await response.json().catch(() => ({}));
-            if (!response.ok) throw new Error(data?.message || "Failed to save team security code");
             toast.success("Team security code updated");
             setTeamActionCode(teamCodeToSet);
             rememberTeamSecurityCode(internalOrgId, teamCodeToSet);

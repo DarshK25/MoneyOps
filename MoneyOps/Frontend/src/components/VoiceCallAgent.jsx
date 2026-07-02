@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useUser } from "@clerk/clerk-react";
+import { useUser } from "@/contexts/AuthContext";
+import { authClient } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { X, Phone, PhoneOff } from "lucide-react";
 import { toast } from "sonner";
@@ -36,16 +37,11 @@ export function VoiceCallAgent({ agentType = "orchestrator" }) {
     const handleClientPick = async (client) => {
         if (!activeClientPicker?.session_id) return;
         try {
-            const res = await fetch("/api/v1/voice/dialog-response", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    session_id: activeClientPicker.session_id,
-                    dialog_id: "invoice_preview_form",
-                    fields: { client_name: client.name, client_id: client.id },
-                }),
+            const data = await api.post("/api/v1/voice/dialog-response", {
+                session_id: activeClientPicker.session_id,
+                dialog_id: "invoice_preview_form",
+                fields: { client_name: client.name, client_id: client.id },
             });
-            const data = await res.json();
             if (data?.ui_event) {
                 window.dispatchEvent(new CustomEvent("voice:open_client_picker", { detail: null }));
                 window.dispatchEvent(new CustomEvent("voice:manual_ui_event", { detail: data.ui_event }));
@@ -69,7 +65,7 @@ export function VoiceCallAgent({ agentType = "orchestrator" }) {
         setIsProcessing(true);
         try {
             const userId = internalUserId;
-            const sessionToken = await window.Clerk?.session?.getToken();
+            const sessionToken = await authClient.getToken();
             const orgId = internalOrgId;
             const metadata = JSON.stringify({
                 user_id: userId,
@@ -77,26 +73,7 @@ export function VoiceCallAgent({ agentType = "orchestrator" }) {
                 user_name: user.fullName || user.username || "User",
                 auth_token: sessionToken || "",
             });
-            const params = new URLSearchParams({ user_id: userId, org_id: orgId, metadata });
-            const res = await fetch(`/api/v1/voice/token?${params.toString()}`, {
-                headers: {
-                    "Authorization": `Bearer ${sessionToken}`,
-                    "X-User-Id": userId,
-                    "X-Org-Id": orgId
-                }
-            });
-            if (!res.ok) {
-                const errText = await res.text();
-                throw new Error(errText || `Failed to fetch token (${res.status})`);
-            }
-            const contentType = res.headers.get("content-type");
-            if (!contentType?.includes("application/json")) {
-                throw new Error(
-                    "Server returned non-JSON. Is AI Gateway running on port 8001? " +
-                    "Restart the dev server after adding the proxy."
-                );
-            }
-            const data = await res.json();
+            const data = await api.get("/api/v1/voice/token", { user_id: userId, org_id: orgId, metadata });
             if (!data.token || !data.url) throw new Error("Invalid token response: missing token or url");
             sessionMetaRef.current = {
                 id: `voice-${Date.now()}`,

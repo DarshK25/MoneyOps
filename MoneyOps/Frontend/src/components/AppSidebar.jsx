@@ -13,6 +13,7 @@ import {
   GitMerge,
   Receipt,
   MessageSquare,
+  Repeat,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -23,6 +24,7 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
+import { api } from "@/lib/api";
 import { useState, useEffect } from "react";
 
 function SidebarNav({ items }) {
@@ -78,14 +80,10 @@ export function AppSidebar(props) {
     const fetchOrgName = async () => {
       if (!userId) return;
       try {
-        const response = await fetch(`/api/org/my`, {
-          headers: { "X-User-Id": userId }
-        });
-        if (response.ok) {
-          const result = await response.json();
-          const data = result.data;
-          setOrgName(data.legalName || "MoneyOps");
-        }
+        try {
+          const result = await api.get("/api/org/my");
+          setOrgName(result.data?.legalName || "MoneyOps");
+        } catch {}; // ignore errors
       } catch (err) {
         console.error("Failed to fetch org name", err);
       }
@@ -103,6 +101,11 @@ export function AppSidebar(props) {
       href: "/invoices",
       title: "Invoices",
       icon: <FileText className="h-4 w-4" />,
+    },
+    {
+      href: "/recurring-invoices",
+      title: "Recurring",
+      icon: <Repeat className="h-4 w-4" />,
     },
     {
       href: "/clients",

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { RefreshCw, TrendingUp, TrendingDown, AlertTriangle, Users, DollarSign, Activity, Loader2 } from "lucide-react";
-import { useAuth, useUser } from "@clerk/clerk-react";
+import { api } from "@/lib/api";
+import { useUser } from "@/contexts/AuthContext";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 
 const PRIORITY_BADGE = {
@@ -23,7 +24,6 @@ function StatCard({ label, value, sub, icon: Icon, iconColor }) {
 }
 
 export function SalesCRMDashboard({ businessId, onRefresh }) {
-    const { getToken } = useAuth();
     const { user } = useUser();
     const { orgId } = useOnboardingStatus();
     const [loading, setLoading] = useState(true);
@@ -40,30 +40,15 @@ export function SalesCRMDashboard({ businessId, onRefresh }) {
     async function fetchCRMData() {
         setLoading(true);
         try {
-            const token = await getToken();
-            const headers = {
-                "Authorization": `Bearer ${token}`,
-                "X-User-Id": user?.id,
-                "X-Org-Id": orgId
-            };
-
-            const [clientsRes, invoicesRes, metricsRes] = await Promise.all([
-                fetch(`/api/clients`, { headers }),
-                fetch(`/api/invoices`, { headers }),
-                fetch(`/api/finance-intelligence/metrics?businessId=${businessId}`, { headers }),
+            const [cr, ir, metricsData] = await Promise.all([
+                api.get("/api/clients").catch(() => ({ content: [] })),
+                api.get("/api/invoices").catch(() => ({ content: [] })),
+                api.get("/api/finance-intelligence/metrics", { businessId }).catch(() => null),
             ]);
 
-            if (clientsRes.ok) {
-                const cr = await clientsRes.json();
-                setClients(cr.data || cr || []);
-            }
-            if (invoicesRes.ok) {
-                const ir = await invoicesRes.json();
-                setInvoices(ir.data || ir || []);
-            }
-            if (metricsRes.ok) {
-                setMetricsData(await metricsRes.json());
-            }
+            setClients(cr.content || cr.data || cr || []);
+            setInvoices(ir.content || ir.data || ir || []);
+            setMetricsData(metricsData);
         } catch (error) {
             console.error("Failed to fetch CRM data:", error);
         } finally {

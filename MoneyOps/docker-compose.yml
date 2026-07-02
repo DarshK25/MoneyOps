@@ -1,23 +1,4 @@
-# =============================================================
-#  MoneyOps — Full Project Docker Compose
-#
-#  Starts ALL services:
-#    - redis        (cache)        → localhost:6379
-#    - backend      (Spring Boot)  → localhost:8000
-#    - ai-gateway   (FastAPI)      → localhost:8001
-#    - voice-service(LiveKit)      → localhost:8003
-#    - frontend     (React/nginx)  → localhost:3000
-#
-#  Usage:
-#    Start all:    docker-compose up -d
-#    Stop all:     docker-compose down
-#    Logs:         docker-compose logs -f
-#    Rebuild one:  docker-compose up -d --build backend
-# =============================================================
-
 services:
-
-  # ── Redis (cache for AI Gateway) ────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: moneyops-redis
@@ -33,7 +14,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── Backend (Spring Boot) ────────────────────────────────────
   backend:
     build:
       context: ./backend
@@ -45,7 +25,6 @@ services:
     env_file:
       - .env
     environment:
-      # Override Redis host to use Docker service name
       REDIS_HOST: redis
     depends_on:
       redis:
@@ -57,7 +36,31 @@ services:
       retries: 5
       start_period: 60s
 
-  # ── AI Gateway (FastAPI) ─────────────────────────────────────
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: moneyops-api-gateway
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    env_file:
+      - .env
+    environment:
+      REDIS_HOST: redis
+      BACKEND_CORE_URL: http://backend:8000
+      AI_GATEWAY_URL: http://ai-gateway:8005
+      VOICE_SERVICE_URL: http://voice-service:8003
+    depends_on:
+      - backend
+      - ai-gateway
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8002/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
   ai-gateway:
     build:
       context: ./ai-gateway
@@ -65,13 +68,11 @@ services:
     container_name: moneyops-ai-gateway
     restart: unless-stopped
     ports:
-      - "8001:8001"
+      - "8005:8005"
     env_file:
       - .env
     environment:
-      # Override Redis host to use Docker service name
       REDIS_HOST: redis
-      # Override backend URL to use Docker service name
       BACKEND_BASE_URL: http://backend:8000
     depends_on:
       redis:
@@ -79,13 +80,12 @@ services:
       backend:
         condition: service_started
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8001/api/v1/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:8005/api/v1/health"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 30s
 
-  # ── Voice Service (LiveKit Agent) ────────────────────────────
   voice-service:
     build:
       context: ./voice-service
@@ -97,13 +97,11 @@ services:
     env_file:
       - .env
     environment:
-      # Override AI Gateway URL to use Docker service name
-      AI_GATEWAY_URL: http://ai-gateway:8001
+      AI_GATEWAY_URL: http://ai-gateway:8005
     depends_on:
       ai-gateway:
         condition: service_started
 
-  # ── Frontend (React → nginx) ─────────────────────────────────
   frontend:
     build:
       context: ./Frontend
@@ -115,6 +113,38 @@ services:
     depends_on:
       - backend
       - ai-gateway
+
+  email-worker:
+    build:
+      context: ./scripts/workers
+      dockerfile: Dockerfile.email
+    container_name: moneyops-email-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      REDIS_HOST: redis
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./scripts/workers:/app
+
+  notification-worker:
+    build:
+      context: ./scripts/workers
+      dockerfile: Dockerfile.notification
+    container_name: moneyops-notification-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      REDIS_HOST: redis
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./scripts/workers:/app
 
 volumes:
   redis_data:

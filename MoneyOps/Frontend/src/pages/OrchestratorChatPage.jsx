@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth, useUser } from "@clerk/clerk-react";
+import { api } from "@/lib/api";
+import { useUser } from "@/contexts/AuthContext";
 import {
   ArrowLeft,
   Bot,
@@ -69,7 +70,6 @@ function extractActions(payload) {
 
 export default function OrchestratorChatPage() {
   const navigate = useNavigate();
-  const { getToken } = useAuth();
   const { user } = useUser();
   const { userId: internalUserId, orgId: internalOrgId, loading: onboardingLoading } = useOnboardingStatus();
 
@@ -205,28 +205,19 @@ export default function OrchestratorChatPage() {
     setSending(true);
 
     try {
-      const token = await getToken();
-      const response = await fetch("/api/v1/voice/process", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+      const payload = await api.post("/api/v1/voice/process", {
+        text,
+        user_id: internalUserId,
+        org_id: internalOrgId,
+        session_id: session.id,
+        context: {
+          channel: "chat",
+          agent_type: "orchestrator",
+          preferences,
         },
-        body: JSON.stringify({
-          text,
-          user_id: internalUserId,
-          org_id: internalOrgId,
-          session_id: session.id,
-          context: {
-            channel: "chat",
-            agent_type: "orchestrator",
-            preferences,
-          },
-          conversation_history: preferences.rememberContext ? preparedSession?.messages || [userMessage] : [userMessage],
-        }),
+        conversation_history: preferences.rememberContext ? preparedSession?.messages || [userMessage] : [userMessage],
       });
 
-      const payload = await response.json();
       const actions = extractActions(payload);
       const agentMessage = {
         id: `msg-agent-${Date.now()}`,

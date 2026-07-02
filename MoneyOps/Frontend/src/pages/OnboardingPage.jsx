@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Building2, Users, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Progress } from "@/components/ui/progress";
-import { useUser } from "@clerk/clerk-react";
+import { api } from "@/lib/api";
+import { useUser } from "@/contexts/AuthContext";
 
 import { BusinessInfoStep } from "@/components/onboarding/BusinessInfoStep";
 import { RegulatoryInfoStep } from "@/components/onboarding/RegulatoryInfoStep";
@@ -56,7 +57,7 @@ export default function OnboardingPage() {
         try {
             const payload = {
                 ...finalData,
-                clerkId: user?.id,
+                userId: user?.id,
                 email: user?.primaryEmailAddress?.emailAddress,
                 name: user?.fullName || user?.firstName,
             };
@@ -64,18 +65,7 @@ export default function OnboardingPage() {
             const endpoint = mode === "new-business"
                 ? "/api/onboarding/create-business"
                 : "/api/onboarding/join-business";
-            const response = await fetch(endpoint, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-User-Id": user?.id
-                },
-                body: JSON.stringify(payload),
-            });
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error || "Failed to complete onboarding");
-            }
+            await api.post(endpoint, payload);
             toast.success("Onboarding completed! Redirecting to dashboard…");
             setTimeout(() => { window.location.href = "/analytics"; }, 1500);
         } catch (error) {

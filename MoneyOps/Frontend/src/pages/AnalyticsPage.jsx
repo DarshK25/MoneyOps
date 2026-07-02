@@ -11,7 +11,8 @@ import {
 import { toast } from "sonner";
 import { InteractiveTrendCard } from "@/components/ui/trend-card";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
-import { useAuth, useUser } from "@clerk/clerk-react";
+import { api } from "@/lib/api";
+import { useUser } from "@/contexts/AuthContext";
 
 const FALLBACK_DATA = {
     kpis: [
@@ -57,7 +58,6 @@ function buildLastThreeMonths() {
 
 export default function AnalyticsPage() {
     const { userId, orgId } = useOnboardingStatus();
-    const { getToken } = useAuth();
     const { user } = useUser();
     const [data, setData] = useState(null);
     const [orgName, setOrgName] = useState("Your Business");
@@ -73,13 +73,8 @@ export default function AnalyticsPage() {
     const fetchOrgName = async () => {
         if (!userId) return;
         try {
-            const res = await fetch(`/api/org/my`, {
-                headers: { "X-User-Id": userId, "X-Org-Id": orgId }
-            });
-            if (res.ok) {
-                const result = await res.json();
-                setOrgName(result.data?.legalName || "Your Business");
-            }
+            const result = await api.get("/api/org/my");
+            setOrgName(result.data?.legalName || "Your Business");
         } catch (err) {
             console.error("Failed to fetch org name", err);
         }
@@ -88,41 +83,18 @@ export default function AnalyticsPage() {
     const fetchAnalytics = async () => {
         try {
             setLoading(true);
-            const token = await getToken();
-            const headers = {
-                Authorization: `Bearer ${token}`,
-                "X-User-Id": user?.id,
-                "X-Org-Id": orgId,
-            };
 
-            const [metricsRes, budgetRes, clientsRes, invoicesRes, transactionsRes] = await Promise.all([
-                fetch(`/api/finance-intelligence/metrics?businessId=1`, { headers }),
-                fetch(`/api/finance-intelligence/budget?businessId=1`, { headers }),
-                fetch(`/api/clients`, { headers }),
-                fetch(`/api/invoices`, { headers }),
-                fetch(`/api/transactions`, { headers }),
+            const [metrics, budget, clientsData, invoicesData, transactionsData] = await Promise.all([
+                api.get("/api/finance-intelligence/metrics", { businessId: 1 }).catch(() => null),
+                api.get("/api/finance-intelligence/budget", { businessId: 1 }).catch(() => null),
+                api.get("/api/clients").catch(() => ({ content: [] })),
+                api.get("/api/invoices").catch(() => ({ content: [] })),
+                api.get("/api/transactions").catch(() => ({ content: [] })),
             ]);
 
-            let metrics = null;
-            let budget = null;
-            let clients = [];
-            let invoices = [];
-            let transactions = [];
-
-            if (metricsRes.ok) metrics = await metricsRes.json();
-            if (budgetRes.ok) budget = await budgetRes.json();
-            if (clientsRes.ok) {
-                const result = await clientsRes.json();
-                clients = result.data || result || [];
-            }
-            if (invoicesRes.ok) {
-                const result = await invoicesRes.json();
-                invoices = result.data || result || [];
-            }
-            if (transactionsRes.ok) {
-                const result = await transactionsRes.json();
-                transactions = result.data || result || [];
-            }
+            const clients = clientsData.content || clientsData.data || clientsData || [];
+            const invoices = invoicesData.content || invoicesData.data || invoicesData || [];
+            const transactions = transactionsData.content || transactionsData.data || transactionsData || [];
 
             const revenue = Number(metrics?.revenue || 0);
             const expenses = Number(metrics?.expenses || 0);

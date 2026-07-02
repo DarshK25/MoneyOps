@@ -22,8 +22,11 @@ import FinanceIntelligencePage from "@/pages/FinanceIntelligencePage";
 import CompliancePage from "@/pages/CompliancePage";
 import OrchestratorPage from "@/pages/OrchestratorPage";
 import OrchestratorChatPage from "@/pages/OrchestratorChatPage";
+import RecurringInvoicesPage from "@/pages/RecurringInvoicesPage";
+import BulkUploadPage from "@/pages/BulkUploadPage";
 import DashboardLayout from "@/components/DashboardLayout";
 import InviteAcceptPage from "@/pages/InviteAcceptPage";
+import OAuth2RedirectPage from "@/pages/OAuth2RedirectPage";
 
 export default function App() {
     return (
@@ -35,6 +38,7 @@ export default function App() {
                 <Route path="/" element={<LandingPage />} />
                 <Route path="/sign-in/*" element={<SignInPage />} />
                 <Route path="/sign-up/*" element={<SignUpPage />} />
+                <Route path="/oauth2/redirect" element={<OAuth2RedirectPage />} />
 
                 {/* Onboarding — protected (must be signed in) but no sidebar */}
                 <Route
@@ -79,6 +83,8 @@ export default function App() {
                     <Route path="/invoices" element={<InvoicesPage />} />
                     <Route path="/invoices/new" element={<NewInvoicePage />} />
                     <Route path="/invoices/:id" element={<InvoiceDetailPage />} />
+                    <Route path="/recurring-invoices" element={<RecurringInvoicesPage />} />
+                    <Route path="/bulk-upload" element={<BulkUploadPage />} />
                     <Route path="/settings" element={<SettingsPage />} />
                     <Route path="/analytics" element={<AnalyticsPage />} />
                     <Route path="/transactions" element={<TransactionsPage />} />

@@ -16,7 +16,8 @@ import {
 } from "@/components/ui/select";
 import { ArrowLeft, Send, FileText, Loader2, DollarSign, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { useAuth, useUser } from "@clerk/clerk-react";
+import { api } from "@/lib/api";
+import { useUser } from "@/contexts/AuthContext";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 
 const STATUS_BADGE = {
@@ -109,7 +110,6 @@ function DarkInput({ ...props }) {
 }
 
 export default function InvoiceDetailPage() {
-    const { getToken } = useAuth();
     const { user } = useUser();
     const { userId: internalUserId, orgId: internalOrgId } = useOnboardingStatus();
     const navigate = useNavigate();
@@ -142,16 +142,8 @@ export default function InvoiceDetailPage() {
 
     const fetchInvoice = async (invoiceId) => {
         try {
-            const token = await getToken();
-            const res = await fetch(`/api/invoices/${invoiceId}`, {
-                headers: {
-                    "Authorization": `Bearer ${token}`,
-                    "X-User-Id": internalUserId,
-                    "X-Org-Id": internalOrgId
-                }
-            });
-            if (!res.ok) throw new Error("Failed to fetch invoice");
-            setInvoice(await res.json());
+            const data = await api.get(`/api/invoices/${invoiceId}`);
+            setInvoice(data);
         } catch (error) {
             console.error(error);
             toast.error("Could not load invoice");
@@ -160,29 +152,15 @@ export default function InvoiceDetailPage() {
 
     const fetchLogs = async (invoiceId) => {
         try {
-            const token = await getToken();
-            const res = await fetch(`/api/invoices/${invoiceId}/logs`, {
-                headers: {
-                    "Authorization": `Bearer ${token}`,
-                    "X-User-Id": internalUserId,
-                    "X-Org-Id": internalOrgId
-                }
-            });
-            if (res.ok) setLogs(await res.json());
+            const d = await api.get(`/api/invoices/${invoiceId}/logs`);
+            setLogs(Array.isArray(d) ? d : (d.content || d.data || []));
         } catch (error) { console.error(error); }
     };
 
     const fetchPayments = async (invoiceId) => {
         try {
-            const token = await getToken();
-            const res = await fetch(`/api/invoices/${invoiceId}/payments`, {
-                headers: {
-                    "Authorization": `Bearer ${token}`,
-                    "X-User-Id": internalUserId,
-                    "X-Org-Id": internalOrgId
-                }
-            });
-            if (res.ok) setPayments(await res.json());
+            const d = await api.get(`/api/invoices/${invoiceId}/payments`);
+            setPayments(Array.isArray(d) ? d : (d.content || d.data || []));
         } catch (error) { console.error(error); }
     };
 
@@ -193,28 +171,16 @@ export default function InvoiceDetailPage() {
         }
         try {
             setRecordingPayment(true);
-            const token = await getToken();
             const invId = invoice.id || invoice._id;
             const idempotencyKey = `payment:${invId}:${paymentForm.paymentDate}:${Number(paymentForm.amount || 0).toFixed(2)}:${String(paymentForm.transactionId || "no-ref").trim().toLowerCase()}`;
-            const res = await fetch(`/api/invoices/${invId}/payment`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${token}`,
-                    "X-User-Id": internalUserId,
-                    "X-Org-Id": internalOrgId
-                },
-                body: JSON.stringify({
-                    amount: parseFloat(paymentForm.amount),
-                    transactionDate: paymentForm.paymentDate,
-                    paymentMethod: paymentForm.paymentMethod,
-                    referenceNumber: paymentForm.transactionId,
-                    description: paymentForm.notes,
-                    idempotencyKey,
-                }),
+            const result = await api.post(`/api/invoices/${invId}/payment`, {
+                amount: parseFloat(paymentForm.amount),
+                transactionDate: paymentForm.paymentDate,
+                paymentMethod: paymentForm.paymentMethod,
+                referenceNumber: paymentForm.transactionId,
+                description: paymentForm.notes,
+                idempotencyKey,
             });
-            if (!res.ok) throw new Error("Failed to record payment");
-            const result = await res.json();
             toast.success(result.message);
             setPaymentDialogOpen(false);
             setPaymentForm({ amount: "", paymentDate: new Date().toISOString().split("T")[0], paymentMethod: "bank_transfer", transactionId: "", notes: "" });
@@ -235,20 +201,7 @@ export default function InvoiceDetailPage() {
         }
         setSending(true);
         try {
-            const token = await getToken();
-            const res = await fetch(`/api/invoices/${invoice.id}/send`, {
-                method: "PATCH",
-                headers: {
-                    "Authorization": `Bearer ${token}`,
-                    "X-User-Id": internalUserId,
-                    "X-Org-Id": internalOrgId
-                }
-            });
-            if (!res.ok) {
-                const errorData = await res.json().catch(() => null);
-                throw new Error(errorData?.message || "Failed to send invoice");
-            }
-            const updated = await res.json();
+            const updated = await api.patch(`/api/invoices/${invoice.id}/send`);
             setInvoice(updated);
             toast.success(invoice.status?.toLowerCase() === "sent"
                 ? "Invoice re-sent successfully"
@@ -262,17 +215,8 @@ export default function InvoiceDetailPage() {
         if (!window.confirm("Delete this invoice? This cannot be undone.")) return;
         setDeleting(true);
         try {
-            const token = await getToken();
             const invId = invoice.id || invoice._id;
-            const res = await fetch(`/api/invoices/${invId}`, {
-                method: "DELETE",
-                headers: {
-                    "Authorization": `Bearer ${token}`,
-                    "X-User-Id": internalUserId,
-                    "X-Org-Id": internalOrgId
-                }
-            });
-            if (!res.ok) throw new Error("Failed to delete invoice");
+            await api.delete(`/api/invoices/${invId}`);
             toast.success("Invoice deleted successfully");
             navigate("/invoices");
         } catch (error) {

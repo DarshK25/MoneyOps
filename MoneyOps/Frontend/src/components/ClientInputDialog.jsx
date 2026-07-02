@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -85,16 +86,11 @@ export default function ClientInputDialog({ dialog, onSubmit, onClose }) {
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      const res = await fetch(dialog.submit_endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: dialog.session_id,
-          dialog_id: dialog.dialog_id,
-          fields: values
-        })
+      const data = await api.post(dialog.submit_endpoint, {
+        session_id: dialog.session_id,
+        dialog_id: dialog.dialog_id,
+        fields: values
       });
-      const data = await res.json();
       if (data.ui_event) {
         window.dispatchEvent(new CustomEvent("voice:manual_ui_event", { detail: data.ui_event }));
       }

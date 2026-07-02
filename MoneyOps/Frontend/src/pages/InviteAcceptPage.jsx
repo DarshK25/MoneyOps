@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { useUser } from "@clerk/clerk-react";
+import { api } from "@/lib/api";
+import { useUser } from "@/contexts/AuthContext";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 import { Loader2 } from "lucide-react";
 
@@ -26,17 +27,7 @@ export default function InviteAcceptPage() {
 
         const handleAccept = async () => {
             try {
-                const res = await fetch(`/api/invites/accept/${token}`, {
-                    method: "POST",
-                    headers: {
-                        "X-User-Id": internalUserId
-                    }
-                });
-
-                if (!res.ok) {
-                    const data = await res.json().catch(() => ({}));
-                    throw new Error(data.message || "Failed to accept invite or invite expired.");
-                }
+                await api.post(`/api/invites/accept/${token}`);
 
                 toast.success("Successfully joined the organization!");
                 navigate("/teams");

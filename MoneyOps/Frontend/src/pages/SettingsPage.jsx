@@ -12,7 +12,8 @@ import {
     Clock3,
     Upload,
 } from "lucide-react";
-import { useUser } from "@clerk/clerk-react";
+import { api } from "@/lib/api";
+import { useUser } from "@/contexts/AuthContext";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 
 const inputStyle = {
@@ -147,15 +148,7 @@ export default function SettingsPage() {
         const fetchBusinessData = async () => {
             if (!userId) return;
             try {
-                const response = await fetch("/api/org/my", {
-                    headers: {
-                        "X-User-Id": userId,
-                    },
-                });
-                if (!response.ok) {
-                    throw new Error("Failed to load organization settings");
-                }
-                const result = await response.json();
+                const result = await api.get("/api/org/my");
                 const data = result.data;
                 if (!data) return;
 
@@ -214,12 +207,7 @@ export default function SettingsPage() {
         if (!userId) return;
         setVerifying(true);
         try {
-            const resp = await fetch("/api/org/verify/basic", {
-                method: "POST",
-                headers: { "X-User-Id": userId },
-            });
-            const result = await resp.json();
-            if (!resp.ok) throw new Error(result.message || "Verification failed");
+            await api.post("/api/org/verify/basic");
             setVerificationTier("BASIC");
             toast.success("Basic verification complete!");
         } catch (err) {
@@ -287,14 +275,8 @@ export default function SettingsPage() {
                 if (validationError) throw new Error(validationError);
 
                 setSavingBusiness(true);
-                const response = await fetch(`/api/org/${targetId}`, {
-                    method: "PUT",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "X-User-Id": userId,
-                    },
-                    body: JSON.stringify({
-                        legalName: business.legalName,
+                const payload = await api.put(`/api/org/${targetId}`, {
+                    legalName: business.legalName,
                         tradingName: business.tradingName,
                         businessType: business.businessType,
                         industry: business.industry,
@@ -324,12 +306,7 @@ export default function SettingsPage() {
                         accountingMethod: business.accountingMethod,
                         financialYearStartMonth: business.financialYearStartMonth,
                         preferredLanguage: business.preferredLanguage,
-                    }),
                 });
-                const payload = await response.json().catch(() => ({}));
-                if (!response.ok) {
-                    throw new Error(payload?.message || "Failed to update business");
-                }
                 toast.success("Business settings saved");
                 if (payload?.data) {
                     const data = payload.data;
@@ -668,10 +645,9 @@ export default function SettingsPage() {
                         <h2 className="mo-h2 mb-1">Security</h2>
                         <p className="mo-text-secondary mb-6">Manage your account security settings</p>
                         <div className="p-4 bg-[#4CBB1710] border border-[#4CBB1730] rounded-xl">
-                            <p className="text-sm text-[#4CBB17] font-medium">Clerk-Managed Authentication</p>
+                            <p className="text-sm text-[#4CBB17] font-medium">Secure Authentication</p>
                             <p className="text-sm text-[#A0A0A0] mt-1">
-                                Your account is secured by Clerk. Password changes and two-factor authentication
-                                are managed through the Clerk user portal.
+                                Your account is secured with industry-standard authentication. Contact support for password changes or security updates.
                             </p>
                         </div>
                     </div>

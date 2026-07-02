@@ -6,7 +6,7 @@ import {
   Edit2, Save, Trash2, ArrowUpRight, TrendingUp, AlertCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useAuth } from '@clerk/clerk-react';
+import { api } from "@/lib/api";
 
 function normalizeClientEmail(value) {
   const raw = String(value || '').trim();
@@ -38,7 +38,6 @@ function buildClientUpdatePayload(formData) {
 }
 
 export default function ClientDetailDialog({ client, onClose, onUpdate, onDelete, internalUserId, internalOrgId }) {
-  const { getToken } = useAuth();
   const [invoices, setInvoices] = useState([]);
   const [loadingInvoices, setLoadingInvoices] = useState(true);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -54,18 +53,9 @@ export default function ClientDetailDialog({ client, onClose, onUpdate, onDelete
   const fetchInvoices = async () => {
     try {
       setLoadingInvoices(true);
-      const token = await getToken();
       const id = client.id || client._id;
-      const res = await fetch(`/api/invoices?clientId=${id}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'X-User-Id': internalUserId,
-          'X-Org-Id': internalOrgId
-        }
-      });
-      if (!res.ok) throw new Error("Failed to fetch invoices");
-      const data = await res.json();
-      setInvoices(data);
+      const data = await api.get("/api/invoices", { clientId: id });
+      setInvoices(data.content || data.data || data || []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -91,21 +81,8 @@ export default function ClientDetailDialog({ client, onClose, onUpdate, onDelete
 
     setIsSaving(true);
     try {
-      const token = await getToken();
       const id = client.id || client._id;
-      const res = await fetch(`/api/clients/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'X-User-Id': internalUserId,
-          'X-Org-Id': internalOrgId
-        },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.message || data?.error || "Update failed");
-      const updated = data;
+      const updated = await api.put(`/api/clients/${id}`, payload);
       onUpdate(updated);
       setFormData(updated);
       setIsEditMode(false);
