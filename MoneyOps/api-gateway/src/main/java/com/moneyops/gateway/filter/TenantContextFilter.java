@@ -14,6 +14,8 @@ import org.springframework.web.server.WebFilter;
 import org.springframework.web.server.WebFilterChain;
 import reactor.core.publisher.Mono;
 
+import jakarta.annotation.PostConstruct;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -45,8 +47,15 @@ public class TenantContextFilter implements WebFilter {
     @Value("${gateway.tenant.enforce-isolation:true}")
     private boolean enforceTenantIsolation;
     
-    @Value("#{'${gateway.tenant.required-paths}'.split(',')}")
+    @Value("${gateway.tenant.required-paths}")
+    private String tenantRequiredPathsRaw;
+
     private List<String> tenantRequiredPaths;
+
+    @PostConstruct
+    void initTenantPaths() {
+        this.tenantRequiredPaths = Arrays.asList(tenantRequiredPathsRaw.split(","));
+    }
     
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
     

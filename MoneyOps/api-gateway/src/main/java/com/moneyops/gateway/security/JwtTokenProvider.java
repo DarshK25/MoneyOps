@@ -11,7 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
+
 
 @Slf4j
 @Component
@@ -30,16 +30,16 @@ public class JwtTokenProvider {
     /**
      * Generate JWT token with userId and orgId claims
      */
-    public String generateToken(UUID userId, UUID orgId) {
+    public String generateToken(String userId, String orgId) {
         Map<String, Object> claims = new HashMap<>();
-        claims.put("userId", userId.toString());
-        claims.put("orgId", orgId.toString());
+        claims.put("userId", userId);
+        claims.put("orgId", orgId);
         
         Date now = new Date();
         Date validity = new Date(now.getTime() + validityInMilliseconds);
         
         return Jwts.builder()
-            .subject(userId.toString())
+            .subject(userId)
             .claims(claims)
             .issuedAt(now)
             .expiration(validity)
@@ -66,37 +66,47 @@ public class JwtTokenProvider {
         }
     }
     
-    public UUID getUserIdFromToken(String token) {
+    public String getUserIdFromToken(String token) {
         Claims claims = validateToken(token);
         String userId = claims.get("userId", String.class);
         if (userId == null) {
-            throw new IllegalArgumentException("JWT token missing userId claim");
+            // Fall back to subject claim (backends may use subject instead of userId claim)
+            userId = claims.getSubject();
         }
-        return UUID.fromString(userId);
+        if (userId == null) {
+            throw new IllegalArgumentException("JWT token missing userId claim and subject");
+        }
+        return userId;
     }
     
-    public UUID getOrgIdFromToken(String token) {
-        Claims claims = validateToken(token);
-        String orgId = claims.get("orgId", String.class);
-        if (orgId == null) {
-            throw new IllegalArgumentException("JWT token missing orgId claim");
+    public String getOrgIdFromToken(String token) {
+        try {
+            Claims claims = validateToken(token);
+            String orgId = claims.get("orgId", String.class);
+            if (orgId == null) {
+                // orgId is optional — some flows (OAuth) may not include it
+                return null;
+            }
+            return orgId;
+        } catch (Exception e) {
+            return null;
         }
-        return UUID.fromString(orgId);
     }
     
     /**
      * CRITICAL: Validate that X-Org-Id and X-User-Id headers match JWT claims
      */
-    public void validateHeadersAgainstToken(String token, UUID headerOrgId, UUID headerUserId) {
-        UUID tokenUserId = getUserIdFromToken(token);
-        UUID tokenOrgId = getOrgIdFromToken(token);
+    public void validateHeadersAgainstToken(String token, String headerOrgId, String headerUserId) {
+        String tokenUserId = getUserIdFromToken(token);
         
         if (!tokenUserId.equals(headerUserId)) {
             log.error("Header userId {} doesn't match token userId {}", headerUserId, tokenUserId);
             throw new SecurityException("User ID mismatch between header and token");
         }
         
-        if (!tokenOrgId.equals(headerOrgId)) {
+        // orgId validation is optional — skip if token or header lacks it
+        String tokenOrgId = getOrgIdFromToken(token);
+        if (tokenOrgId != null && headerOrgId != null && !tokenOrgId.equals(headerOrgId)) {
             log.error("Header orgId {} doesn't match token orgId {}", headerOrgId, tokenOrgId);
             throw new SecurityException("Organization ID mismatch between header and token");
         }

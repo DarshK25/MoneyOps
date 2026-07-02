@@ -1,6 +1,15 @@
+# ===================================================================
+# MoneyOps API Gateway - Main Configuration
+# ===================================================================
+
 spring:
   application:
     name: api-gateway
+
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisReactiveAutoConfiguration
 
   cloud:
     gateway:
@@ -19,243 +28,126 @@ spring:
             allowCredentials: true
             maxAge: 3600
 
-      redis-rate-limiter:
-        replenish-rate: 10
-        burst-capacity: 20
-        requested-tokens: 1
+      httpclient:
+        follow-redirects: false
 
       routes:
         - id: auth-login
           uri: ${backend.core.url}
           predicates:
-            - Path=/api/auth/login
-            - Method=POST
+            - Path=/api/auth/login,/api/auth/register
           filters:
-            - name: RequestRateLimiter
+            - name: RateLimitFilter
               args:
-                redis-rate-limiter.replenishRate: 5
-                redis-rate-limiter.burstCapacity: 10
-                redis-rate-limiter.requestedTokens: 1
-                key-resolver: "#{@ipKeyResolver}"
+                key: "ip:auth"
+                limit: 10
+                windowSeconds: 60
 
-        - id: auth-register
+        - id: oauth2
           uri: ${backend.core.url}
           predicates:
-            - Path=/api/auth/register
-            - Method=POST
-          filters:
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 2
-                redis-rate-limiter.burstCapacity: 5
-                redis-rate-limiter.requestedTokens: 1
-                key-resolver: "#{@ipKeyResolver}"
+            - Path=/oauth2/**,/login/**
 
-        - id: auth-refresh
-          uri: ${backend.core.url}
-          predicates:
-            - Path=/api/auth/refresh
-            - Method=POST
-          filters:
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 10
-                redis-rate-limiter.burstCapacity: 20
-                redis-rate-limiter.requestedTokens: 1
-                key-resolver: "#{@userKeyResolver}"
-
-        - id: users-routes
-          uri: ${backend.core.url}
-          predicates:
-            - Path=/api/users/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 50
-                redis-rate-limiter.burstCapacity: 100
-                redis-rate-limiter.requestedTokens: 1
-                key-resolver: "#{@userKeyResolver}"
-
-        - id: organizations-routes
-          uri: ${backend.core.url}
-          predicates:
-            - Path=/api/organizations/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 20
-                redis-rate-limiter.burstCapacity: 40
-                redis-rate-limiter.requestedTokens: 1
-                key-resolver: "#{@orgKeyResolver}"
-
-        - id: clients-routes
-          uri: ${backend.core.url}
-          predicates:
-            - Path=/api/clients/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 30
-                redis-rate-limiter.burstCapacity: 60
-                redis-rate-limiter.requestedTokens: 1
-                key-resolver: "#{@orgKeyResolver}"
-
-        - id: invoices-routes
-          uri: ${backend.core.url}
-          predicates:
-            - Path=/api/invoices/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 30
-                redis-rate-limiter.burstCapacity: 60
-                redis-rate-limiter.requestedTokens: 1
-                key-resolver: "#{@orgKeyResolver}"
-
-        - id: transactions-routes
-          uri: ${backend.core.url}
-          predicates:
-            - Path=/api/transactions/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 30
-                redis-rate-limiter.burstCapacity: 60
-                redis-rate-limiter.requestedTokens: 1
-                key-resolver: "#{@orgKeyResolver}"
-
-        - id: documents-routes
-          uri: ${backend.core.url}
-          predicates:
-            - Path=/api/documents/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 20
-                redis-rate-limiter.burstCapacity: 40
-                redis-rate-limiter.requestedTokens: 1
-                key-resolver: "#{@orgKeyResolver}"
-
-        - id: ai-chat-routes
+        - id: ai-gateway
           uri: ${ai.gateway.url}
           predicates:
-            - Path=/api/ai/chat/**
+            - Path=/api/v1/**
           filters:
-            - name: RequestRateLimiter
+            - StripPrefix=0
+            - name: RateLimitFilter
               args:
-                redis-rate-limiter.replenishRate: 5
-                redis-rate-limiter.burstCapacity: 10
-                redis-rate-limiter.requestedTokens: 1
-                key-resolver: "#{@orgKeyResolver}"
+                key: "user:ai"
+                limit: 20
+                windowSeconds: 60
 
-        - id: ai-voice-routes
-          uri: ${ai.gateway.url}
+        - id: backend-api
+          uri: ${backend.core.url}
           predicates:
-            - Path=/api/ai/voice/**
+            - Path=/api/**
           filters:
-            - name: RequestRateLimiter
+            - StripPrefix=0
+            - name: RateLimitFilter
               args:
-                redis-rate-limiter.replenishRate: 3
-                redis-rate-limiter.burstCapacity: 6
-                redis-rate-limiter.requestedTokens: 1
-                key-resolver: "#{@orgKeyResolver}"
+                key: "user:api"
+                limit: 100
+                windowSeconds: 60
 
-        - id: voice-service-routes
+        - id: voice-service
           uri: ${voice.service.url}
           predicates:
-            - Path=/api/voice/**
+            - Path=/voice/**
           filters:
-            - name: RequestRateLimiter
+            - StripPrefix=0
+            - name: RateLimitFilter
               args:
-                redis-rate-limiter.replenishRate: 5
-                redis-rate-limiter.burstCapacity: 10
-                redis-rate-limiter.requestedTokens: 1
-                key-resolver: "#{@orgKeyResolver}"
+                key: "user:voice"
+                limit: 30
+                windowSeconds: 60
+
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Origin
+
+  main:
+    web-application-type: reactive
 
   data:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
-      timeout: 2000ms
-      lettuce:
-        pool:
-          max-active: 8
-          max-idle: 8
-          min-idle: 2
+      timeout: ${REDIS_TIMEOUT:2000}
 
-  lifecycle:
-    timeout-per-shutdown-phase: 20s
+jwt:
+  secret: ${JWT_SECRET:}
+  expiration: ${JWT_EXPIRATION:86400000}
+
+gateway:
+  public-endpoints: ${GATEWAY_PUBLIC_ENDPOINTS:/api/auth/login,/api/auth/register,/actuator/health,/actuator/ready,/oauth2,/oauth2/**,/login,/login/**}
+  tenant:
+    enforce-isolation: ${TENANT_ENFORCE_ISOLATION:true}
+    required-paths: ${TENANT_REQUIRED_PATHS:/api/clients/**,/api/invoices/**,/api/payments/**,/api/organizations/**}
+  logging:
+    enabled: ${GATEWAY_LOGGING_ENABLED:true}
+    log-request-body: ${GATEWAY_LOG_REQUEST_BODY:false}
+    log-response-body: ${GATEWAY_LOG_RESPONSE_BODY:false}
+    slow-request-threshold-ms: ${GATEWAY_SLOW_REQUEST_THRESHOLD:3000}
+  rate-limit:
+    enabled: ${GATEWAY_RATE_LIMIT_ENABLED:true}
 
 backend:
   core:
-    url: http://localhost:8000
+    url: ${BACKEND_CORE_URL:http://localhost:8000}
 
 ai:
   gateway:
-    url: http://localhost:8001
-
-voice:
-  service:
-    url: http://localhost:8003
-
-jwt:
-  secret: ${JWT_SECRET:your-256-bit-secret-your-256-bit-secret-your-256-bit-secret-your-256-bit-secret}
-  expiration: 86400000
-
-gateway:
-  public-endpoints: /api/auth/login,/api/auth/register,/actuator/health,/actuator/ready
-  tenant:
-    enforce-isolation: true
-    required-paths: /api/clients/**,/api/invoices/**,/api/transactions/**,/api/documents/**,/api/organizations/**
-  logging:
-    enabled: true
-    log-request-body: false
-    log-response-body: false
-    slow-request-threshold-ms: 3000
-  rate-limit:
-    enabled: true
-    fail-open: true
-    presets:
-      strict: 2
-      normal: 10
-      relaxed: 50
-      ai: 5
-    defaults:
-      public-endpoints: 10
-      authenticated-endpoints: 50
-      tenant-endpoints: 30
-      ai-endpoints: 5
-      voice-endpoints: 3
+    url: ${AI_GATEWAY_URL:http://localhost:8005}
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info,gateway
-      base-path: /actuator
   endpoint:
     health:
       show-details: always
+      show-components: always
       probes:
         enabled: true
   health:
-    readiness-state:
-      enabled: true
-    liveness-state:
-      enabled: true
+    redis:
+      enabled: false
 
 logging:
   level:
-    root: INFO
-    com.moneyops.gateway: DEBUG
-    org.springframework.cloud.gateway: DEBUG
-    org.springframework.security: INFO
+    root: ${LOG_LEVEL_ROOT:INFO}
+    com.moneyops.gateway: ${LOG_LEVEL_GATEWAY:DEBUG}
+    org.springframework.cloud.gateway: ${LOG_LEVEL_CLOUD_GATEWAY:DEBUG}
+    org.springframework.security: ${LOG_LEVEL_SECURITY:INFO}
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
 
 server:
-  port: ${PORT:8080}
+  port: ${PORT:8002}
   shutdown: graceful
   error:
     include-message: always

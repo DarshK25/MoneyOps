@@ -58,6 +58,7 @@ public class SecurityConfig {
                 // Public endpoints (no authentication required)
                 .pathMatchers("/api/auth/login", "/api/auth/register").permitAll()
                 .pathMatchers("/actuator/health", "/actuator/ready").permitAll()
+                .pathMatchers("/oauth2/**", "/login/**").permitAll()
                 
                 // OPTIONS requests for CORS preflight
                 .pathMatchers(HttpMethod.OPTIONS, "/**").permitAll()

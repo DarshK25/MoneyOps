@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.connection.ReactiveRedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
@@ -49,10 +50,14 @@ public class RedisConfig {
     @Value("${spring.data.redis.timeout:2000}")
     private long redisTimeout;
     
+    @Value("${spring.data.redis.ssl:false}")
+    private boolean redisSsl;
+    
     /**
      * Configure Redis connection factory
      */
     @Bean
+    @Primary
     public ReactiveRedisConnectionFactory reactiveRedisConnectionFactory() {
         RedisStandaloneConfiguration redisConfig = new RedisStandaloneConfiguration();
         redisConfig.setHostName(redisHost);
@@ -63,10 +68,15 @@ public class RedisConfig {
         }
         
         // Configure Lettuce client
-        LettuceClientConfiguration clientConfig = LettuceClientConfiguration.builder()
+        var clientBuilder = LettuceClientConfiguration.builder()
             .commandTimeout(Duration.ofMillis(redisTimeout))
-            .shutdownTimeout(Duration.ofMillis(100))
-            .build();
+            .shutdownTimeout(Duration.ofMillis(100));
+        
+        if (redisSsl) {
+            clientBuilder.useSsl();
+        }
+        
+        LettuceClientConfiguration clientConfig = clientBuilder.build();
         
         LettuceConnectionFactory factory = new LettuceConnectionFactory(redisConfig, clientConfig);
         
