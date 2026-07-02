@@ -339,7 +339,7 @@ async def test_business_context_avoids_not_set_placeholders(monkeypatch):
         success = True
         data = {"businessName": "VoltNest Energy", "orgId": "org-1"}
 
-    async def fake_get_onboarding_status(_clerk_id):
+    async def fake_get_onboarding_status(_user_id):
         return FakeResponse()
 
     monkeypatch.setattr(agent.backend, "get_onboarding_status", fake_get_onboarding_status)
@@ -373,7 +373,7 @@ async def test_business_context_prefers_org_profile_over_status(monkeypatch):
     async def fake_get_my_organization(_user_id):
         return FakeOrgResponse()
 
-    async def fake_get_onboarding_status(_clerk_id):
+    async def fake_get_onboarding_status(_user_id):
         return FakeStatusResponse()
 
     monkeypatch.setattr(agent.backend, "get_my_organization", fake_get_my_organization)

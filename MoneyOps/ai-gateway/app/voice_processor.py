@@ -35,7 +35,7 @@ class VoiceContext:
     user_id: str
     org_uuid: str
     business_id: Optional[Any] = 1
-    clerk_org_id: Optional[str] = None
+    user_org_id: Optional[str] = None
     extracted_entities: List[Dict[str, Any]] = field(default_factory=list)
     raw_text: Optional[str] = None
     history: List[Dict[str, Any]] = field(default_factory=list)
@@ -56,7 +56,7 @@ class VoiceProcessor:
 
         lock = self._session_locks.setdefault(context.session_id, asyncio.Lock())
         async with lock:
-            session_record = session_manager.get_session(
+            session_record = await session_manager.get_session(
                 session_id=context.session_id,
                 user_id=context.user_id,
                 org_id=context.org_uuid,
@@ -93,7 +93,7 @@ class VoiceProcessor:
             if len(session_record.history) > 20:
                 session_record.history = session_record.history[-20:]
 
-            session_manager.save_session(session_record)
+            await session_manager.save_session(session_record)
 
         logger.info(
             "voice_process_complete",

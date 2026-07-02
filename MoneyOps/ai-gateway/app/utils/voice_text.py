@@ -171,7 +171,7 @@ def sanitize_for_tts(text: str, tool_names: Optional[Iterable[str]] = None) -> s
             return match.group(0)
         if 1900 <= value <= 2099:
             return str(value)
-        return f"{format_inr_words(value)} rupees"
+        return f"{value} rupees"
 
     sanitized = re.sub(r"(?:₹|Rs\.?|INR|\$)\s*([\d,.]+)", replace_currency, sanitized, flags=re.IGNORECASE)
 
@@ -181,7 +181,7 @@ def sanitize_for_tts(text: str, tool_names: Optional[Iterable[str]] = None) -> s
             return str(value)
         if value < 10_000:
             return match.group(0)
-        return format_inr_words(value)
+        return str(value)
 
     sanitized = re.sub(
         r"(?<![A-Za-z0-9-])\b\d{5,}(?:,\d{3})*\b(?!-[A-Za-z0-9])",

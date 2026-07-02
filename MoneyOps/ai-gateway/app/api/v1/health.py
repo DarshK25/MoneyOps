@@ -7,6 +7,7 @@ from typing import Dict, Any
 import time
 
 from app.config import settings
+from app.integrations.redis_client import get_redis
 from app.utils.logger import get_logger
 
 router = APIRouter()
@@ -38,16 +39,19 @@ async def health_check():
         "redis": "checking...",
         "backend": "checking...",
     }
-    try:
-        redis_client = await get_redis()
-        checks["redis"] = await redis_client.ping()
-    except:
+    redis_client = await get_redis()
+    if redis_client is not None:
+        try:
+            checks["redis"] = await redis_client.ping()
+        except:
+            checks["redis"] = False
+    else:
         checks["redis"] = False
 
     import httpx
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(settings.BACKEND_BASE_URL.rstrip('/') + '/actuator/health')
+            resp = await client.get(settings.BACKEND_BASE_URL.rstrip('/') + '/api/invoices?limit=1')
             checks["backend"] = resp.status_code == 200
     except:
         checks["backend"] = False
@@ -80,7 +84,7 @@ async def readiness_check():
     import httpx
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(settings.BACKEND_BASE_URL.rstrip('/') + '/actuator/health')
+            resp = await client.get(settings.BACKEND_BASE_URL.rstrip('/') + '/api/invoices?limit=1')
             checks["backend"] = resp.status_code == 200
     except Exception:
         checks["backend"] = False

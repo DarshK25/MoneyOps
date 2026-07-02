@@ -148,19 +148,19 @@ class TestBug8GhostConfirmation:
     """
 
     def test_premature_confirmation_guard_blocks_non_executed(self):
-        from voice_service.app.agent.entrypoint import premature_confirmation_guard
+        from app.guard import premature_confirmation_guard
         # Should NOT block because it passes the text through
         # (the primary guard is stage-based, keyword check is safety net)
         result = premature_confirmation_guard("invoice created", "COLLECTING")
         assert result == "invoice created"  # Returns original, logs error
 
     def test_premature_confirmation_guard_allows_executed(self):
-        from voice_service.app.agent.entrypoint import premature_confirmation_guard
+        from app.guard import premature_confirmation_guard
         result = premature_confirmation_guard("Your invoice has been created!", "EXECUTED")
         assert "invoice" in result.lower()
 
     def test_premature_confirmation_guard_neutral_text(self):
-        from voice_service.app.agent.entrypoint import premature_confirmation_guard
+        from app.guard import premature_confirmation_guard
         result = premature_confirmation_guard("What is the client's name?", "COLLECTING")
         assert result == "What is the client's name?"
 
@@ -564,7 +564,7 @@ class TestClientCreateVoiceMapping:
     """Regression coverage for company vs contact-name capture in client creation."""
 
     def test_company_name_is_not_used_as_contact_name(self):
-        from app.agents.moneyops_agent import _merge_client_draft_from_text
+        from app.agents.voice_helpers import _merge_client_draft_from_text
 
         draft = _merge_client_draft_from_text("Navi Mumbai Logistics Pvt Ltd", {})
 
@@ -572,7 +572,7 @@ class TestClientCreateVoiceMapping:
         assert draft.get("name") is None
 
     def test_contact_name_can_follow_company_name(self):
-        from app.agents.moneyops_agent import _merge_client_draft_from_text
+        from app.agents.voice_helpers import _merge_client_draft_from_text
 
         draft = _merge_client_draft_from_text(
             "Arjun Desai",
@@ -583,7 +583,7 @@ class TestClientCreateVoiceMapping:
         assert draft.get("name") == "Arjun Desai"
 
     def test_create_client_intent_sentence_extracts_company_name_only(self):
-        from app.agents.moneyops_agent import _merge_client_draft_from_text
+        from app.agents.voice_helpers import _merge_client_draft_from_text
 
         draft = _merge_client_draft_from_text(
             "i would like to create a client navi mumbai logistics private limited",
@@ -594,7 +594,7 @@ class TestClientCreateVoiceMapping:
         assert draft.get("name") is None
 
     def test_main_contact_followup_extracts_only_person_name(self):
-        from app.agents.moneyops_agent import _merge_client_draft_from_text
+        from app.agents.voice_helpers import _merge_client_draft_from_text
 
         draft = _merge_client_draft_from_text(
             "the main contact person name is abhishek shalma",
@@ -606,7 +606,7 @@ class TestClientCreateVoiceMapping:
 
     @pytest.mark.asyncio
     async def test_create_client_prompts_for_contact_when_only_company_present(self):
-        from app.agents.moneyops_agent import AgentSession, execute_tool
+        from app.agents.voice_helpers import AgentSession, execute_tool
 
         session = AgentSession(
             session_id="session-1",
@@ -628,7 +628,7 @@ class TestClientCreateVoiceMapping:
 
     @pytest.mark.asyncio
     async def test_create_client_sends_team_code_in_request_body(self):
-        from app.agents.moneyops_agent import AgentSession, execute_tool
+        from app.agents.voice_helpers import AgentSession, execute_tool
 
         session = AgentSession(
             session_id="session-1",
@@ -655,40 +655,40 @@ class TestClientCreateVoiceMapping:
         assert payload["source"] == "VOICE"
 
     def test_names_do_not_trigger_email_fragment_detection(self):
-        from app.agents.moneyops_agent import _looks_like_email_fragment
+        from app.agents.voice_helpers import _looks_like_email_fragment
 
         assert _looks_like_email_fragment("tanush jain") is False
         assert _looks_like_email_fragment("navi mumbai logistics private limited") is False
 
     def test_bare_team_code_is_accepted(self):
-        from app.agents.moneyops_agent import _extract_team_code
+        from app.agents.voice_helpers import _extract_team_code
 
         assert _extract_team_code("2091") == "2091"
 
     def test_spoken_team_code_with_spaces_is_accepted(self):
-        from app.agents.moneyops_agent import _extract_team_code
+        from app.agents.voice_helpers import _extract_team_code
 
         assert _extract_team_code("team security code is 2 0 9 1") == "2091"
 
     def test_natural_team_code_reply_is_accepted(self):
-        from app.agents.moneyops_agent import _extract_team_code
+        from app.agents.voice_helpers import _extract_team_code
 
         assert _extract_team_code("it is 2091") == "2091"
 
     def test_client_draft_captures_spoken_team_code_with_spaces(self):
-        from app.agents.moneyops_agent import _merge_client_draft_from_text
+        from app.agents.voice_helpers import _merge_client_draft_from_text
 
         draft = _merge_client_draft_from_text("team security code is 2 0 9 1", {})
 
         assert draft.get("team_code") == "2091"
 
     def test_bare_invoice_client_name_is_extracted(self):
-        from app.agents.moneyops_agent import _extract_client_name_for_invoice
+        from app.agents.voice_helpers import _extract_client_name_for_invoice
 
         assert _extract_client_name_for_invoice("sunita") == "sunita"
 
     def test_spoken_invoice_line_item_is_extracted(self):
-        from app.agents.moneyops_agent import _extract_line_items_from_invoice_text
+        from app.agents.voice_helpers import _extract_line_items_from_invoice_text
 
         items = _extract_line_items_from_invoice_text(
             "ac ev charger supply and installation of 72 kilowatt at 50000 rupees"
@@ -699,12 +699,12 @@ class TestClientCreateVoiceMapping:
         assert "ac ev charger" in items[0]["description"].lower()
 
     def test_spoken_invoice_amount_words_are_parsed(self):
-        from app.agents.moneyops_agent import _extract_amount_value
+        from app.agents.voice_helpers import _extract_amount_value
 
         assert _extract_amount_value("five thousand rupees") == 5000.0
 
     def test_unknown_company_name_does_not_fuzzy_match_wrong_existing_client(self):
-        from app.agents.moneyops_agent import _best_client_match
+        from app.agents.voice_helpers import _best_client_match
 
         clients = [
             {"id": "1", "name": "ajay singh", "company": "Ajay Traders"},
@@ -715,19 +715,19 @@ class TestClientCreateVoiceMapping:
         assert _best_client_match("Vedanta Solutions", clients) is None
 
     def test_call_prefix_is_treated_as_client_name_hint(self):
-        from app.agents.moneyops_agent import _extract_client_name_for_invoice
+        from app.agents.voice_helpers import _extract_client_name_for_invoice
 
         assert _extract_client_name_for_invoice("call Vedanta solutions") == "Vedanta solutions"
 
     def test_replace_invoice_item_with_phrase_is_parsed(self):
-        from app.agents.moneyops_agent import _extract_invoice_item_replacement_text
+        from app.agents.voice_helpers import _extract_invoice_item_replacement_text
 
         assert _extract_invoice_item_replacement_text(
             "Replace the invoice item with solar monitoring system setup."
         ) == "solar monitoring system setup"
 
     def test_invoice_items_text_parser_supports_preview_dialog_format(self):
-        from app.agents.moneyops_agent import _parse_invoice_items_text
+        from app.agents.voice_helpers import _parse_invoice_items_text
 
         items = _parse_invoice_items_text(
             "SERVICE | AC EV Charger Supply & Installation (7.2 kW) | 1 | 50000 | 18"
@@ -739,7 +739,7 @@ class TestClientCreateVoiceMapping:
         assert items[0]["gst_percent"] == 18
 
     def test_invoice_draft_follow_up_does_not_overwrite_existing_client_name(self):
-        from app.agents.moneyops_agent import _merge_invoice_draft_from_text
+        from app.agents.voice_helpers import _merge_invoice_draft_from_text
 
         draft = {"client_name": "Priya Sharma"}
 
@@ -751,7 +751,7 @@ class TestClientCreateVoiceMapping:
         assert merged["client_name"] == "Priya Sharma"
 
     def test_invoice_draft_merges_amount_then_description_into_line_item(self):
-        from app.agents.moneyops_agent import _merge_invoice_draft_from_text
+        from app.agents.voice_helpers import _merge_invoice_draft_from_text
 
         draft = {"client_name": "Priya Sharma"}
         draft = _merge_invoice_draft_from_text("the amount is 50000 rupees", draft)
@@ -763,7 +763,7 @@ class TestClientCreateVoiceMapping:
         assert "aceb charger supply and installation" in merged["line_items"][0]["description"].lower()
 
     def test_invoice_draft_merges_service_phrase_with_pending_amount(self):
-        from app.agents.moneyops_agent import _merge_invoice_draft_from_text
+        from app.agents.voice_helpers import _merge_invoice_draft_from_text
 
         draft = {"client_name": "Abhishek Sharma"}
         draft = _merge_invoice_draft_from_text("the amount is 20 000", draft)
@@ -774,7 +774,7 @@ class TestClientCreateVoiceMapping:
         assert "ac ev charger supply and installation" in merged["line_items"][0]["description"].lower()
 
     def test_invoice_draft_merges_amount_and_service_in_same_sentence(self):
-        from app.agents.moneyops_agent import _merge_invoice_draft_from_text
+        from app.agents.voice_helpers import _merge_invoice_draft_from_text
 
         merged = _merge_invoice_draft_from_text(
             "the amount is 20 000 and service is acev charger installation",
@@ -786,13 +786,13 @@ class TestClientCreateVoiceMapping:
         assert "acev charger installation" in merged["line_items"][0]["description"].lower()
 
     def test_due_date_phrase_supports_spoken_day_month(self):
-        from app.agents.moneyops_agent import _extract_due_date_phrase
+        from app.agents.voice_helpers import _extract_due_date_phrase
 
         assert _extract_due_date_phrase("30 april").endswith("-04-30")
         assert _extract_due_date_phrase("30th april").endswith("-04-30")
 
     def test_best_client_match_rejects_unrelated_short_name(self):
-        from app.agents.moneyops_agent import _best_client_match
+        from app.agents.voice_helpers import _best_client_match
 
         clients = [
             {"name": "Arjun Desai"},
@@ -803,7 +803,7 @@ class TestClientCreateVoiceMapping:
         assert _best_client_match("yash", clients) is None
 
     def test_best_client_match_accepts_first_name_only(self):
-        from app.agents.moneyops_agent import _best_client_match
+        from app.agents.voice_helpers import _best_client_match
 
         clients = [
             {"name": "Arjun Desai"},
@@ -816,7 +816,7 @@ class TestClientCreateVoiceMapping:
         assert match["name"] == "Priya Sharma"
 
     def test_best_client_match_accepts_small_stt_drift(self):
-        from app.agents.moneyops_agent import _best_client_match
+        from app.agents.voice_helpers import _best_client_match
 
         clients = [
             {"name": "Arjun Desai"},
@@ -829,13 +829,13 @@ class TestClientCreateVoiceMapping:
         assert match["name"] == "Sunita Rao"
 
     def test_extract_client_name_for_invoice_rejects_service_description(self):
-        from app.agents.moneyops_agent import _extract_client_name_for_invoice
+        from app.agents.voice_helpers import _extract_client_name_for_invoice
 
         assert _extract_client_name_for_invoice("smart load management system setup") is None
         assert _extract_client_name_for_invoice("electrical panel upgrade and safety compliance") is None
 
     def test_merge_payment_draft_extracts_method_and_reference(self):
-        from app.agents.moneyops_agent import _merge_payment_draft_from_text
+        from app.agents.voice_helpers import _merge_payment_draft_from_text
 
         merged = _merge_payment_draft_from_text(
             "record partial payment from sunita by upi reference UPI-12345",
@@ -847,7 +847,7 @@ class TestClientCreateVoiceMapping:
         assert merged["utr_or_reference"] == "UPI-12345"
 
     def test_groq_rate_limit_message_formats_long_wait_in_minutes_only(self):
-        from app.agents.moneyops_agent import _groq_rate_limit_message
+        from app.agents.voice_helpers import _groq_rate_limit_message
 
         message = _groq_rate_limit_message(
             RuntimeError("429 Too Many Requests. Please try again in 31m16.608s. Need more tokens?")
@@ -857,7 +857,7 @@ class TestClientCreateVoiceMapping:
         assert "16.608" not in message
 
     def test_groq_rate_limit_message_formats_short_wait_in_minutes_and_seconds(self):
-        from app.agents.moneyops_agent import _groq_rate_limit_message
+        from app.agents.voice_helpers import _groq_rate_limit_message
 
         message = _groq_rate_limit_message(
             RuntimeError("rate limit reached. Please try again in 2m14.4s. Need more tokens?")
@@ -866,7 +866,7 @@ class TestClientCreateVoiceMapping:
         assert "2 minutes 14 seconds" in message
 
     def test_groq_rate_limit_message_formats_sub_minute_wait_in_seconds_only(self):
-        from app.agents.moneyops_agent import _groq_rate_limit_message
+        from app.agents.voice_helpers import _groq_rate_limit_message
 
         message = _groq_rate_limit_message(
             RuntimeError("Too Many Requests. Please try again in 42.2 seconds. Need more tokens?")
@@ -875,20 +875,20 @@ class TestClientCreateVoiceMapping:
         assert "42 seconds" in message
 
     def test_market_update_query_is_detected(self):
-        from app.agents.moneyops_agent import _is_market_growth_query
+        from app.agents.voice_helpers import _is_market_growth_query
 
         assert _is_market_growth_query("give me a market update")
         assert _is_market_growth_query("what changed in the market")
 
     def test_market_action_followup_is_detected(self):
-        from app.agents.moneyops_agent import AgentSession, _is_market_action_followup_query
+        from app.agents.voice_helpers import AgentSession, _is_market_action_followup_query
 
         session = AgentSession(session_id="s1", user_id="u1", org_uuid="org1", last_tool_called="search_market_intelligence")
         assert _is_market_action_followup_query("how do we grab this opportunity", session)
         assert _is_market_action_followup_query("how do we avoid financial loss here", session)
 
     def test_synthesize_market_result_is_actionable(self):
-        from app.agents.moneyops_agent import _synthesize_market_result
+        from app.agents.voice_helpers import _synthesize_market_result
 
         result = _synthesize_market_result(
             {
@@ -912,7 +912,7 @@ class TestClientCreateVoiceMapping:
         assert "third" in lowered
 
     def test_market_action_guidance_for_financial_loss_is_explicit(self):
-        from app.agents.moneyops_agent import AgentSession, _market_action_guidance
+        from app.agents.voice_helpers import AgentSession, _market_action_guidance
 
         session = AgentSession(
             session_id="s1",
@@ -936,7 +936,7 @@ class TestClientCreateVoiceMapping:
         assert "collections" in message.lower()
 
     def test_spoken_invoice_line_item_with_quantity_and_each_rate_is_extracted(self):
-        from app.agents.moneyops_agent import _extract_line_items_from_invoice_text
+        from app.agents.voice_helpers import _extract_line_items_from_invoice_text
 
         items = _extract_line_items_from_invoice_text(
             "add quarterly amc for 12 chargers at 850 rupees each"
@@ -948,7 +948,7 @@ class TestClientCreateVoiceMapping:
         assert "quarterly amc" in items[0]["description"].lower()
 
     def test_additional_invoice_item_follow_up_collects_description_then_amount(self):
-        from app.agents.moneyops_agent import _merge_additional_invoice_item_followup
+        from app.agents.voice_helpers import _merge_additional_invoice_item_followup
 
         draft = {
             "client_name": "Sunita Rao",
@@ -967,7 +967,7 @@ class TestClientCreateVoiceMapping:
         assert draft["line_items"][1]["unit_price"] == 5000
 
     def test_invoice_item_review_followup_can_set_quantity_then_offer_more_items(self):
-        from app.agents.moneyops_agent import _handle_invoice_item_review_followup
+        from app.agents.voice_helpers import _handle_invoice_item_review_followup
 
         draft = {
             "client_name": "Abhishek Sharma",
@@ -982,7 +982,7 @@ class TestClientCreateVoiceMapping:
         assert message == "Got it. Do you want to add another item?"
 
     def test_invoice_item_review_followup_can_skip_quantity_and_move_on(self):
-        from app.agents.moneyops_agent import _handle_invoice_item_review_followup
+        from app.agents.voice_helpers import _handle_invoice_item_review_followup
 
         draft = {
             "client_name": "Abhishek Sharma",
@@ -999,7 +999,7 @@ class TestClientCreateVoiceMapping:
         assert message == "What due date should I put on the invoice?"
 
     def test_semantic_invoice_followup_intent_detects_add_item_when_fast_path_is_ambiguous(self):
-        from app.agents.moneyops_agent import _semantic_invoice_followup_intent
+        from app.agents.voice_helpers import _semantic_invoice_followup_intent
 
         intent = _semantic_invoice_followup_intent(
             "include one more service line",
@@ -1009,7 +1009,7 @@ class TestClientCreateVoiceMapping:
         assert intent == "add_item"
 
     def test_semantic_invoice_followup_intent_detects_negative_even_with_send_words(self):
-        from app.agents.moneyops_agent import _semantic_invoice_followup_intent
+        from app.agents.voice_helpers import _semantic_invoice_followup_intent
 
         intent = _semantic_invoice_followup_intent(
             "let's not send that yet",
@@ -1020,7 +1020,7 @@ class TestClientCreateVoiceMapping:
 
     @pytest.mark.asyncio
     async def test_invoice_send_offer_can_be_declined(self):
-        from app.agents.moneyops_agent import AgentSession, process
+        from app.agents.voice_helpers import AgentSession, process
 
         session = AgentSession(
             session_id="s1",
@@ -1048,7 +1048,7 @@ class TestClientCreateVoiceMapping:
 
     @pytest.mark.asyncio
     async def test_delete_invoice_query_sets_confirmation_context(self):
-        from app.agents.moneyops_agent import AgentSession, process
+        from app.agents.voice_helpers import AgentSession, process
 
         class BackendStub:
             async def get(self, endpoint, org_id=None, user_id=None, headers=None):
@@ -1076,7 +1076,7 @@ class TestClientCreateVoiceMapping:
 
     @pytest.mark.asyncio
     async def test_delete_invoice_confirmation_executes_without_groq(self):
-        from app.agents.moneyops_agent import AgentSession, process
+        from app.agents.voice_helpers import AgentSession, process
 
         class BackendStub:
             def __init__(self):
@@ -1114,7 +1114,7 @@ class TestClientCreateVoiceMapping:
 
     @pytest.mark.asyncio
     async def test_mark_invoice_as_paid_from_client_uses_outstanding_amount(self):
-        from app.agents.moneyops_agent import AgentSession, process
+        from app.agents.voice_helpers import AgentSession, process
 
         class BackendStub:
             def __init__(self):
@@ -1163,7 +1163,7 @@ class TestClientCreateVoiceMapping:
 
     @pytest.mark.asyncio
     async def test_partial_payment_from_client_asks_amount_then_records(self):
-        from app.agents.moneyops_agent import AgentSession, process
+        from app.agents.voice_helpers import AgentSession, process
 
         class BackendStub:
             def __init__(self):
@@ -1223,7 +1223,7 @@ class TestClientCreateVoiceMapping:
 
     @pytest.mark.asyncio
     async def test_full_payment_from_client_passes_method_and_reference(self):
-        from app.agents.moneyops_agent import AgentSession, process
+        from app.agents.voice_helpers import AgentSession, process
 
         class BackendStub:
             def __init__(self):
@@ -1271,7 +1271,7 @@ class TestClientCreateVoiceMapping:
 
     @pytest.mark.asyncio
     async def test_partial_payment_follow_up_keeps_method_and_reference(self):
-        from app.agents.moneyops_agent import AgentSession, process
+        from app.agents.voice_helpers import AgentSession, process
 
         class BackendStub:
             def __init__(self):

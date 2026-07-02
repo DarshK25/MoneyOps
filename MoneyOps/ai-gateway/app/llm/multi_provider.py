@@ -490,6 +490,7 @@ def get_langchain_llm(provider: str = "groq"):
     """Get a LangChain-compatible LLM for LangGraph.
 
     Returns a LangChain ChatModel that can be used with bind_tools().
+    Lazy-loads to avoid import errors at module load time.
     """
     return llm_client.get_langchain_llm(provider)
 
@@ -530,5 +531,6 @@ def _add_langchain_method():
     MultiProviderClient.get_langchain_llm = get_langchain_llm
 
 
-_add_langchain_method()
+# Don't call at import time - lazy load
+# _add_langchain_method()
 

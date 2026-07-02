@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-import moneyops_pb2 as moneyops__pb2
+from app.grpc.gen import moneyops_pb2 as moneyops__pb2
 
 GRPC_GENERATED_VERSION = '1.80.0'
 GRPC_VERSION = grpc.__version__
@@ -38,7 +38,7 @@ class OrganizationServiceStub(object):
         """
         self.GetOnboardingStatus = channel.unary_unary(
                 '/moneyops.OrganizationService/GetOnboardingStatus',
-                request_serializer=moneyops__pb2.ClerkIdRequest.SerializeToString,
+                request_serializer=moneyops__pb2.UserIdRequest.SerializeToString,
                 response_deserializer=moneyops__pb2.GetOnboardingStatusResponse.FromString,
                 _registered_method=True)
         self.GetOrganization = channel.unary_unary(
@@ -70,7 +70,7 @@ def add_OrganizationServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'GetOnboardingStatus': grpc.unary_unary_rpc_method_handler(
                     servicer.GetOnboardingStatus,
-                    request_deserializer=moneyops__pb2.ClerkIdRequest.FromString,
+                    request_deserializer=moneyops__pb2.UserIdRequest.FromString,
                     response_serializer=moneyops__pb2.GetOnboardingStatusResponse.SerializeToString,
             ),
             'GetOrganization': grpc.unary_unary_rpc_method_handler(
@@ -106,7 +106,7 @@ class OrganizationService(object):
             request,
             target,
             '/moneyops.OrganizationService/GetOnboardingStatus',
-            moneyops__pb2.ClerkIdRequest.SerializeToString,
+            moneyops__pb2.UserIdRequest.SerializeToString,
             moneyops__pb2.GetOnboardingStatusResponse.FromString,
             options,
             channel_credentials,

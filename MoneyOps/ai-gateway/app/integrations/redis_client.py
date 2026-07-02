@@ -11,25 +11,25 @@ logger = get_logger(__name__)
 _redis_client: aioredis.Redis | None = None
 
 
-async def get_redis() -> aioredis.Redis:
-    """Get or create the Redis connection."""
+async def get_redis() -> aioredis.Redis | None:
+    """Get or create the Redis connection. Returns None if Redis is unavailable."""
     global _redis_client
+    if not settings.REDIS_HOST:
+        return None
     if _redis_client is None:
         _redis_client = await _create_redis()
     return _redis_client
 
 
-async def _create_redis() -> aioredis.Redis:
+async def _create_redis() -> aioredis.Redis | None:
     """Create a Redis connection (TLS for Upstash, plain for local)."""
     try:
         if settings.REDIS_TLS:
-            # Upstash / cloud Redis — requires TLS (rediss://)
             url = (
-                f"rediss://:{settings.REDIS_PASSWORD}@"
+                f"rediss://default:{settings.REDIS_PASSWORD}@"
                 f"{settings.REDIS_HOST}:{settings.REDIS_PORT}"
             )
         else:
-            # Local Redis
             if settings.REDIS_PASSWORD:
                 url = (
                     f"redis://:{settings.REDIS_PASSWORD}@"
@@ -38,14 +38,14 @@ async def _create_redis() -> aioredis.Redis:
             else:
                 url = f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB}"
 
-        client = aioredis.from_url(url, decode_responses=True)
+        client = aioredis.from_url(url, decode_responses=True, socket_connect_timeout=3)
         await client.ping()
         logger.info("redis_connected", host=settings.REDIS_HOST, tls=settings.REDIS_TLS)
         return client
 
     except Exception as e:
-        logger.error("redis_connection_failed", error=str(e))
-        raise
+        logger.warning("redis_unavailable", error=str(e), note="Continuing without cache")
+        return None
 
 
 async def close_redis():

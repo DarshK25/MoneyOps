@@ -2,20 +2,22 @@
 Pinecone Vector Store Integration for MoneyOps.
 Provides persistent agent memory and RAG capabilities.
 """
-import os
 import json
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+from dataclasses import dataclass
 
 from pinecone import Pinecone, ServerlessSpec
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Pinecone config
-PINECONE_API_KEY = "pcsk_27rmTB_31CQnh7Gfw72C2aPFmRaxAfqZSb94dt47gjgA4kWkMo5eRY651bEAkSfLBaJZFM"
-PINECONE_INDEX_NAME = "moneyops-agent-memory"
-PINECONE_HOST = "https://moneyops-9tizmhe.svc.aped-4627-b74a.pinecone.io"
+# Pinecone config — loaded from app.config.settings (which reads root .env)
+from app.config import settings as _cfg
+
+PINECONE_API_KEY = _cfg.PINECONE_API_KEY
+PINECONE_INDEX_NAME = _cfg.PINECONE_INDEX_NAME
+PINECONE_HOST = _cfg.PINECONE_HOST
 
 # Namespaces for different data types
 NAMESPACE_COMPLIANCE = "compliance-rules"    # GST rules, tax regulations
@@ -30,10 +32,12 @@ class PineconeManager:
     Uses llama-text-embed-v2 (hosted by Pinecone) for embeddings.
     """
 
-    def __init__(self):
-        self.pc = Pinecone(api_key=PINECONE_API_KEY)
-        self.index_name = PINECONE_INDEX_NAME
-        self.host = PINECONE_HOST
+    def __init__(self, api_key: Optional[str] = None,
+                 index_name: Optional[str] = None,
+                 host: Optional[str] = None):
+        self.pc = Pinecone(api_key=api_key or PINECONE_API_KEY)
+        self.index_name = index_name or PINECONE_INDEX_NAME
+        self.host = host or PINECONE_HOST
         self._ensure_index_exists()
         self.index = self.pc.Index(self.index_name, host=self.host)
         logger.info("pinecone_initialized", index=self.index_name)
@@ -67,14 +71,22 @@ class PineconeManager:
         """
         Store a memory record in Pinecone.
         Pinecone auto-generates embeddings using llama-text-embed-v2.
+        Metadata values must be strings, numbers, booleans, or lists of strings.
         """
         try:
-            record = {
+            record: Dict[str, Any] = {
                 "id": record_id,
                 "text": text,
             }
+            # Flatten metadata into top-level record (Pinecone v9+ does not support nested metadata)
             if metadata:
-                record["metadata"] = metadata
+                for k, v in metadata.items():
+                    if isinstance(v, (str, int, float, bool)):
+                        record[k] = v
+                    elif isinstance(v, list):
+                        record[k] = [str(x) for x in v]
+                    else:
+                        record[k] = str(v)
             
             self.index.upsert_records(
                 namespace=namespace,
@@ -103,27 +115,27 @@ class PineconeManager:
         Pinecone auto-converts query to vector using llama-text-embed-v2.
         """
         try:
-            search_params = {
+            search_kwargs = {
+                "namespace": namespace,
                 "inputs": {"text": query},
                 "top_k": top_k,
             }
             if filter:
-                search_params["filter"] = filter
+                search_kwargs["filter"] = filter
             
-            results = self.index.search(
-                namespace=namespace,
-                query=search_params
-            )
+            results = self.index.search(**search_kwargs)
             
-            # Parse results
+            # Parse results — Pinecone v9+ returns SearchRecordsResponse
             matches = []
-            if hasattr(results, 'result') and results.result.hits:
+            if hasattr(results, 'result') and hasattr(results.result, 'hits'):
                 for hit in results.result.hits:
+                    fields = hit.fields if hasattr(hit, 'fields') else {}
+                    text = fields.pop("text", "") if isinstance(fields, dict) else ""
                     matches.append({
                         "id": hit.id,
                         "score": hit.score,
-                        "text": hit.fields.get("text", ""),
-                        "metadata": hit.fields.get("metadata", {}),
+                        "text": text,
+                        "metadata": fields,  # remaining fields are metadata
                     })
             
             logger.info(

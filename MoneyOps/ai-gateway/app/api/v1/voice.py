@@ -6,6 +6,9 @@ Processes voice input via moneyops_agent — no classify, no route, no entity ex
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from typing import Dict, Any, List, Optional
+from enum import Enum
+from dataclasses import dataclass, field
+import time
 import uuid
 
 from app.voice_processor import voice_processor, VoiceContext
@@ -108,7 +111,7 @@ async def process_voice(request: VoiceProcessRequest, fastapi_request: Request):
             user_id=request.user_id,
             org_uuid=request.org_id,
             business_id=str(resolved_business_id),
-            clerk_org_id=request.org_id,
+            user_org_id=request.org_id,
             raw_text=request.text,
             history=request.conversation_history,
         )
@@ -195,14 +198,14 @@ async def process_voice_dialog_response(request: VoiceDialogResponseRequest):
             if fields.get("notes") is not None:
                 draft["notes"] = str(fields.get("notes")).strip()
             if fields.get("invoice_items_text") is not None:
-                from app.agents.moneyops_agent import _parse_invoice_items_text
+                from app.agents.voice_helpers import _parse_invoice_items_text
                 parsed_items = _parse_invoice_items_text(str(fields.get("invoice_items_text") or ""))
                 if parsed_items:
                     draft["line_items"] = parsed_items
 
             session.invoice_draft_data = draft
             session_manager.save_session(session)
-            from app.agents.moneyops_agent import _build_invoice_preview_dialog_ui_event
+            from app.agents.voice_helpers import _build_invoice_preview_dialog_ui_event
             return {
                 "success": True,
                 "message": "Invoice draft updated. You can keep editing it or continue by voice.",
@@ -236,7 +239,7 @@ async def process_voice_dialog_response(request: VoiceDialogResponseRequest):
 
             session.client_draft = draft
             session_manager.save_session(session)
-            from app.agents.moneyops_agent import _build_client_form_ui_event
+            from app.agents.voice_helpers import _build_client_form_ui_event
             return {
                 "success": True,
                 "message": "Client draft updated. Your typed corrections will be used for the next voice step.",
@@ -253,3 +256,94 @@ async def process_voice_dialog_response(request: VoiceDialogResponseRequest):
             "success": False,
             "message": "I couldn't update that draft right now.",
         }
+
+
+class InvoiceStage(str, Enum):
+    COLLECT_CLIENT = "COLLECT_CLIENT"
+    COLLECT_AMOUNT = "COLLECT_AMOUNT"
+    COLLECT_DUE_DATE = "COLLECT_DUE_DATE"
+    CONFIRMATION = "CONFIRMATION"
+    EXECUTED = "EXECUTED"
+
+
+@dataclass
+class BaseDraftContext:
+    intent_value: str
+    stage_attempt_count: int = 0
+    last_question_asked: Optional[str] = None
+    failed_turn_count: int = 0
+    created_at: float = field(default_factory=time.time)
+    updated_at: float = field(default_factory=time.time)
+
+
+@dataclass
+class InvoiceDraft(BaseDraftContext):
+    stage: InvoiceStage = InvoiceStage.COLLECT_CLIENT
+    eager_validation_done: bool = False
+    client_name: Optional[str] = None
+    client_id: Optional[str] = None
+    amount: Optional[float] = None
+    due_date: Optional[str] = None
+    gst_percent: Optional[float] = None
+    line_items: list = field(default_factory=list)
+
+    def update(self, data: dict):
+        if "client_name" in data:
+            self.client_name = data["client_name"]
+        if "client_id" in data:
+            self.client_id = data["client_id"]
+        if "amount" in data:
+            self.amount = data["amount"]
+        if "due_date" in data:
+            self.due_date = data["due_date"]
+        if "gst_percent" in data:
+            self.gst_percent = data["gst_percent"]
+        if "line_items" in data:
+            self.line_items = data["line_items"]
+        self._advance_stage()
+        self.updated_at = time.time()
+
+    def _advance_stage(self):
+        if self.stage == InvoiceStage.COLLECT_CLIENT and self.client_name:
+            self.stage = InvoiceStage.COLLECT_AMOUNT
+        if self.stage == InvoiceStage.COLLECT_AMOUNT and self.amount is not None:
+            self.stage = InvoiceStage.COLLECT_DUE_DATE
+        if self.stage == InvoiceStage.COLLECT_DUE_DATE and self.due_date:
+            self.stage = InvoiceStage.CONFIRMATION
+
+    def is_complete_for_execution(self) -> bool:
+        return all([self.client_name, self.amount is not None, self.due_date])
+
+
+@dataclass
+class ClientDraft(BaseDraftContext):
+    onboarding_verified: bool = False
+    presented_client_list: list = field(default_factory=list)
+
+
+def sanitize_history(history: list) -> list:
+    clean = []
+    for turn in history:
+        if isinstance(turn, dict):
+            if turn.get("intent") == "ERROR":
+                continue
+            content = str(turn.get("content", turn.get("message", "")))
+            if "trouble" in content.lower():
+                continue
+        clean.append(turn)
+    return clean[-10:]
+
+
+def should_break_multi_turn_lock(current_intent: str, new_intent: str, new_confidence: float, current_stage: str) -> bool:
+    if current_stage in ("CONFIRMATION", "EXECUTED"):
+        return False
+    if new_confidence < 0.85:
+        return False
+    break_pairs = {
+        "INVOICE_CREATE": "BALANCE_CHECK",
+        "CLIENT_CREATE": "INVOICE_CREATE",
+    }
+    expected = break_pairs.get(current_intent)
+    if expected and new_intent == expected:
+        return True
+    return False
