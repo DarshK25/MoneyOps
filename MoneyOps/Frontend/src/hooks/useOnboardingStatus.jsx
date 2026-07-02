@@ -1,9 +1,8 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { useUser } from "@clerk/clerk-react";
+import { api } from "@/lib/api";
+import { useUser } from "@/contexts/AuthContext";
 
 const OnboardingContext = createContext(null);
-
-const BACKEND_URL = ""; // Use Vite proxy via relative paths
 
 export function OnboardingProvider({ children }) {
     const { user, isLoaded } = useUser();
@@ -20,16 +19,7 @@ export function OnboardingProvider({ children }) {
         }
         setLoading(true);
         try {
-            const res = await fetch(
-                `${BACKEND_URL}/api/onboarding/status?clerkId=${user.id}`,
-                {
-                    headers: {
-                        "X-User-Id": user.id
-                    }
-                }
-            );
-            if (!res.ok) throw new Error("Status check failed");
-            const json = await res.json();
+            const json = await api.get('/api/onboarding/status', { userId: user.id });
             const data = json.data ?? json;
             setComplete(data.onboardingComplete ?? false);
             setUserId(data.userId ?? null);

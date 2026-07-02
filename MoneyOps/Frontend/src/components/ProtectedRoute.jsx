@@ -1,5 +1,5 @@
 import { Navigate, useLocation } from "react-router-dom";
-import { useAuth } from "@clerk/clerk-react";
+import { useAuth } from "@/contexts/AuthContext";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 
 /**
@@ -18,7 +18,7 @@ export function ProtectedRoute({ children }) {
 
     const isOnboardingRoute = location.pathname === "/onboarding";
 
-    // ── 1. Clerk not yet loaded ────────────────────────────────────────────────
+    // ── 1. Auth not yet loaded ────────────────────────────────────────────────
     if (!isLoaded) {
         return <Spinner />;
     }

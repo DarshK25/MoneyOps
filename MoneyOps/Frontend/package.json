@@ -10,7 +10,6 @@
         "preview": "vite preview"
     },
     "dependencies": {
-        "@clerk/clerk-react": "latest",
         "@livekit/components-react": "^2.9.19",
         "@livekit/components-styles": "^1.2.0",
         "@number-flow/react": "^0.6.0",

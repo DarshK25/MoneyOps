@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
-import { useAuth } from "@clerk/clerk-react";
+import { api } from "@/lib/api";
 import { MarketResearchDashboard } from "@/components/MarketResearchDashboard";
-import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 
 export default function MarketResearchPage() {
     const [isHydrated, setIsHydrated] = useState(false);
     const [loading, setLoading] = useState(true);
     const [data, setData] = useState(null);
-    const { orgId, userId } = useAuth();
+    const { orgId, userId } = useOnboardingStatus();
 
     useEffect(() => {
         setIsHydrated(true);
@@ -18,22 +18,10 @@ export default function MarketResearchPage() {
     async function fetchMarketData() {
         setLoading(true);
         try {
-            // Directly fetch market intelligence from AI Gateway using the Clerk orgId.
-            // Our backend adapter resolves the orgId to an internal UUID automatically.
-            const res = await fetch(
-                `http://localhost:8001/api/v1/market/intelligence?org_uuid=${orgId}&business_id=1&user_id=${userId || ""}`,
-                { headers: { "Content-Type": "application/json" } }
-            );
-            const json = await res.json();
-            if (json.success) {
-                setData(json);
-                if (json.cached) {
-                    toast.info("Showing cached market data", { duration: 2000 });
-                }
-            }
-        } catch (error) {
-            console.error(error);
-            toast.error("Failed to load market data");
+            const json = await api.get("/api/v1/market/intelligence", { org_uuid: orgId, business_id: 1, user_id: userId || "" });
+            setData(json);
+        } catch {
+            setData({ data: [], highlights: [] });
         } finally {
             setLoading(false);
         }

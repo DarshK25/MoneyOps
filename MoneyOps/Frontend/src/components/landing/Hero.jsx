@@ -139,7 +139,7 @@ export default function Hero() {
                 >
                     <Link to="/analytics">
                         <button
-                            className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold transition-all hover:scale-105 hover:brightness-110"
+                            className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold transition-all hover:scale-105"
                             style={{ backgroundColor: "#4CBB17", color: "#000" }}
                         >
                             Get Started Free <ArrowRight className="w-4 h-4" />

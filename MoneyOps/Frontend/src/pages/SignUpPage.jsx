@@ -1,15 +1,5 @@
-import { SignUp } from "@clerk/clerk-react";
+import { SignUp } from "@/components/auth/SignUp";
 
 export default function SignUpPage() {
-    return (
-        <div className="flex min-h-screen items-center justify-center bg-muted/30">
-            <SignUp
-                routing="path"
-                path="/sign-up"
-                signInUrl="/sign-in"
-                afterSignUpUrl="/analytics"
-                redirectUrl="/analytics"
-            />
-        </div>
-    );
+    return <SignUp redirectUrl="/analytics" />;
 }

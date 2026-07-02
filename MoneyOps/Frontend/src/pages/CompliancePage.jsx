@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ComplianceDashboard } from "@/components/ComplianceDashboard";
 import { Loader2 } from "lucide-react";
-import { useAuth } from "@clerk/clerk-react";
+import { api } from "@/lib/api";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 import { useSearchParams } from "react-router-dom";
 
@@ -187,7 +187,6 @@ function deriveComplianceFallback(invoices, transactions, currentGstSummary = {}
 
 export default function CompliancePage() {
     const [searchParams] = useSearchParams();
-    const { getToken } = useAuth();
     const { userId: internalUserId, orgId: internalOrgId, loading: onboardingLoading } = useOnboardingStatus();
     const [isHydrated, setIsHydrated] = useState(false);
     const [businessId] = useState(1);
@@ -203,42 +202,17 @@ export default function CompliancePage() {
 
         setLoading(true);
         try {
-            const token = await getToken();
-            const headers = {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${token}`,
-                "X-User-Id": internalUserId,
-                "X-Org-Id": internalOrgId,
-            };
-            const responses = await Promise.allSettled([
-                fetch(`/api/compliance/status?businessId=${businessId}&userId=${internalUserId}`, { headers }),
-                fetch(`/api/compliance/gst/summary`, { headers }),
-                fetch(`/api/compliance/tds/obligations`, { headers }),
-                fetch(`/api/compliance/audit/readiness`, { headers }),
-                fetch(`/api/compliance/issues`, { headers }),
-                fetch(`/api/invoices`, { headers }),
-                fetch(`/api/transactions`, { headers }),
-            ]);
-            const [statusResult, gstResult, tdsResult, auditResult, issuesResult, invoicesResult, transactionsResult] = responses;
-
-            const readJson = async (result, fallback) => {
-                if (result.status !== "fulfilled" || !result.value.ok) {
-                    return fallback;
-                }
-                return result.value.json();
-            };
-
             const [statusData, gstData, tdsData, auditData, issuesData, invoicesData, transactionsData] = await Promise.all([
-                readJson(statusResult, {}),
-                readJson(gstResult, {}),
-                readJson(tdsResult, {}),
-                readJson(auditResult, {}),
-                readJson(issuesResult, []),
-                readJson(invoicesResult, []),
-                readJson(transactionsResult, []),
+                api.get(`/api/compliance/status`, { businessId, userId: internalUserId }).catch(() => ({})),
+                api.get("/api/compliance/gst/summary").catch(() => ({})),
+                api.get("/api/compliance/tds/obligations").catch(() => ({})),
+                api.get("/api/compliance/audit/readiness").catch(() => ({})),
+                api.get("/api/compliance/issues").catch(() => []),
+                api.get("/api/invoices").catch(() => []),
+                api.get("/api/transactions").catch(() => []),
             ]);
 
-            const normalizedInvoices = Array.isArray(invoicesData) ? invoicesData : invoicesData?.data || [];
+            const normalizedInvoices = Array.isArray(invoicesData) ? invoicesData : invoicesData?.content || invoicesData?.data || [];
             const normalizedTransactions = Array.isArray(transactionsData) ? transactionsData : transactionsData?.transactions || [];
             const fallback = deriveComplianceFallback(normalizedInvoices, normalizedTransactions, gstData, tdsData);
             const finalGstSummary = (!Array.isArray(gstData.invoiceBreakdown) || gstData.invoiceBreakdown.length === 0 || !Array.isArray(gstData.expenseBreakdown) || gstData.expenseBreakdown.length === 0)

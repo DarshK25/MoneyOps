@@ -1,2 +1,3 @@
-export const API_BASE = ""; // Relative path works because of Vite proxy
-// If proxy is failing, change to "http://localhost:8000"
+// Re-export the single API client from lib/api
+// This file kept for backward compatibility with existing imports
+export { api as apiClient } from "@/lib/api";

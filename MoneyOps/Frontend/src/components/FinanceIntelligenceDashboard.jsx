@@ -4,7 +4,8 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     PieChart as RePieChart, Pie, Cell,
 } from "recharts";
-import { useAuth, useUser } from "@clerk/clerk-react";
+import { api } from "@/lib/api";
+import { useUser } from "@/contexts/AuthContext";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 import { InteractiveTrendCard } from "@/components/ui/trend-card";
 
@@ -49,7 +50,6 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 export function FinanceIntelligenceDashboard({ businessId: initialBusinessId }) {
-    const { getToken } = useAuth();
     const { user } = useUser();
     const { orgId } = useOnboardingStatus();
     
@@ -84,44 +84,18 @@ export function FinanceIntelligenceDashboard({ businessId: initialBusinessId }) 
     async function fetchFinanceData() {
         setRefreshing(true);
         try {
-            const token = await getToken();
-            const [metricsRes, budgetRes, insightsRes, ledgerRes] = await Promise.all([
-                fetch(`/api/finance-intelligence/metrics?businessId=${businessId}`, {
-                    headers: {
-                        "Authorization": `Bearer ${token}`,
-                        "X-User-Id": user?.id,
-                        "X-Org-Id": orgId
-                    }
-                }),
-                fetch(`/api/finance-intelligence/budget?businessId=${businessId}`, {
-                    headers: {
-                        "Authorization": `Bearer ${token}`,
-                        "X-User-Id": user?.id,
-                        "X-Org-Id": orgId
-                    }
-                }),
-                fetch(`/api/finance-intelligence/insights?businessId=${businessId}`, {
-                    headers: {
-                        "Authorization": `Bearer ${token}`,
-                        "X-User-Id": user?.id,
-                        "X-Org-Id": orgId
-                    }
-                }),
-                fetch(`/api/finance-intelligence/ledger?businessId=${businessId}`, {
-                    headers: {
-                        "Authorization": `Bearer ${token}`,
-                        "X-User-Id": user?.id,
-                        "X-Org-Id": orgId
-                    }
-                }),
+            const [metricsData, budgets, insights, ledger] = await Promise.all([
+                api.get("/api/finance-intelligence/metrics", { businessId }).catch(() => null),
+                api.get("/api/finance-intelligence/budget", { businessId }).catch(() => []),
+                api.get("/api/finance-intelligence/insights", { businessId }).catch(() => []),
+                api.get("/api/finance-intelligence/ledger", { businessId }).catch(() => []),
             ]);
 
-            if (metricsRes.ok) {
-                const data = await metricsRes.json();
-                const totalRevenue = data.revenue || 0;
-                const netProfit = data.netProfit || 0;
-                const expenses = data.expenses || 0;
-                const healthScore = totalRevenue > 0 ? Math.min(100, Math.max(0, Math.round(70 + (data.collectionRate / 2) + (netProfit > 0 ? 10 : -10)))) : 85; 
+            if (metricsData) {
+                const totalRevenue = metricsData.revenue || 0;
+                const netProfit = metricsData.netProfit || 0;
+                const expenses = metricsData.expenses || 0;
+                const healthScore = totalRevenue > 0 ? Math.min(100, Math.max(0, Math.round(70 + (metricsData.collectionRate / 2) + (netProfit > 0 ? 10 : -10)))) : 85; 
 
                 setMetrics({
                     healthScore,
@@ -133,15 +107,13 @@ export function FinanceIntelligenceDashboard({ businessId: initialBusinessId }) 
                     netProfit,
                     grossMargin: totalRevenue > 0 ? ((totalRevenue - (expenses * 0.4)) / totalRevenue) * 100 : 0,
                     netMargin: totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0,
-                    gstPayable: data.overdueAmount * 0.18,
-                    tdsPayable: data.expenses * 0.1,
+                    gstPayable: metricsData.overdueAmount * 0.18,
+                    tdsPayable: metricsData.expenses * 0.1,
                 });
             } else setMetrics({ healthScore: 85, healthRating: "Healthy", totalRevenue: 5200000, netCashflow: 1200000, gstPayable: 450000, tdsPayable: 120000, grossProfit: 3500000, netProfit: 1800000, grossMargin: 67.3, netMargin: 34.6 });
 
-            if (budgetRes.ok) { 
-                const d = await budgetRes.json();
-                const items = d.items || [];
-                setBudgets(items.map(b => ({
+            if (budgets.length > 0) {
+                setBudgets(budgets.map(b => ({
                     ...b,
                     variancePercent: Number(b.budgeted) > 0 ? (b.variance / b.budgeted) * 100 : null,
                     status: String(b.status || "").toLowerCase() === "no_budget"
@@ -155,10 +127,9 @@ export function FinanceIntelligenceDashboard({ businessId: initialBusinessId }) 
                 { category: "Software", budgeted: 300000, actual: 295000, variance: 5000, variancePercent: -1.6, status: "on-track" },
             ]);
 
-            if (insightsRes.ok) {
-                const d = await insightsRes.json();
-                const items = Array.isArray(d) ? d : (d.insights || []);
-                setInsights(items.map((ins, i) => ({
+            const insightItems = Array.isArray(insights) ? insights : (insights?.insights || []);
+            if (insightItems.length > 0) {
+                setInsights(insightItems.map((ins, i) => ({
                     id: String(i),
                     type: ins.type || "alert",
                     title: ins.title,
@@ -169,22 +140,13 @@ export function FinanceIntelligenceDashboard({ businessId: initialBusinessId }) 
                 })));
             } else {
                 setInsights([
-                    {
-                        id: "1",
-                        type: "suggestion",
-                        title: "Tax Optimization",
-                        message: "Review GST input credits and deductible expenses before month close.",
-                        priority: "medium",
-                        actionable: true,
-                        action: "View Details"
-                    }
+                    { id: "1", type: "suggestion", title: "Tax Optimization", message: "Review GST input credits and deductible expenses before month close.", priority: "medium", actionable: true, action: "View Details" }
                 ]);
             }
 
-            if (ledgerRes.ok) { 
-                const d = await ledgerRes.json(); 
-                const entries = d.entries || [];
-                setLedgerEntries(entries.map((e) => ({
+            const ledgerData = Array.isArray(ledger) ? ledger : (ledger?.entries || []);
+            if (ledgerData.length > 0) {
+                setLedgerEntries(ledgerData.map((e) => ({
                     particular: e.description || e.category || "Transaction",
                     date: e.date,
                     debit: e.type === "EXPENSE" ? e.amount : 0,
@@ -219,24 +181,11 @@ export function FinanceIntelligenceDashboard({ businessId: initialBusinessId }) 
         };
 
         try {
-            const token = await getToken();
-            const res = await fetch("/api/budgets", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${token}`,
-                    "X-User-Id": user?.id,
-                    "X-Org-Id": orgId
-                },
-                body: JSON.stringify(payload)
-            });
-
-            if (res.ok) {
-                setShowBudgetModal(false);
-                setEditingBudget(null);
-                setBudgetForm({ category: "", amount: "", notes: "" });
-                fetchFinanceData();
-            }
+            await api.post("/api/budgets", payload);
+            setShowBudgetModal(false);
+            setEditingBudget(null);
+            setBudgetForm({ category: "", amount: "", notes: "" });
+            fetchFinanceData();
         } catch (error) {
             console.error("Failed to save budget:", error);
         }
@@ -245,19 +194,13 @@ export function FinanceIntelligenceDashboard({ businessId: initialBusinessId }) 
     async function deleteBudget(category) {
         const now = new Date();
         try {
-            const token = await getToken();
-            const res = await fetch(`/api/budgets?orgId=${orgId}&year=${now.getFullYear()}&month=${now.getMonth() + 1}&category=${encodeURIComponent(category)}`, {
-                method: "DELETE",
-                headers: {
-                    "Authorization": `Bearer ${token}`,
-                    "X-User-Id": user?.id,
-                    "X-Org-Id": orgId
-                }
+            await api.delete("/api/budgets", {
+                orgId,
+                year: now.getFullYear(),
+                month: now.getMonth() + 1,
+                category
             });
-
-            if (res.ok) {
-                fetchFinanceData();
-            }
+            fetchFinanceData();
         } catch (error) {
             console.error("Failed to delete budget:", error);
         }

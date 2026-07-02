@@ -9,7 +9,7 @@ import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { useAuth } from "@clerk/clerk-react";
+import { api } from "@/lib/api";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 
 const PRIORITY_BADGE = {
@@ -69,7 +69,6 @@ function formatDisplayDate(value) {
 }
 
 export function ComplianceDashboard({ businessId, data, onRefresh, initialTab = "overview" }) {
-    const { getToken } = useAuth();
     const navigate = useNavigate();
     const { userId: internalUserId, orgId: internalOrgId } = useOnboardingStatus();
     const [activeTab, setActiveTab] = useState(initialTab);
@@ -82,16 +81,7 @@ export function ComplianceDashboard({ businessId, data, onRefresh, initialTab = 
         const fetchDeadlines = async () => {
             if (!businessId || !internalUserId || !internalOrgId) return;
             try {
-                const token = await getToken();
-                const res = await fetch(`/api/deadlines?businessId=${businessId}`, {
-                    headers: {
-                        "Authorization": `Bearer ${token}`,
-                        "X-User-Id": internalUserId,
-                        "X-Org-Id": internalOrgId,
-                    },
-                });
-                if (!res.ok) throw new Error("Failed to fetch deadlines");
-                const json = await res.json();
+                const json = await api.get("/api/deadlines", { businessId });
                 setDeadlines(json.deadlines || []);
             } catch (error) {
                 console.error(error);
@@ -100,7 +90,7 @@ export function ComplianceDashboard({ businessId, data, onRefresh, initialTab = 
         };
 
         fetchDeadlines();
-    }, [businessId, internalUserId, internalOrgId, getToken]);
+    }, [businessId, internalUserId, internalOrgId]);
 
     useEffect(() => {
         setActiveTab(initialTab || "overview");
@@ -157,23 +147,12 @@ export function ComplianceDashboard({ businessId, data, onRefresh, initialTab = 
 
     async function onCalculate() {
         try {
-            const token = await getToken();
-            const res = await fetch("/api/tds/calc", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${token}`,
-                    "X-User-Id": internalUserId,
-                    "X-Org-Id": internalOrgId,
-                },
-                body: JSON.stringify({
-                    amount: parseFloat(formData.amount),
-                    category: formData.category,
-                    isIndividual: formData.isIndividual === "true",
-                }),
+            const result = await api.post("/api/tds/calc", {
+                amount: parseFloat(formData.amount),
+                category: formData.category,
+                isIndividual: formData.isIndividual === "true",
             });
-            if (!res.ok) throw new Error("Calculation failed");
-            setCalcResult(await res.json());
+            setCalcResult(result);
             toast.success("TDS calculated successfully");
         } catch (error) {
             console.error(error);

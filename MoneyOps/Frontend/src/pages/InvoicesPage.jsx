@@ -22,7 +22,8 @@ import {
     Trash2
 } from "lucide-react";
 import { toast } from "sonner";
-import { useAuth, useUser } from "@clerk/clerk-react";
+import { api } from "@/lib/api";
+import { useUser } from "@/contexts/AuthContext";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 
 const STATUS_STYLES = {
@@ -46,7 +47,6 @@ const STATUS_BADGE_CLASS = (status) => {
 const TABS = ["all", "draft", "sent", "paid", "overdue"];
 
 export default function InvoicesPage() {
-    const { getToken } = useAuth();
     const { user } = useUser();
     const { userId: internalUserId, orgId: internalOrgId } = useOnboardingStatus();
     const navigate = useNavigate();
@@ -65,18 +65,8 @@ export default function InvoicesPage() {
     const fetchInvoices = async () => {
         try {
             setLoading(true);
-            const token = await getToken();
-            const res = await fetch("/api/invoices", {
-                headers: {
-                    "Authorization": `Bearer ${token}`,
-                    "X-User-Id": internalUserId,
-                    "X-Org-Id": internalOrgId
-                }
-            });
-            if (!res.ok) throw new Error("Failed to fetch");
-            const data = await res.json();
-            // Backend returns List<InvoiceDto> directly
-            setInvoices(Array.isArray(data) ? data : []);
+            const data = await api.get("/api/invoices");
+            setInvoices(Array.isArray(data) ? data : data?.content || []);
         } catch {
             toast.error("Failed to load invoices");
             setInvoices([]);
@@ -96,16 +86,7 @@ export default function InvoicesPage() {
 
         setActionLoading(id);
         try {
-            const token = await getToken();
-            const res = await fetch(`/api/invoices/${id}`, {
-                method: "DELETE",
-                headers: {
-                    "Authorization": `Bearer ${token}`,
-                    "X-User-Id": internalUserId,
-                    "X-Org-Id": internalOrgId
-                }
-            });
-            if (!res.ok) throw new Error("Failed to delete invoice");
+            await api.delete(`/api/invoices/${id}`);
             toast.success("Invoice deleted");
             fetchInvoices();
         } catch (error) {
@@ -127,20 +108,8 @@ export default function InvoicesPage() {
         }
         setActionLoading(invoice.id || invoice._id);
         try {
-            const token = await getToken();
             const id = invoice.id || invoice._id;
-            const res = await fetch(`/api/invoices/${id}/send`, {
-                method: "PATCH",
-                headers: {
-                    "Authorization": `Bearer ${token}`,
-                    "X-User-Id": internalUserId,
-                    "X-Org-Id": internalOrgId
-                }
-            });
-            if (!res.ok) {
-                const errorData = await res.json().catch(() => null);
-                throw new Error(errorData?.message || "Failed to send invoice");
-            }
+            await api.patch(`/api/invoices/${id}/send`);
             toast.success(normalizedStatus === "sent"
                 ? `Invoice re-sent to ${invoice.clientEmail}`
                 : `Invoice emailed to ${invoice.clientEmail}`);

@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, TrendingUp } from "lucide-react";
+import { Menu, X, TrendingUp, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
-import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@clerk/clerk-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 const navItems = [
     { name: "Features", href: "#features" },
@@ -30,6 +30,7 @@ function MoneyOpsLogo({ size = 24 }) {
 export default function Navigation() {
     const [isScrolled, setIsScrolled] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const { isSignedIn, signOut } = useAuth();
 
     useEffect(() => {
         const handleScroll = () => setIsScrolled(window.scrollY > 20);
@@ -70,26 +71,35 @@ export default function Navigation() {
 
                 {/* Desktop CTA */}
                 <div className="hidden md:flex items-center space-x-3">
-                    <SignedOut>
-                        <SignInButton mode="modal">
-                            <button className="text-sm font-medium text-[#A0A0A0] hover:text-white transition-colors px-3 py-1.5">
-                                Sign In
+                    {!isSignedIn ? (
+                        <>
+                            <Link to="/sign-in">
+                                <button className="text-sm font-medium text-[#A0A0A0] hover:text-white transition-colors px-3 py-1.5">
+                                    Sign In
+                                </button>
+                            </Link>
+                            <Link to="/sign-up">
+                                <button className="text-sm font-semibold bg-[#4CBB17] text-black px-4 py-1.5 rounded-lg hover:bg-[#3da314] transition-colors">
+                                    Get Started
+                                </button>
+                            </Link>
+                        </>
+                    ) : (
+                        <>
+                            <Link to="/analytics">
+                                <button className="text-sm font-semibold bg-[#4CBB17] text-black px-4 py-1.5 rounded-lg hover:bg-[#3da314] transition-colors">
+                                    Dashboard
+                                </button>
+                            </Link>
+                            <button
+                                onClick={signOut}
+                                className="p-2 rounded-full bg-[#1A1A1A] hover:bg-[#2A2A2A] transition-colors"
+                                title="Sign Out"
+                            >
+                                <User className="w-5 h-5 text-white" />
                             </button>
-                        </SignInButton>
-                        <SignUpButton mode="modal">
-                            <button className="text-sm font-semibold bg-[#4CBB17] text-black px-4 py-1.5 rounded-lg hover:bg-[#3da314] transition-colors">
-                                Get Started
-                            </button>
-                        </SignUpButton>
-                    </SignedOut>
-                    <SignedIn>
-                        <Link to="/analytics">
-                            <button className="text-sm font-semibold bg-[#4CBB17] text-black px-4 py-1.5 rounded-lg hover:bg-[#3da314] transition-colors">
-                                Dashboard
-                            </button>
-                        </Link>
-                        <UserButton afterSignOutUrl="/" />
-                    </SignedIn>
+                        </>
+                    )}
                 </div>
 
                 {/* Mobile Hamburger */}
@@ -122,22 +132,28 @@ export default function Navigation() {
                             </a>
                         ))}
                         <div className="flex flex-col gap-2 w-full pt-2">
-                            <SignedOut>
-                                <SignInButton mode="modal">
-                                    <button className="w-full text-sm text-[#A0A0A0] border border-[#2A2A2A] rounded-lg py-2">Sign In</button>
-                                </SignInButton>
-                                <SignUpButton mode="modal">
-                                    <button className="w-full text-sm font-semibold bg-[#4CBB17] text-black rounded-lg py-2">Get Started</button>
-                                </SignUpButton>
-                            </SignedOut>
-                            <SignedIn>
-                                <Link to="/analytics" className="w-full">
-                                    <button className="w-full text-sm font-semibold bg-[#4CBB17] text-black rounded-lg py-2">Dashboard</button>
-                                </Link>
-                                <div className="flex justify-center">
-                                    <UserButton afterSignOutUrl="/" />
-                                </div>
-                            </SignedIn>
+                            {!isSignedIn ? (
+                                <>
+                                    <Link to="/sign-in" className="w-full">
+                                        <button className="w-full text-sm text-[#A0A0A0] border border-[#2A2A2A] rounded-lg py-2">Sign In</button>
+                                    </Link>
+                                    <Link to="/sign-up" className="w-full">
+                                        <button className="w-full text-sm font-semibold bg-[#4CBB17] text-black rounded-lg py-2">Get Started</button>
+                                    </Link>
+                                </>
+                            ) : (
+                                <>
+                                    <Link to="/analytics" className="w-full">
+                                        <button className="w-full text-sm font-semibold bg-[#4CBB17] text-black rounded-lg py-2">Dashboard</button>
+                                    </Link>
+                                    <button
+                                        onClick={signOut}
+                                        className="w-full text-sm text-[#A0A0A0] border border-[#2A2A2A] rounded-lg py-2"
+                                    >
+                                        Sign Out
+                                    </button>
+                                </>
+                            )}
                         </div>
                     </motion.div>
                 )}

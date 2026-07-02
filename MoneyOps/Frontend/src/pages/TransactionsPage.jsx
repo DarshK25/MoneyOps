@@ -21,7 +21,7 @@ import {
     Lightbulb,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useAuth } from "@clerk/clerk-react";
+import { api } from "@/lib/api";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 
 const CATEGORIES = [
@@ -83,7 +83,6 @@ function getTransactionCategoryDisplay(txn) {
 }
 
 export default function TransactionsPage() {
-    const { getToken } = useAuth();
     const { userId: internalUserId, orgId: internalOrgId } = useOnboardingStatus();
     
     const [transactions, setTransactions] = useState([]);
@@ -121,36 +120,20 @@ export default function TransactionsPage() {
     const fetchTransactions = async () => {
         try {
             setLoading(true);
-            const token = await getToken();
-            const headers = {
-                "Authorization": `Bearer ${token}`,
-                "X-User-Id": internalUserId,
-                "X-Org-Id": internalOrgId,
-            };
 
-            const [txRes, invoiceRes, orgRes] = await Promise.all([
-                fetch("/api/transactions", { headers }),
-                fetch("/api/invoices", { headers }),
-                fetch("/api/org/my", { headers }),
+            const [txData, invoiceData, orgData] = await Promise.all([
+                api.get("/api/transactions"),
+                api.get("/api/invoices").catch(() => ({ content: [], data: [] })),
+                api.get("/api/org/my").catch(() => ({ data: null })),
             ]);
 
-            if (!txRes.ok) throw new Error("Failed to fetch transactions");
-
-            const txData = await txRes.json();
-            const txns = Array.isArray(txData) ? txData : txData.transactions || [];
+            const txns = Array.isArray(txData) ? txData : txData?.content || txData.transactions || [];
             setTransactions(txns);
 
-            if (invoiceRes.ok) {
-                const invoiceData = await invoiceRes.json();
-                setInvoices(Array.isArray(invoiceData) ? invoiceData : invoiceData.data || []);
-            } else {
-                setInvoices([]);
-            }
+            const invs = Array.isArray(invoiceData) ? invoiceData : invoiceData?.content || invoiceData?.data || [];
+            setInvoices(invs);
 
-            if (orgRes.ok) {
-                const orgData = await orgRes.json();
-                setOrgName(orgData?.data?.legalName || "MoneyOps Workspace");
-            }
+            setOrgName(orgData?.data?.legalName || "MoneyOps Workspace");
         } catch (err) {
             console.error("Failed to fetch transactions", err);
             toast.error("Failed to load transactions");
@@ -239,7 +222,6 @@ export default function TransactionsPage() {
         
         try {
             setIsSavingTransaction(true);
-            const token = await getToken();
             const payload = {
                 ...newTransaction,
                 amount: parseFloat(newTransaction.amount),
@@ -252,25 +234,11 @@ export default function TransactionsPage() {
                 itcEligible: newTransaction.type === "expense" ? Boolean(newTransaction.itcEligible) : false,
                 hasReceipt: newTransaction.type === "expense" ? Boolean(newTransaction.hasReceipt) : false,
             };
-            const res = await fetch("/api/transactions", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${token}`,
-                    "X-User-Id": internalUserId,
-                    "X-Org-Id": internalOrgId,
-                },
-                body: JSON.stringify({
-                    ...payload,
-                    idempotencyKey: buildTransactionIdempotencyKey(payload),
-                }),
+            await api.post("/api/transactions", {
+                ...payload,
+                idempotencyKey: buildTransactionIdempotencyKey(payload),
             });
-            
-            if (res.ok) {
-                toast.success("Transaction added successfully");
-            } else {
-                throw new Error("Failed to add transaction");
-            }
+            toast.success("Transaction added successfully");
             
             setIsAddOpen(false);
             setNewTransaction({

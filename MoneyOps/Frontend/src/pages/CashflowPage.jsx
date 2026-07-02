@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { TrendingUp, TrendingDown, AlertTriangle, Calendar, Loader2 } from "lucide-react";
-import { useAuth, useUser } from "@clerk/clerk-react";
+import { api } from "@/lib/api";
+import { useUser } from "@/contexts/AuthContext";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 
 const FORECAST_WINDOWS = [7, 30, 90];
@@ -35,7 +36,6 @@ function daysUntil(value) {
 }
 
 export default function CashflowPage() {
-    const { getToken } = useAuth();
     const { user } = useUser();
     const { orgId } = useOnboardingStatus();
     const [loading, setLoading] = useState(true);
@@ -54,27 +54,16 @@ export default function CashflowPage() {
     async function fetchCashFlow() {
         setLoading(true);
         try {
-            const token = await getToken();
-            const headers = {
-                Authorization: `Bearer ${token}`,
-                "X-User-Id": user?.id,
-                "X-Org-Id": orgId,
-            };
-
-            const [invoicesRes, transactionsRes, metricsRes] = await Promise.all([
-                fetch("/api/invoices", { headers }),
-                fetch("/api/transactions", { headers }),
-                fetch("/api/finance-intelligence/metrics?businessId=1", { headers }),
+            const [invoicesData, transactionsData, metricsData] = await Promise.all([
+                api.get("/api/invoices").catch(() => ({ content: [], data: [] })),
+                api.get("/api/transactions").catch(() => ({ content: [], transactions: [] })),
+                api.get("/api/finance-intelligence/metrics", { businessId: 1 }).catch(() => ({})),
             ]);
 
-            const invoicesJson = invoicesRes.ok ? await invoicesRes.json() : [];
-            const transactionsJson = transactionsRes.ok ? await transactionsRes.json() : [];
-            const metricsJson = metricsRes.ok ? await metricsRes.json() : {};
-
             setCashFlowData({
-                invoices: Array.isArray(invoicesJson) ? invoicesJson : invoicesJson.data || [],
-                transactions: Array.isArray(transactionsJson) ? transactionsJson : transactionsJson.content || transactionsJson.transactions || [],
-                metrics: metricsJson || {},
+                invoices: Array.isArray(invoicesData) ? invoicesData : invoicesData.content || invoicesData.data || [],
+                transactions: Array.isArray(transactionsData) ? transactionsData : transactionsData.content || transactionsData.transactions || [],
+                metrics: metricsData || {},
             });
         } finally {
             setLoading(false);
