@@ -75,38 +75,7 @@ logger = get_logger(__name__)
 
 
 # ── Bug 8: Premature Confirmation Guard ───────────────────────────────────────
-FORBIDDEN_PREMATURE_PHRASES = [
-    "invoice created", "invoice sent", "payment recorded",
-    "client added", "all set", "good to go",
-    # Note: "done" and "completed" excluded — too common in collection responses
-]
-
-def premature_confirmation_guard(response_text: str, stage: str) -> str:
-    """
-    If stage is not EXECUTED, check for premature success phrases.
-    Replaces the response with a safe fallback if a forbidden phrase is found.
-    
-    This prevents the voice agent from saying "invoice created" before the backend
-    has actually confirmed creation (Bug 8).
-    """
-    if stage == "EXECUTED":
-        return response_text
-    if stage in {"COLLECTING", "CONFIRMING"}:
-        return response_text
-    if stage == "FAILED":
-        return "I hit a snag there. Could you try again?"
-
-    text_lower = response_text.lower()
-    for phrase in FORBIDDEN_PREMATURE_PHRASES:
-        if phrase in text_lower:
-            logger.error(
-                "premature_confirmation_blocked",
-                phrase=phrase,
-                stage=stage,
-                response_preview=str(response_text)[:100]
-            )
-            return "I am still working on that. One moment."
-    return response_text
+from app.agent.guard import premature_confirmation_guard, FORBIDDEN_PREMATURE_PHRASES
 
 
 # ── Agent ─────────────────────────────────────────────────────────────────────
@@ -324,7 +293,7 @@ async def entrypoint(ctx: JobContext):
                 await session.say("I hit a connection issue. Please try again.")
 
     async def _debounce_timer():
-        """Wait for silence then trigger processing."""
+        """Wait for silence then trigger processing. 600ms / 0.6 seconds."""
         await asyncio.sleep(settings.TURN_DETECTION_DELAY)
         if transcript_buffer:
             combined = " ".join(transcript_buffer)

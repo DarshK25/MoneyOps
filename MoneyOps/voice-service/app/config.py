@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
 
     # AI Gateway
-    AI_GATEWAY_URL: str = "http://localhost:8001"
+    AI_GATEWAY_URL: str = "http://localhost:8005"
     AI_GATEWAY_TIMEOUT: int = 15  # seconds — tighter timeout so failures surface quickly
 
     # Session
