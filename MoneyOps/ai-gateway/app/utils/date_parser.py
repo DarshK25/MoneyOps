@@ -14,6 +14,10 @@ def parse_relative_date(text: str) -> Optional[str]:
     if not text:
         return None
 
+    # ISO date passthrough — check before stripping hyphens
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text.strip()):
+        return text.strip()[:10]
+
     s = re.sub(r"\s+", " ", text.lower().strip().replace("-", " "))
     now = datetime.now()
 

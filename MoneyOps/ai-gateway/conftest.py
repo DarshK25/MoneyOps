@@ -2,7 +2,12 @@
 Pytest configuration for AI Gateway tests
 """
 import os
+import sys
 import pytest
+
+_proj_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _proj_root not in sys.path:
+    sys.path.insert(0, _proj_root)
 
 
 @pytest.fixture(scope="session", autouse=True)

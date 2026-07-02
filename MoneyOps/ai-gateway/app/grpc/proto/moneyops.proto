@@ -31,14 +31,14 @@ message OrgIdRequest {
   string org_id = 1;
 }
 
-message ClerkIdRequest {
-  string clerk_id = 1;
+message UserIdRequest {
+  string user_id = 1;
 }
 
 message Organization {
   string id = 1;
   string name = 2;
-  string clerk_id = 3;
+  string user_id = 3;
   string gst_number = 4;
   string status = 5;
   string created_at = 6;
@@ -252,7 +252,7 @@ message SendCollectionEmailResponse {
 // ==================== Service Definitions ====================
 
 service OrganizationService {
-  rpc GetOnboardingStatus(ClerkIdRequest) returns (GetOnboardingStatusResponse);
+  rpc GetOnboardingStatus(UserIdRequest) returns (GetOnboardingStatusResponse);
   rpc GetOrganization(OrgIdRequest) returns (GetOrganizationResponse);
 }
 

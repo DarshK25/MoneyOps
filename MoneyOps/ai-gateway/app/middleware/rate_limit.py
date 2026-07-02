@@ -39,8 +39,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # Try to connect to Redis
         try:
             from app.integrations.redis_client import get_redis
-            self._use_redis = True
             self._redis_get = get_redis
+            self._use_redis = True
             logger.info(
                 "rate_limit_redis_enabled",
                 requests=self.requests_per_window,
@@ -115,6 +115,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         """Check rate limit using Redis sliding window."""
         try:
             r = await self._redis_get()
+            if r is None:
+                return self._check_rate_limit_memory(client_id, now)
             key = f"rate_limit:{client_id}"
 
             # Remove old entries outside the window

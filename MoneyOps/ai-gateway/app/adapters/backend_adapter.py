@@ -98,24 +98,42 @@ class BackendHttpAdapter:
 
         logger.info("backend_adapter_initialized", base_url=self.base_url, redis_cache=self._use_redis_cache)
 
-    async def resolve_org_uuid(self, clerk_id: str) -> Optional[str]:
-        if not clerk_id or clerk_id == "unknown":
+    @staticmethod
+    def _unwrap_collection(data: Any) -> List[Dict[str, Any]]:
+        """Normalize Spring Page, ApiResponse, and raw list payloads into item lists."""
+        if data is None:
+            return []
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            if isinstance(data.get("data"), list):
+                return data["data"]
+            if isinstance(data.get("data"), dict):
+                return BackendHttpAdapter._unwrap_collection(data["data"])
+            if isinstance(data.get("content"), list):
+                return data["content"]
+            for key in ("clients", "invoices", "transactions", "items", "results"):
+                if isinstance(data.get(key), list):
+                    return data[key]
+        return []
+
+    async def resolve_org_uuid(self, user_id: str) -> Optional[str]:
+        if not user_id or user_id == "unknown":
             return None
 
-        # Try Redis cache first
         if self._use_redis_cache:
+            cache_key = f"org_uuid:{user_id}"
             try:
                 r = await get_redis()
-                cache_key = f"org_uuid:{clerk_id}"
                 cached = await r.get(cache_key)
                 if cached:
                     return cached
             except Exception as e:
                 logger.warning("redis_cache_get_failed", key=cache_key, error=str(e))
-        elif clerk_id in self._org_uuid_cache:
-            return self._org_uuid_cache[clerk_id]
+        elif user_id in self._org_uuid_cache:
+            return self._org_uuid_cache[user_id]
 
-        resp = await self.get_onboarding_status(clerk_id)
+        resp = await self.get_onboarding_status(user_id)
         if resp.success and resp.data:
             data = (
                 resp.data.get("data")
@@ -126,15 +144,14 @@ class BackendHttpAdapter:
                 data.get("orgId") or data.get("orgUuid") or data.get("organizationId")
             )
             if org_uuid:
-                # Cache in Redis or in-memory
                 if self._use_redis_cache:
                     try:
                         r = await get_redis()
-                        await r.setex(f"org_uuid:{clerk_id}", 300, org_uuid)
+                        await r.setex(f"org_uuid:{user_id}", 300, org_uuid)
                     except Exception as e:
                         logger.warning("redis_cache_set_failed", error=str(e))
                 else:
-                    self._org_uuid_cache[clerk_id] = org_uuid
+                    self._org_uuid_cache[user_id] = org_uuid
                 return org_uuid
         return None
 
@@ -207,25 +224,24 @@ class BackendHttpAdapter:
             logger.error("backend_request_error", endpoint=endpoint, error=str(e))
             return BackendResponse(success=False, error=str(e), status_code=500)
 
-    async def get_onboarding_status(self, clerk_id: str) -> BackendResponse:
-        # Try Redis cache first for onboarding status
+    async def get_onboarding_status(self, user_id: str) -> BackendResponse:
         if self._use_redis_cache:
+            cache_key = f"onboarding:{user_id}"
             try:
                 r = await get_redis()
-                cache_key = f"onboarding:{clerk_id}"
                 cached_data = await r.get(cache_key)
                 if cached_data:
                     data = json.loads(cached_data)
                     return BackendResponse(success=True, data=data, status_code=200)
             except Exception as e:
                 logger.warning("redis_cache_get_failed", key=cache_key, error=str(e))
-        elif clerk_id in self._onboarding_cache:
-            cached_data, ts = self._onboarding_cache[clerk_id]
+        elif user_id in self._onboarding_cache:
+            cached_data, ts = self._onboarding_cache[user_id]
             if time.time() - ts < self._ONBOARDING_TTL:
                 return BackendResponse(success=True, data=cached_data, status_code=200)
 
         resp = await self._request(
-            "GET", "/api/onboarding/status", params={"clerkId": clerk_id}
+            "GET", "/api/onboarding/status", params={"userId": user_id}
         )
         if resp.success and resp.data:
             data = (
@@ -233,18 +249,14 @@ class BackendHttpAdapter:
                 if isinstance(resp.data, dict) and "data" in resp.data
                 else resp.data
             )
-            onboarded = (
-                data.get("onboardingComplete", False) or data.get("orgId") is not None
-            )
-            # Cache the FULL data (including orgId) not just the boolean
             if self._use_redis_cache:
                 try:
                     r = await get_redis()
-                    await r.setex(f"onboarding:{clerk_id}", 300, json.dumps(data))
+                    await r.setex(f"onboarding:{user_id}", 300, json.dumps(data))
                 except Exception as e:
                     logger.warning("redis_cache_set_failed", error=str(e))
             else:
-                self._onboarding_cache[clerk_id] = (data, time.time())
+                self._onboarding_cache[user_id] = (data, time.time())
             resp.data = data
         return resp
 
@@ -296,16 +308,12 @@ class BackendHttpAdapter:
         resp = await self._request(
             "GET",
             "/api/clients",
-            params={"limit": limit},
+            params={"page": 0, "size": limit},
             org_id=org_id,
             user_id=user_id,
         )
         if resp.success and resp.data:
-            return (
-                resp.data
-                if isinstance(resp.data, list)
-                else resp.data.get("clients", [])
-            )
+            return self._unwrap_collection(resp.data)
         return []
 
     async def get_invoices(
@@ -330,11 +338,15 @@ class BackendHttpAdapter:
                 # Fall through to HTTP
 
         params = {"limit": limit}
+        params = {"page": 0, "size": limit}
         if status:
             params["status"] = status
-        return await self._request(
+        resp = await self._request(
             "GET", "/api/invoices", params=params, org_id=org_id, user_id=user_id
         )
+        if resp.success:
+            resp.data = self._unwrap_collection(resp.data)
+        return resp
 
     async def get_finance_metrics(
         self, business_id: Optional[Any], org_id: str, user_id: Optional[str] = None
@@ -392,7 +404,7 @@ class BackendHttpAdapter:
                 "invoiceNumber": invoice_number,
                 "amount": amount,
                 "dueDate": due_date,
-                "businessName": "VoltNest Energy Solutions Pvt. Ltd.",
+                "businessName": settings.BUSINESS_NAME,
                 "tone": tone,
             },
         }
@@ -486,6 +498,13 @@ class BackendHttpAdapter:
         if not resp.success:
             raise RuntimeError(resp.error or f"DELETE {endpoint} failed")
         return resp.data
+
+    def _build_client_params(self, org_id: Optional[str] = None, **kwargs) -> dict:
+        if not org_id:
+            raise OrgIsolationError("Organization ID (org_id) is required for client operations")
+        params = dict(kwargs)
+        params["org_id"] = org_id
+        return params
 
     def set_auth_token(self, token: str):
         self.auth_token = token
