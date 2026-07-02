@@ -29,8 +29,8 @@ public class OnboardingService {
 
     // ── Status check ──────────────────────────────────────────────────────────
 
-    public OnboardingStatusResponse getStatus(String clerkId) {
-        Optional<User> userOpt = userRepository.findByClerkIdAndDeletedAtIsNull(clerkId);
+    public OnboardingStatusResponse getStatus(String userId) {
+        Optional<User> userOpt = userRepository.findById(userId);
 
         if (userOpt.isEmpty()) {
             return new OnboardingStatusResponse(false, null, null, "New user — onboarding required");
@@ -66,7 +66,7 @@ public class OnboardingService {
     // ── Create business ───────────────────────────────────────────────────────
 
     public OnboardingStatusResponse createBusiness(OnboardingRequest req) {
-        log.info("Creating business for clerkId={}, legalName={}", req.getClerkId(), req.getLegalName());
+        log.info("Creating business for userId={}, legalName={}", req.getUserId(), req.getLegalName());
         
         BusinessOrganization org = new BusinessOrganization();
         org.setLegalName(req.getLegalName());
@@ -153,7 +153,7 @@ public class OnboardingService {
     }
 
     public OnboardingStatusResponse joinBusiness(OnboardingRequest req) {
-        log.info("User clerkId={} joining via code={}", req.getClerkId(), req.getInviteCode());
+        log.info("User userId={} joining via code={}", req.getUserId(), req.getInviteCode());
         
         Invite invite = inviteRepository.findByTokenAndDeletedAtIsNull(req.getInviteCode())
                 .orElseThrow(() -> new RuntimeException("Invalid invite code"));
@@ -185,12 +185,10 @@ public class OnboardingService {
     }
 
     private User getOrCreateUser(OnboardingRequest req) {
-        return userRepository.findByClerkIdAndDeletedAtIsNull(req.getClerkId()).orElseGet(() -> {
+        return userRepository.findById(req.getUserId()).orElseGet(() -> {
             User newUser = new User();
-            newUser.setClerkId(req.getClerkId());
             newUser.setEmail(req.getEmail());
             newUser.setName(req.getName());
-            // Audit populated by @EnableMongoAuditing
             return userRepository.save(newUser);
         });
     }

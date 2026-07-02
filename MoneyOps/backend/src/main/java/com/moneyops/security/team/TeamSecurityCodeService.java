@@ -1,6 +1,6 @@
 package com.moneyops.security.team;
 
-import com.moneyops.invites.EmailService;
+import com.moneyops.email.EmailService;
 import com.moneyops.organizations.entity.BusinessOrganization;
 import com.moneyops.organizations.repository.BusinessOrganizationRepository;
 import com.moneyops.shared.exceptions.UnauthorizedException;

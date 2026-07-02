@@ -18,7 +18,6 @@ public interface UserRepository extends MongoRepository<User, String> {
 
     Optional<User> findByEmailAndOrgIdAndDeletedAtIsNull(String email, String orgId);
     Optional<User> findByEmailAndDeletedAtIsNull(String email);
-    Optional<User> findByClerkIdAndDeletedAtIsNull(String clerkId);
 
     boolean existsByEmailAndOrgIdAndDeletedAtIsNull(String email, String orgId);
     boolean existsByEmailAndDeletedAtIsNull(String email);

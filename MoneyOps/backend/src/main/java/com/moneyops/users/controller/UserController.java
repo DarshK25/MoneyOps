@@ -4,9 +4,12 @@ package com.moneyops.users.controller;
 import com.moneyops.users.dto.UserDto;
 import com.moneyops.users.dto.CreateInviteRequest;
 import com.moneyops.users.dto.AcceptInviteRequest;
+import com.moneyops.users.entity.Invite;
 import com.moneyops.users.service.UserService;
+import com.moneyops.shared.utils.OrgContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -22,6 +25,30 @@ public class UserController {
     public ResponseEntity<List<UserDto>> getAllUsers(@RequestHeader("X-Org-Id") String orgId) {
         List<UserDto> users = userService.getAllUsers(orgId);
         return ResponseEntity.ok(users);
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<UserDto> getCurrentUser(Authentication authentication) {
+        String userId = OrgContext.getUserId();
+        if (userId == null && authentication != null) {
+            userId = authentication.getName();
+        }
+        if (userId == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        com.moneyops.users.entity.User user = userService.findUserById(userId);
+        if (user == null) {
+            return ResponseEntity.notFound().build();
+        }
+        
+        UserDto dto = new UserDto();
+        dto.setId(user.getId());
+        dto.setName(user.getName());
+        dto.setEmail(user.getEmail());
+        dto.setRole(user.getRole() != null ? user.getRole().name() : null);
+        dto.setStatus(user.getStatus() != null ? user.getStatus().name() : null);
+        
+        return ResponseEntity.ok(dto);
     }
 
     @GetMapping("/{id}")
@@ -64,5 +91,11 @@ public class UserController {
     public ResponseEntity<UserDto> acceptInvite(@RequestBody AcceptInviteRequest request) {
         UserDto user = userService.acceptInvite(request);
         return ResponseEntity.ok(user);
+    }
+
+    @GetMapping("/invite/{token}")
+    public ResponseEntity<Invite> getInviteByToken(@PathVariable String token) {
+        var invite = userService.getInviteByToken(token);
+        return ResponseEntity.ok(invite);
     }
 }

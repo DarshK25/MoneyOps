@@ -8,12 +8,32 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 @Component
 public class ComplianceMetadataService {
 
     private static final BigDecimal STANDARD_GST_RATE = new BigDecimal("0.18");
+
+    private static final Map<String, BigDecimal> GST_RATES_BY_CATEGORY;
+
+    static {
+        Map<String, BigDecimal> rates = new java.util.HashMap<>();
+        rates.put("HARDWARE", new BigDecimal("0.18"));
+        rates.put("SOFTWARE", new BigDecimal("0.18"));
+        rates.put("UTILITIES", new BigDecimal("0.05"));
+        rates.put("MARKETING", new BigDecimal("0.18"));
+        rates.put("PROFESSIONAL", new BigDecimal("0.18"));
+        rates.put("PROFESSIONAL_FEES", new BigDecimal("0.18"));
+        rates.put("CONSULTING", new BigDecimal("0.18"));
+        rates.put("CONTRACTOR", new BigDecimal("0.12"));
+        rates.put("SUBCONTRACTOR", new BigDecimal("0.12"));
+        rates.put("ESSENTIAL_GOODS", new BigDecimal("0.05"));
+        rates.put("GOODS", new BigDecimal("0.12"));
+        rates.put("EXEMPT", BigDecimal.ZERO);
+        GST_RATES_BY_CATEGORY = java.util.Collections.unmodifiableMap(rates);
+    }
 
     private static final Set<String> BLOCKED_ITC_CATEGORIES = Set.of("SALARIES", "SALARY", "FUEL", "PERSONAL");
     private static final Set<String> POTENTIAL_GST_CATEGORIES = Set.of(
@@ -101,10 +121,19 @@ public class ComplianceMetadataService {
     }
 
     public BigDecimal deriveInclusiveGst(BigDecimal grossAmount) {
+        return deriveInclusiveGst(grossAmount, null);
+    }
+
+    public BigDecimal deriveInclusiveGst(BigDecimal grossAmount, String category) {
+        BigDecimal rate = STANDARD_GST_RATE;
+        if (category != null) {
+            String normalized = normalizeCategory(category);
+            rate = GST_RATES_BY_CATEGORY.getOrDefault(normalized, STANDARD_GST_RATE);
+        }
         if (grossAmount == null || grossAmount.compareTo(BigDecimal.ZERO) <= 0) {
             return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
         }
-        return scale(grossAmount.multiply(STANDARD_GST_RATE).divide(BigDecimal.ONE.add(STANDARD_GST_RATE), 2, RoundingMode.HALF_UP));
+        return scale(grossAmount.multiply(rate).divide(BigDecimal.ONE.add(rate), 2, RoundingMode.HALF_UP));
     }
 
     public String normalizeCategory(String category) {

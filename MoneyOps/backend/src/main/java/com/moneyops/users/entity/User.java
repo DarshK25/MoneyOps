@@ -12,12 +12,7 @@ import org.springframework.data.annotation.CreatedBy;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedBy;
 import org.springframework.data.annotation.LastModifiedDate;
-import org.springframework.data.mongodb.core.index.Indexed;
-import org.springframework.data.mongodb.core.mapping.Document;
 import jakarta.annotation.PostConstruct;
-
-import java.time.LocalDateTime;
-import java.util.UUID;
 
 @Document(collection = "users")
 @Data
@@ -35,12 +30,9 @@ public class User {
     private String email;
 
     private String phone;
+    private String passwordHash;
     private Role role = Role.STAFF;
     private Status status = Status.ACTIVE;
-
-    // Clerk user ID — stored so we can look up a user by their Clerk token
-    @Indexed(unique = true)
-    private String clerkId;
 
     private boolean onboardingComplete = false;
 

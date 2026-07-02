@@ -10,9 +10,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
-/**
- * Onboarding endpoints — called by the frontend after Clerk sign-in.
- */
 @RestController
 @RequestMapping("/api/onboarding")
 @RequiredArgsConstructor
@@ -22,8 +19,8 @@ public class OnboardingController {
 
     @GetMapping("/status")
     public ResponseEntity<ApiResponse<OnboardingStatusResponse>> getStatus(
-            @RequestParam String clerkId) {
-        OnboardingStatusResponse status = onboardingService.getStatus(clerkId);
+            @RequestParam String userId) {
+        OnboardingStatusResponse status = onboardingService.getStatus(userId);
         return ResponseEntity.ok(ApiResponse.success(status));
     }
 
