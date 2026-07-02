@@ -1,48 +1,19 @@
-# Development-specific configuration
+# Development — lightweight local overrides
 spring:
-  cloud:
-    gateway:
-      routes:
-        - id: auth-login
-          uri: http://localhost:8000
-          predicates:
-            - Path=/api/auth/login
-
-        - id: users-routes
-          uri: http://localhost:8000
-          predicates:
-            - Path=/api/users/**
-
   data:
     redis:
       host: localhost
       port: 6379
       password:
 
-backend:
-  core:
-    url: http://localhost:8000
-
-ai:
-  gateway:
-    url: http://localhost:8001
-
-voice:
-  service:
-    url: http://localhost:8003
-
 gateway:
   tenant:
     enforce-isolation: false
   logging:
-    enabled: true
     log-request-body: true
     log-response-body: true
 
 logging:
   level:
-    root: INFO
-    com.moneyops.gateway: DEBUG
-    org.springframework.cloud.gateway: DEBUG
     org.springframework.security: DEBUG
     org.springframework.web: DEBUG

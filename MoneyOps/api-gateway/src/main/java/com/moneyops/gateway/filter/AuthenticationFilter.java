@@ -14,8 +14,9 @@ import org.springframework.web.server.WebFilter;
 import org.springframework.web.server.WebFilterChain;
 import reactor.core.publisher.Mono;
 
+import jakarta.annotation.PostConstruct;
+import java.util.Arrays;
 import java.util.List;
-import java.util.UUID;
 
 @Slf4j
 @Component
@@ -24,8 +25,15 @@ public class AuthenticationFilter implements WebFilter {
     
     private final JwtTokenProvider jwtTokenProvider;
     
-    @Value("#{'${gateway.public-endpoints}'.split(',')}")
+    @Value("${gateway.public-endpoints}")
+    private String publicEndpointsRaw;
+
     private List<String> publicEndpoints;
+
+    @PostConstruct
+    void initPublicEndpoints() {
+        this.publicEndpoints = Arrays.asList(publicEndpointsRaw.split(","));
+    }
     
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
@@ -47,16 +55,22 @@ public class AuthenticationFilter implements WebFilter {
         
         try {
             // Validate token and extract claims FROM THE TOKEN
-            UUID userId = jwtTokenProvider.getUserIdFromToken(token);
-            UUID orgId = jwtTokenProvider.getOrgIdFromToken(token);
+            String userId = jwtTokenProvider.getUserIdFromToken(token);
+            String orgId = jwtTokenProvider.getOrgIdFromToken(token);
             
             // CRITICAL: Don't trust headers - extract from token
             // This prevents header spoofing attacks
-            ServerHttpRequest mutatedRequest = request.mutate()
-                .header("X-User-Id", userId.toString())
-                .header("X-Org-Id", orgId.toString())
-                .header("X-Auth-Token", token)
-                .build();
+            ServerHttpRequest.Builder mutatedBuilder = request.mutate()
+                .header("X-User-Id", userId)
+                .header("X-Auth-Token", token);
+            if (orgId != null) {
+                mutatedBuilder.header("X-Org-Id", orgId);
+            }
+            // Explicitly set Authorization header to ensure it reaches the backend
+            // (replaces any original value to avoid duplicates)
+            mutatedBuilder.headers(httpHeaders ->
+                httpHeaders.set(HttpHeaders.AUTHORIZATION, "Bearer " + token));
+            ServerHttpRequest mutatedRequest = mutatedBuilder.build();
             
             log.debug("Authenticated request for userId={}, orgId={}", userId, orgId);
             

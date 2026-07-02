@@ -1,0 +1,40 @@
+# ===================================================================
+# Production Configuration
+# ===================================================================
+# All secrets and URLs come from environment variables.
+# The main application.yml provides the default schema and fallbacks.
+#
+# REQUIRED ENV VARS:
+#   JWT_SECRET              — 256+ bit HS256 secret (set in CI/CD)
+#   BACKEND_CORE_URL        — http://backend:8000
+#   AI_GATEWAY_URL          — http://ai-gateway:8005
+#   VOICE_SERVICE_URL       — http://voice-service:8003
+#   REDIS_HOST / REDIS_PORT — Upstash / ElastiCache endpoint
+#   REDIS_PASSWORD          — Redis auth token
+#
+# OPTIONAL ENV VARS (with sensible defaults):
+#   PORT                    — 8002
+#   LOG_LEVEL_ROOT          — WARN
+#   LOG_LEVEL_GATEWAY       — INFO
+#   GATEWAY_RATE_LIMIT_ENABLED — true
+# ===================================================================
+
+spring:
+  data:
+    redis:
+      ssl: true
+
+gateway:
+  tenant:
+    enforce-isolation: true
+  logging:
+    enabled: true
+    log-request-body: false
+    log-response-body: false
+    slow-request-threshold-ms: 2000
+
+logging:
+  level:
+    root: ${LOG_LEVEL_ROOT:WARN}
+    com.moneyops.gateway: ${LOG_LEVEL_GATEWAY:INFO}
+    org.springframework.cloud.gateway: WARN

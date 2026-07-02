@@ -8,6 +8,7 @@ import org.springframework.cloud.gateway.filter.factory.AbstractGatewayFilterFac
 import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
@@ -67,7 +68,7 @@ public class RateLimitFilter extends AbstractGatewayFilterFactory<RateLimitFilte
                 return chain.filter(exchange);
             }
             
-            String key = config.getKey();
+            String key = resolveKey(config.getKey(), exchange.getRequest());
             int limit = config.getLimit();
             int windowSeconds = config.getWindowSeconds();
             
@@ -119,6 +120,48 @@ public class RateLimitFilter extends AbstractGatewayFilterFactory<RateLimitFilte
         };
     }
     
+    private String resolveKey(String configuredKey, ServerHttpRequest request) {
+        if (configuredKey == null || configuredKey.isBlank()) {
+            return configuredKey;
+        }
+
+        String[] parts = configuredKey.split(":", 2);
+        String dimension = parts[0].trim().toLowerCase();
+        String bucket = parts.length > 1 ? parts[1].trim() : "default";
+
+        return switch (dimension) {
+            case "user" -> {
+                String userId = request.getHeaders().getFirst("X-User-Id");
+                if (userId != null && !userId.isBlank()) {
+                    yield "user:" + userId + ":" + bucket;
+                }
+                yield "ip:" + clientIp(request) + ":" + bucket;
+            }
+            case "org" -> {
+                String orgId = request.getHeaders().getFirst("X-Org-Id");
+                if (orgId != null && !orgId.isBlank()) {
+                    yield "org:" + orgId + ":" + bucket;
+                }
+                String userId = request.getHeaders().getFirst("X-User-Id");
+                if (userId != null && !userId.isBlank()) {
+                    yield "user:" + userId + ":" + bucket;
+                }
+                yield "ip:" + clientIp(request) + ":" + bucket;
+            }
+            case "ip" -> "ip:" + clientIp(request) + ":" + bucket;
+            default -> configuredKey;
+        };
+    }
+
+    private String clientIp(ServerHttpRequest request) {
+        String forwardedFor = request.getHeaders().getFirst("X-Forwarded-For");
+        if (forwardedFor != null && !forwardedFor.isBlank()) {
+            return forwardedFor.split(",")[0].trim();
+        }
+        return request.getRemoteAddress() != null && request.getRemoteAddress().getAddress() != null
+                ? request.getRemoteAddress().getAddress().getHostAddress()
+                : "unknown";
+    }
     /**
      * Configuration for rate limiting
      */
