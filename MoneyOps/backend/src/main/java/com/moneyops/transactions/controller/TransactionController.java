@@ -5,6 +5,9 @@ import com.moneyops.transactions.dto.TransactionDto;
 import com.moneyops.transactions.service.TransactionService;
 import com.moneyops.shared.utils.OrgContext;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -42,14 +45,15 @@ public class TransactionController {
     }
 
     @GetMapping
-    public ResponseEntity<List<TransactionDto>> getAllTransactions(
+    public ResponseEntity<Page<TransactionDto>> getAllTransactions(
             @RequestParam(required = false) String type,
             @RequestParam(required = false) String month,
-            @RequestParam(required = false) Integer limit) {
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
         String orgId = OrgContext.getOrgId();
-        if (orgId == null) return ResponseEntity.ok(List.of());
+        if (orgId == null) return ResponseEntity.ok(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 
-        List<TransactionDto> transactions = transactionService.getTransactions(orgId, type, month, limit);
+        Page<TransactionDto> transactions = transactionService.getTransactions(orgId, type, month, page, size);
         return ResponseEntity.ok(transactions);
     }
 

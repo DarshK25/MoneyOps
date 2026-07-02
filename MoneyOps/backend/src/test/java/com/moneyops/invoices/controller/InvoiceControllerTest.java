@@ -12,6 +12,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -134,11 +136,11 @@ public class InvoiceControllerTest {
         InvoiceDto dto2 = new InvoiceDto();
         dto2.setInvoiceNumber("INV-002");
 
-        when(invoiceService.searchInvoices(eq(orgId), nullable(String.class), nullable(String.class), nullable(String.class), anyInt()))
-                .thenReturn(Arrays.asList(dto1, dto2));
+        when(invoiceService.searchInvoices(eq(orgId), nullable(String.class), nullable(String.class), nullable(String.class), anyInt(), anyInt()))
+                .thenReturn(new PageImpl<>(Arrays.asList(dto1, dto2), PageRequest.of(0, 20), 2));
 
         mockMvc.perform(get("/api/invoices"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(2));
+                .andExpect(jsonPath("$.content.length()").value(2));
     }
 }

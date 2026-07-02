@@ -2,6 +2,8 @@
 package com.moneyops.transactions.service;
 
 import com.moneyops.compliance.ComplianceMetadataService;
+import com.moneyops.jpa.entity.TransactionEntity;
+import com.moneyops.jpa.repository.TransactionJpaRepository;
 import com.moneyops.transactions.dto.TransactionDto;
 import com.moneyops.transactions.entity.Transaction;
 import com.moneyops.transactions.entity.TransactionType;
@@ -9,6 +11,12 @@ import com.moneyops.transactions.mapper.TransactionMapper;
 import com.moneyops.transactions.repository.TransactionRepository;
 import com.moneyops.transactions.validator.TransactionValidator;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,10 +33,12 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 @Transactional
 public class TransactionService {
 
     private final TransactionRepository transactionRepository;
+    private final TransactionJpaRepository transactionJpaRepository;
     private final TransactionMapper transactionMapper;
     private final TransactionValidator transactionValidator;
     private final ComplianceMetadataService complianceMetadataService;
@@ -41,14 +51,53 @@ public class TransactionService {
         return transactionMapper;
     }
 
-    public List<TransactionDto> getAllTransactions(String orgId) {
+    private void saveTransactionJpa(Transaction txn) {
+        try {
+            TransactionEntity entity = new TransactionEntity();
+            entity.setId(txn.getId());
+            entity.setOrgId(txn.getOrgId());
+            entity.setInvoiceId(txn.getInvoiceId());
+            entity.setClientId(txn.getClientId());
+            entity.setType(txn.getType() != null ? txn.getType().name() : null);
+            entity.setAmount(txn.getAmount());
+            entity.setTransactionDate(txn.getTransactionDate());
+            entity.setCreatedAt(txn.getCreatedAt());
+            transactionJpaRepository.save(entity);
+            log.debug("Transaction {} written to PostgreSQL", txn.getId());
+        } catch (Exception e) {
+            log.error("Failed to write transaction {} to PostgreSQL: {}", txn.getId(), e.getMessage());
+        }
+    }
+
+    private TransactionDto toTransactionDto(TransactionEntity entity) {
+        TransactionDto dto = new TransactionDto();
+        dto.setId(entity.getId());
+        dto.setOrgId(entity.getOrgId());
+        dto.setInvoiceId(entity.getInvoiceId());
+        dto.setClientId(entity.getClientId());
+        dto.setType(entity.getType());
+        dto.setAmount(entity.getAmount());
+        dto.setTransactionDate(entity.getTransactionDate());
+        return dto;
+    }
+
+    public Page<TransactionDto> getAllTransactions(String orgId, int page, int size) {
         if (orgId == null || orgId.isBlank()) throw new com.moneyops.shared.exceptions.UnauthorizedException("Missing organization context");
-        return transactionRepository.findAllByOrgIdAndDeletedAtIsNull(orgId).stream()
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "transactionDate"));
+        Page<Transaction> transactionPage = transactionRepository.findAllByOrgIdAndDeletedAtIsNull(orgId, pageable);
+        List<TransactionDto> dtoList = transactionPage.getContent().stream()
                 .map(transactionMapper::toDto)
                 .collect(Collectors.toList());
+        return new PageImpl<>(dtoList, pageable, transactionPage.getTotalElements());
     }
 
     public TransactionDto getTransactionById(String id, String orgId) {
+        var jpaTxn = transactionJpaRepository.findByIdAndOrgId(id, orgId);
+        if (jpaTxn.isPresent()) {
+            log.debug("Read transaction {} from PostgreSQL", id);
+            return toTransactionDto(jpaTxn.get());
+        }
+        log.warn("Falling back to MongoDB for transaction {}", id);
         Transaction transaction = transactionRepository.findByIdAndOrgIdAndDeletedAtIsNull(id, orgId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Transaction not found"));
         return transactionMapper.toDto(transaction);
@@ -81,6 +130,7 @@ public class TransactionService {
         complianceMetadataService.normalizeTransaction(transaction);
 
         Transaction saved = transactionRepository.save(transaction);
+        saveTransactionJpa(saved);
         return transactionMapper.toDto(saved);
     }
 
@@ -111,6 +161,7 @@ public class TransactionService {
         complianceMetadataService.normalizeTransaction(existing);
 
         Transaction saved = transactionRepository.save(existing);
+        saveTransactionJpa(saved);
         return transactionMapper.toDto(saved);
     }
 
@@ -121,15 +172,32 @@ public class TransactionService {
         // ✨ Soft Delete
         transaction.setDeletedAt(LocalDateTime.now());
         transactionRepository.save(transaction);
+        transactionJpaRepository.deleteById(id);
     }
 
     public List<TransactionDto> getTransactionsByClient(String clientId, String orgId) {
+        var jpaTxns = transactionJpaRepository.findByOrgIdAndClientId(orgId, clientId);
+        if (!jpaTxns.isEmpty()) {
+            log.debug("Read transactions for client {} from PostgreSQL", clientId);
+            return jpaTxns.stream()
+                    .map(this::toTransactionDto)
+                    .collect(Collectors.toList());
+        }
+        log.warn("Falling back to MongoDB for transactions by client {}", clientId);
         return transactionRepository.findByOrgIdAndClientIdAndDeletedAtIsNull(orgId, clientId).stream()
                 .map(transactionMapper::toDto)
                 .collect(Collectors.toList());
     }
 
     public List<TransactionDto> getTransactionsByInvoice(String invoiceId, String orgId) {
+        var jpaTxns = transactionJpaRepository.findByOrgIdAndInvoiceId(orgId, invoiceId);
+        if (!jpaTxns.isEmpty()) {
+            log.debug("Read transactions for invoice {} from PostgreSQL", invoiceId);
+            return jpaTxns.stream()
+                    .map(this::toTransactionDto)
+                    .collect(Collectors.toList());
+        }
+        log.warn("Falling back to MongoDB for transactions by invoice {}", invoiceId);
         return transactionRepository.findByOrgIdAndInvoiceIdAndDeletedAtIsNull(orgId, invoiceId).stream()
                 .map(transactionMapper::toDto)
                 .collect(Collectors.toList());
@@ -177,6 +245,14 @@ public class TransactionService {
                 .limit(limit != null && limit > 0 ? limit : Long.MAX_VALUE)
                 .map(transactionMapper::toDto)
                 .collect(Collectors.toList());
+    }
+
+    public Page<TransactionDto> getTransactions(String orgId, String type, String month, int page, int size) {
+        List<TransactionDto> transactions = getTransactions(orgId, type, month, null);
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "transactionDate"));
+        int start = Math.min((int) pageable.getOffset(), transactions.size());
+        int end = Math.min(start + pageable.getPageSize(), transactions.size());
+        return new PageImpl<>(transactions.subList(start, end), pageable, transactions.size());
     }
 
     public BigDecimal getTotalIncome(String orgId) {

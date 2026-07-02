@@ -1,6 +1,7 @@
-// src/main/java/com/moneyops/organizations/service/OrganizationService.java
 package com.moneyops.organizations.service;
 
+import com.moneyops.jpa.entity.OrganizationEntity;
+import com.moneyops.jpa.repository.OrganizationJpaRepository;
 import com.moneyops.organizations.dto.BusinessOrganizationDto;
 import com.moneyops.organizations.dto.RegulatoryProfileDto;
 import com.moneyops.organizations.entity.BusinessOrganization;
@@ -12,6 +13,8 @@ import com.moneyops.organizations.validator.OrganizationValidator;
 import com.moneyops.users.entity.User;
 import com.moneyops.users.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,18 +27,19 @@ import java.util.stream.Collectors;
 @Transactional
 public class OrganizationService {
 
+    private static final Logger log = LoggerFactory.getLogger(OrganizationService.class);
+
     private final BusinessOrganizationRepository orgRepository;
+    private final OrganizationJpaRepository orgJpaRepository;
     private final RegulatoryProfileRepository regulatoryRepository;
     private final OrganizationMapper mapper;
     private final OrganizationValidator validator;
     private final UserRepository userRepository;
 
-    // Helper to verify user belongs to org
     private void verifyAccess(String orgId, String userId) {
         User user = userRepository.findByIdAndOrgIdAndDeletedAtIsNull(userId, orgId)
                 .orElseThrow(() -> new RuntimeException("User not found or access denied"));
-        
-        // Allow access if they belong to this org
+
         if (orgId.equals(user.getOrgId())) {
             return;
         }
@@ -44,8 +48,15 @@ public class OrganizationService {
                 .orElseThrow(() -> new RuntimeException("Organization not found or access denied"));
     }
 
-    // Business Organization operations
     public List<BusinessOrganizationDto> getAllOrganizations(String userId) {
+        var jpaOrgs = orgJpaRepository.findByCreatedBy(userId);
+        if (!jpaOrgs.isEmpty()) {
+            log.debug("Read organizations from PostgreSQL");
+            return jpaOrgs.stream()
+                    .map(this::toBusinessOrganizationDto)
+                    .collect(Collectors.toList());
+        }
+        log.warn("Falling back to MongoDB for organizations");
         return orgRepository.findAllByCreatedByAndDeletedAtIsNull(userId).stream()
                 .map(mapper::toDto)
                 .collect(Collectors.toList());
@@ -53,6 +64,12 @@ public class OrganizationService {
 
     public BusinessOrganizationDto getOrganizationById(String id, String userId) {
         verifyAccess(id, userId);
+        var jpaOrg = orgJpaRepository.findByIdAndCreatedBy(id, userId);
+        if (jpaOrg.isPresent()) {
+            log.debug("Read organization {} from PostgreSQL", id);
+            return toBusinessOrganizationDto(jpaOrg.get());
+        }
+        log.warn("Falling back to MongoDB for organization {}", id);
         BusinessOrganization org = orgRepository.findByIdAndCreatedByAndDeletedAtIsNull(id, userId)
                 .orElseThrow(() -> new RuntimeException("Organization not found"));
         return mapper.toDto(org);
@@ -61,14 +78,20 @@ public class OrganizationService {
     public BusinessOrganizationDto getMyOrganization(String userId) {
         User user = userRepository.findByIdAndDeletedAtIsNull(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
-        
+
         String orgId = user.getOrgId();
         if (orgId == null) {
             List<BusinessOrganization> createdOrgs = orgRepository.findAllByCreatedByAndDeletedAtIsNull(userId);
             if (createdOrgs.isEmpty()) throw new RuntimeException("No organization found for user");
             return mapper.toDto(createdOrgs.get(0));
         }
-        
+
+        var jpaOrg = orgJpaRepository.findByIdAndCreatedBy(orgId, userId);
+        if (jpaOrg.isPresent()) {
+            log.debug("Read my organization from PostgreSQL");
+            return toBusinessOrganizationDto(jpaOrg.get());
+        }
+
         BusinessOrganization org = orgRepository.findByIdAndCreatedByAndDeletedAtIsNull(orgId, userId)
                 .orElseThrow(() -> new RuntimeException("Organization not found"));
         return mapper.toDto(org);
@@ -81,8 +104,8 @@ public class OrganizationService {
         org.setCreatedBy(userId);
 
         BusinessOrganization saved = orgRepository.save(org);
-        
-        // Update user's orgId if not set
+        saveOrganizationJpa(saved);
+
         userRepository.findByIdAndDeletedAtIsNull(userId).ifPresent(u -> {
             if (u.getOrgId() == null) {
                 u.setOrgId(saved.getId());
@@ -103,6 +126,7 @@ public class OrganizationService {
 
         BusinessOrganization updated = mergeOrganization(existing, dto);
         BusinessOrganization saved = orgRepository.save(updated);
+        saveOrganizationJpa(saved);
         return mapper.toDto(saved);
     }
 
@@ -149,9 +173,10 @@ public class OrganizationService {
     public void deleteOrganization(String id, String userId) {
         BusinessOrganization org = orgRepository.findByIdAndCreatedByAndDeletedAtIsNull(id, userId)
                 .orElseThrow(() -> new RuntimeException("Organization not found"));
-        
+
         org.setDeletedAt(LocalDateTime.now());
         orgRepository.save(org);
+        orgJpaRepository.deleteById(id);
     }
 
     public BusinessOrganizationDto getVerificationTier(String orgId, String userId) {
@@ -172,10 +197,10 @@ public class OrganizationService {
         }
 
         BusinessOrganization saved = orgRepository.save(org);
+        saveOrganizationJpa(saved);
         return mapper.toDto(saved);
     }
 
-    // Regulatory Profile operations
     public RegulatoryProfileDto getRegulatoryProfile(String orgId, String userId) {
         verifyAccess(orgId, userId);
         RegulatoryProfile profile = regulatoryRepository.findByOrgIdAndDeletedAtIsNull(orgId)
@@ -200,7 +225,6 @@ public class OrganizationService {
         RegulatoryProfile profile = mapper.toRegulatoryEntity(dto, org);
         RegulatoryProfile saved = regulatoryRepository.save(profile);
 
-        // Sync back
         org.setPanNumber(dto.getPanNumber());
         org.setGstRegistered(dto.getGstRegistered());
         org.setGstin(dto.getGstNumber());
@@ -226,12 +250,39 @@ public class OrganizationService {
 
         RegulatoryProfile saved = regulatoryRepository.save(updated);
 
-        // Sync back
         org.setPanNumber(dto.getPanNumber());
         org.setGstRegistered(dto.getGstRegistered());
         org.setGstin(dto.getGstNumber());
         orgRepository.save(org);
 
         return mapper.toRegulatoryDto(saved);
+    }
+
+    private void saveOrganizationJpa(BusinessOrganization org) {
+        try {
+            OrganizationEntity entity = new OrganizationEntity();
+            entity.setId(org.getId());
+            entity.setName(org.getLegalName() != null ? org.getLegalName() : org.getTradingName());
+            entity.setBusinessType(org.getBusinessType());
+            entity.setGstin(org.getGstin());
+            entity.setPan(org.getPanNumber());
+            entity.setCreatedBy(org.getCreatedBy());
+            entity.setCreatedAt(org.getCreatedAt());
+            entity.setUpdatedAt(org.getUpdatedAt());
+            orgJpaRepository.save(entity);
+            log.debug("Organization {} written to PostgreSQL", org.getId());
+        } catch (Exception e) {
+            log.error("Failed to write organization {} to PostgreSQL: {}", org.getId(), e.getMessage());
+        }
+    }
+
+    private BusinessOrganizationDto toBusinessOrganizationDto(OrganizationEntity entity) {
+        BusinessOrganizationDto dto = new BusinessOrganizationDto();
+        dto.setId(entity.getId());
+        dto.setLegalName(entity.getName());
+        dto.setBusinessType(entity.getBusinessType());
+        dto.setGstin(entity.getGstin());
+        dto.setPanNumber(entity.getPan());
+        return dto;
     }
 }

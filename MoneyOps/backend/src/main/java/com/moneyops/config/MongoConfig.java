@@ -31,7 +31,7 @@ import java.util.UUID;
  * 
  * Fix (Update v3 - BinaryToStringConverter):
  *   When the application switched entity ID fields from java.util.UUID to java.lang.String
- *   for Clerk compatibility, Spring Data threw ConverterNotFoundException whenever reading
+ *   for auth user ID compatibility, Spring Data threw ConverterNotFoundException whenever reading
  *   existing legacy documents containing BSON Binary (UUIDs) into String fields.
  *   The BinaryToStringConverter seamlessly translates DB Binary UUIDs into Strings on the fly.
  */

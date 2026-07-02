@@ -52,7 +52,7 @@ public class Client {
     private LocalDateTime updatedAt;
     
     @CreatedBy
-    private String createdBy;  // Clerk userId (String)
+    private String createdBy;  // OAuth2 userId
 
     // Extra creator metadata for protected actions/auditability
     private String createdByEmail;

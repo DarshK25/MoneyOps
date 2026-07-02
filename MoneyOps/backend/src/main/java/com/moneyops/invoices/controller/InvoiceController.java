@@ -4,6 +4,9 @@ import com.moneyops.invoices.dto.InvoiceDto;
 import com.moneyops.invoices.service.InvoiceService;
 import com.moneyops.shared.utils.OrgContext;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -44,14 +47,15 @@ public class InvoiceController {
     }
 
     @GetMapping
-    public ResponseEntity<List<InvoiceDto>> getAllInvoices(
+    public ResponseEntity<Page<InvoiceDto>> getAllInvoices(
             @RequestParam(required = false) String status,
             @RequestParam(required = false, name = "client_name") String clientName,
             @RequestParam(required = false, name = "clientId") String clientId,
-            @RequestParam(defaultValue = "50") int limit) {
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
         String orgId = OrgContext.getOrgId();
-        if (orgId == null) return ResponseEntity.ok(List.of());
-        List<InvoiceDto> invoices = invoiceService.searchInvoices(orgId, status, clientName, clientId, limit);
+        if (orgId == null) return ResponseEntity.ok(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+        Page<InvoiceDto> invoices = invoiceService.searchInvoices(orgId, status, clientName, clientId, page, size);
         return ResponseEntity.ok(invoices);
     }
 
