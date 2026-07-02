@@ -2,6 +2,8 @@
 package com.moneyops.invoices.service;
 
 import com.moneyops.clients.repository.ClientRepository;
+import com.moneyops.jpa.entity.InvoiceEntity;
+import com.moneyops.jpa.repository.InvoiceJpaRepository;
 import com.lowagie.text.Document;
 import com.lowagie.text.DocumentException;
 import com.lowagie.text.Element;
@@ -22,12 +24,19 @@ import com.moneyops.clients.mapper.ClientMapper;
 import com.moneyops.clients.dto.ClientDto;
 import com.moneyops.invoices.repository.InvoiceRepository;
 import com.moneyops.invoices.validator.InvoiceValidator;
-import com.moneyops.invites.EmailService;
+import com.moneyops.email.EmailService;
 import com.moneyops.organizations.entity.BusinessOrganization;
 import com.moneyops.organizations.repository.BusinessOrganizationRepository;
+import com.moneyops.queue.RedisQueueConfig;
+import com.moneyops.queue.RedisQueueService;
 import com.moneyops.security.team.TeamActionAuthorizationService;
 import com.moneyops.shared.exceptions.ValidationException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,13 +51,14 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional
 public class InvoiceService {
 
     private final InvoiceRepository invoiceRepository;
+    private final InvoiceJpaRepository invoiceJpaRepository;
     private final ClientRepository clientRepository;
     private final InvoiceMapper invoiceMapper;
     private final ClientMapper clientMapper;
@@ -58,40 +68,52 @@ public class InvoiceService {
     private final TeamActionAuthorizationService teamActionAuthorizationService;
     private final EmailService emailService;
     private final BusinessOrganizationRepository orgRepository;
+    private final RedisQueueService queueService;
+    private final RedisQueueConfig queueConfig;
+
+    public org.springframework.data.domain.Page<InvoiceDto> getAllInvoices(String orgId, int page, int size) {
+        if (orgId == null || orgId.isBlank()) throw new com.moneyops.shared.exceptions.UnauthorizedException("Missing organization context");
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<Invoice> invoicePage = invoiceRepository.findAllByOrgIdAndDeletedAtIsNull(orgId, pageable);
+        List<InvoiceDto> dtoList = populateClientDetails(invoicePage.getContent(), orgId);
+        return new org.springframework.data.domain.PageImpl<>(dtoList, pageable, invoicePage.getTotalElements());
+    }
 
     public List<InvoiceDto> getAllInvoices(String orgId) {
         if (orgId == null || orgId.isBlank()) throw new com.moneyops.shared.exceptions.UnauthorizedException("Missing organization context");
-        var invoices = invoiceRepository.findAllByOrgIdAndDeletedAtIsNull(orgId);
-        return populateClientDetails(invoices, orgId);
+        var jpaInvoices = invoiceJpaRepository.findByOrgId(orgId);
+        if (!jpaInvoices.isEmpty()) {
+            log.debug("Read invoices from PostgreSQL");
+            return jpaInvoices.stream()
+                    .map(this::toInvoiceDto)
+                    .collect(Collectors.toList());
+        }
+        log.warn("Falling back to MongoDB for invoices");
+        return populateClientDetails(invoiceRepository.findAllByOrgIdAndDeletedAtIsNull(orgId), orgId);
     }
 
     public void validateAndCalculate(InvoiceDto dto) {
         invoiceValidator.validate(dto);
     }
 
-    public List<InvoiceDto> searchInvoices(String orgId, String status, String clientName, String clientId, int limit) {
-        List<Invoice> allInvoices = invoiceRepository.findAllByOrgIdAndDeletedAtIsNull(orgId);
+    public org.springframework.data.domain.Page<InvoiceDto> searchInvoices(String orgId, String status, String clientName, String clientId, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         
-        // Use a wrapper or just process sequentially to keep it simple and final-safe
-        List<Invoice> filtered = allInvoices;
-
-        // 1. Filter by status if provided
         if (status != null && !status.trim().isEmpty()) {
-            final String targetStatus = status.toUpperCase();
-            filtered = filtered.stream()
-                    .filter(inv -> inv.getStatus().name().equals(targetStatus))
-                    .collect(Collectors.toList());
+            InvoiceStatus targetStatus = InvoiceStatus.valueOf(status.toUpperCase());
+            Page<Invoice> invoicePage = invoiceRepository.findByOrgIdAndStatusAndDeletedAtIsNull(orgId, targetStatus, pageable);
+            List<InvoiceDto> dtoList = populateClientDetails(invoicePage.getContent(), orgId);
+            return new org.springframework.data.domain.PageImpl<>(dtoList, pageable, invoicePage.getTotalElements());
         }
-
-        // 2. Filter by clientId if provided
+        
         if (clientId != null && !clientId.trim().isEmpty()) {
-            filtered = filtered.stream()
-                    .filter(inv -> inv.getClientId() != null && inv.getClientId().equals(clientId))
-                    .collect(Collectors.toList());
+            Page<Invoice> invoicePage = invoiceRepository.findAllByOrgIdAndClientIdAndDeletedAtIsNull(orgId, clientId, pageable);
+            List<InvoiceDto> dtoList = populateClientDetails(invoicePage.getContent(), orgId);
+            return new org.springframework.data.domain.PageImpl<>(dtoList, pageable, invoicePage.getTotalElements());
         }
-
-        // 3. Filter by client name (Fuzzy Match) - only if clientId is NOT provided
-        if ((clientId == null || clientId.trim().isEmpty()) && clientName != null && !clientName.trim().isEmpty()) {
+        
+        // For client name search, use existing method (already optimized with fuzzy matching)
+        if (clientName != null && !clientName.trim().isEmpty()) {
             final String query = clientName.toLowerCase().trim();
             var clients = clientRepository.findAllByOrgIdAndDeletedAtIsNull(orgId);
             org.apache.commons.text.similarity.JaroWinklerSimilarity similarity = new org.apache.commons.text.similarity.JaroWinklerSimilarity();
@@ -101,15 +123,23 @@ public class InvoiceService {
                 .map(com.moneyops.clients.entity.Client::getId)
                 .collect(Collectors.toSet());
                 
-            filtered = filtered.stream()
+            List<Invoice> filtered = invoiceRepository.findAllByOrgIdAndDeletedAtIsNull(orgId).stream()
                 .filter(inv -> inv.getClientId() != null && matchedClientIds.contains(inv.getClientId()))
                 .collect(Collectors.toList());
+            List<InvoiceDto> dtoList = populateClientDetails(filtered, orgId);
+            return new org.springframework.data.domain.PageImpl<>(dtoList, pageable, filtered.size());
         }
-
-        return populateClientDetails(filtered.stream().limit(limit).collect(Collectors.toList()), orgId);
+        
+        return getAllInvoices(orgId, page, size);
     }
 
     public InvoiceDto getInvoiceById(String id, String orgId) {
+        var jpaInvoice = invoiceJpaRepository.findByIdAndOrgId(id, orgId);
+        if (jpaInvoice.isPresent()) {
+            log.debug("Read invoice {} from PostgreSQL", id);
+            return toInvoiceDto(jpaInvoice.get());
+        }
+        log.warn("Falling back to MongoDB for invoice {}", id);
         Invoice invoice = invoiceRepository.findByIdAndOrgIdAndDeletedAtIsNull(id, orgId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found"));
 
@@ -180,6 +210,7 @@ public class InvoiceService {
         recalculateInvoiceTotals(invoice);
 
         Invoice saved = invoiceRepository.save(invoice);
+        saveInvoiceJpa(saved);
         auditLogService.logCreate("INVOICE", saved.getId(), saved);
         return populateClientDetails(saved);
     }
@@ -208,6 +239,7 @@ public class InvoiceService {
         // Since items are embedded, simply saving the updated invoice includes its items
         recalculateInvoiceTotals(updated); // Recalculate totals after item changes
         Invoice saved = invoiceRepository.save(updated);
+        saveInvoiceJpa(saved);
         return populateClientDetails(saved);
     }
 
@@ -222,6 +254,7 @@ public class InvoiceService {
         // ✨ Soft Delete
         invoice.setDeletedAt(LocalDateTime.now());
         invoiceRepository.save(invoice);
+        invoiceJpaRepository.deleteById(id);
     }
 
     public InvoiceDto sendInvoice(String id, String orgId) {
@@ -246,7 +279,19 @@ public class InvoiceService {
         String orgName = getOrganizationDisplayName(orgId);
         String subject = buildInvoiceEmailSubject(invoice, orgName);
         String htmlContent = buildInvoiceEmailContent(invoice, orgName);
-        emailService.sendInvoiceEmail(invoice.getClientEmail(), subject, htmlContent);
+
+        if (queueConfig.isQueuesEnabled()) {
+            java.util.Map<String, Object> payload = new java.util.HashMap<>();
+            payload.put("toEmail", invoice.getClientEmail());
+            payload.put("subject", subject);
+            payload.put("htmlContent", htmlContent);
+            payload.put("invoiceId", id);
+            payload.put("orgId", orgId);
+            queueService.pushJob(com.moneyops.queue.RedisQueueConfig.QUEUE_EMAIL, "INVOICE_EMAIL", payload);
+            log.info("Invoice {} email job pushed to queue", id);
+        } else {
+            emailService.sendInvoiceEmail(invoice.getClientEmail(), subject, htmlContent);
+        }
 
         Invoice beforeUpdate = invoiceMapper.toEntity(invoiceMapper.toDto(invoice));
         if (currentStatus == InvoiceStatus.DRAFT) {
@@ -254,6 +299,7 @@ public class InvoiceService {
         }
         invoice.setUpdatedAt(LocalDateTime.now());
         Invoice saved = invoiceRepository.save(invoice);
+        saveInvoiceJpa(saved);
         auditLogService.logUpdate("INVOICE", saved.getId(), beforeUpdate, saved);
         return populateClientDetails(saved);
     }
@@ -278,14 +324,26 @@ public class InvoiceService {
                 ? invoice.getTotalAmount().toPlainString()
                 : "0.00";
 
-        emailService.sendInvoiceFollowUp(
-                invoice.getClientEmail(),
-                invoice.getInvoiceNumber(),
-                invoice.getClientName(),
-                orgName,
-                dueDate,
-                amount
-        );
+        if (queueConfig.isQueuesEnabled()) {
+            java.util.Map<String, Object> payload = new java.util.HashMap<>();
+            payload.put("toEmail", invoice.getClientEmail());
+            payload.put("invoiceNumber", invoice.getInvoiceNumber());
+            payload.put("clientName", invoice.getClientName());
+            payload.put("orgName", orgName);
+            payload.put("dueDate", dueDate);
+            payload.put("amount", amount);
+            queueService.pushJob(com.moneyops.queue.RedisQueueConfig.QUEUE_EMAIL, "INVOICE_FOLLOWUP", payload);
+            log.info("Invoice {} follow-up email job pushed to queue", id);
+        } else {
+            emailService.sendInvoiceFollowUp(
+                    invoice.getClientEmail(),
+                    invoice.getInvoiceNumber(),
+                    invoice.getClientName(),
+                    orgName,
+                    dueDate,
+                    amount
+            );
+        }
 
         auditLogService.logUpdate("INVOICE", invoice.getId(),
                 invoiceMapper.toEntity(invoiceMapper.toDto(invoice)), invoice);
@@ -305,10 +363,20 @@ public class InvoiceService {
         invoice.setBalanceDue(BigDecimal.ZERO);
         invoice.setUpdatedAt(LocalDateTime.now());
         Invoice saved = invoiceRepository.save(invoice);
+        saveInvoiceJpa(saved);
         return populateClientDetails(saved);
     }
 
     public byte[] generateInvoicePdf(String id, String orgId) {
+        if (queueConfig.isQueuesEnabled()) {
+            java.util.Map<String, Object> payload = new java.util.HashMap<>();
+            payload.put("invoiceId", id);
+            payload.put("orgId", orgId);
+            queueService.pushJob(com.moneyops.queue.RedisQueueConfig.QUEUE_PDF, "INVOICE_PDF", payload);
+            log.info("Invoice {} PDF generation job pushed to queue", id);
+            return new byte[0];
+        }
+
         Invoice invoice = invoiceRepository.findByIdAndOrgIdAndDeletedAtIsNull(id, orgId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found"));
 
@@ -404,6 +472,7 @@ public class InvoiceService {
         for (Invoice invoice : overdue) {
             invoice.setStatus(InvoiceStatus.OVERDUE);
             invoiceRepository.save(invoice);
+            saveInvoiceJpa(invoice);
         }
         return populateClientDetails(overdue, orgId);
     }
@@ -443,6 +512,7 @@ public class InvoiceService {
         recalculateInvoiceTotals(invoice);
 
         invoiceRepository.save(invoice);
+        saveInvoiceJpa(invoice);
         return invoiceMapper.toItemDto(item);
     }
 
@@ -481,6 +551,7 @@ public class InvoiceService {
         // Recalculate invoice totals
         recalculateInvoiceTotals(invoice);
         invoiceRepository.save(invoice);
+        saveInvoiceJpa(invoice);
     }
 
     public void deleteItem(String itemId, String orgId) {
@@ -498,6 +569,7 @@ public class InvoiceService {
         // Recalculate invoice totals
         recalculateInvoiceTotals(invoice);
         invoiceRepository.save(invoice);
+        saveInvoiceJpa(invoice);
     }
 
     private void recalculateInvoiceTotals(Invoice invoice) {
@@ -521,6 +593,36 @@ public class InvoiceService {
         BigDecimal paid = invoice.getAmountPaid() != null ? invoice.getAmountPaid() : BigDecimal.ZERO;
         invoice.setBalanceDue(totalAmount.subtract(paid));
         invoice.setUpdatedAt(LocalDateTime.now());
+    }
+
+    private void saveInvoiceJpa(Invoice invoice) {
+        try {
+            InvoiceEntity entity = new InvoiceEntity();
+            entity.setId(invoice.getId());
+            entity.setOrgId(invoice.getOrgId());
+            entity.setClientId(invoice.getClientId());
+            entity.setInvoiceNumber(invoice.getInvoiceNumber());
+            entity.setStatus(invoice.getStatus() != null ? invoice.getStatus().name() : null);
+            entity.setTotalAmount(invoice.getTotalAmount());
+            entity.setCreatedAt(invoice.getCreatedAt());
+            invoiceJpaRepository.save(entity);
+            log.debug("Invoice {} written to PostgreSQL", invoice.getId());
+        } catch (Exception e) {
+            log.error("Failed to write invoice {} to PostgreSQL: {}", invoice.getId(), e.getMessage());
+        }
+    }
+
+    private InvoiceDto toInvoiceDto(InvoiceEntity entity) {
+        InvoiceDto dto = new InvoiceDto();
+        dto.setId(entity.getId());
+        dto.setOrgId(entity.getOrgId());
+        dto.setClientId(entity.getClientId());
+        dto.setInvoiceNumber(entity.getInvoiceNumber());
+        if (entity.getStatus() != null) {
+            dto.setStatus(entity.getStatus());
+        }
+        dto.setTotalAmount(entity.getTotalAmount());
+        return dto;
     }
 
     private InvoiceDto populateClientDetails(Invoice invoice) {
@@ -698,7 +800,7 @@ public class InvoiceService {
 
         // ✨ We don't call transactionService here if we want to avoid double-processing, 
         // but transactionService is where the DB write happens.
-        com.moneyops.transactions.dto.TransactionDto saved = transactionService.createTransaction(paymentDto, orgId, userId);
+        com.moneyops.transactions.dto.TransactionDto createdTransaction = transactionService.createTransaction(paymentDto, orgId, userId);
 
         // ✨ Denormalized sync
         BigDecimal paid = invoice.getAmountPaid() != null ? invoice.getAmountPaid() : BigDecimal.ZERO;
@@ -721,7 +823,8 @@ public class InvoiceService {
 
         invoice.setUpdatedAt(LocalDateTime.now());
         invoiceRepository.save(invoice);
-        
-        return saved;
+        saveInvoiceJpa(invoice);
+
+        return createdTransaction;
     }
 }

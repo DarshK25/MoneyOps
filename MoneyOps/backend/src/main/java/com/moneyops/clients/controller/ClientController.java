@@ -4,7 +4,11 @@ package com.moneyops.clients.controller;
 import com.moneyops.clients.dto.ClientDto;
 import com.moneyops.clients.service.ClientService;
 import com.moneyops.shared.utils.OrgContext;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,10 +22,13 @@ public class ClientController {
     private ClientService clientService;
 
     @GetMapping
-    public ResponseEntity<List<ClientDto>> getAllClients(
-            @RequestHeader(value = "X-Org-Id", required = false) String orgId) {
-        if (orgId == null || orgId.isEmpty()) orgId = OrgContext.getOrgId();
-        List<ClientDto> clients = clientService.getAllClients(orgId);
+    public ResponseEntity<Page<ClientDto>> getAllClients(
+            @RequestParam(required = false, defaultValue = "ACTIVE") String status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        String orgId = OrgContext.getOrgId();
+        if (orgId == null) return ResponseEntity.ok(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+        Page<ClientDto> clients = clientService.getClients(orgId, status, page, size);
         return ResponseEntity.ok(clients);
     }
 

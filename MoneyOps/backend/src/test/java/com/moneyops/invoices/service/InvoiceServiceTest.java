@@ -7,11 +7,14 @@ import com.moneyops.invoices.entity.InvoiceStatus;
 import com.moneyops.invoices.mapper.InvoiceMapper;
 import com.moneyops.invoices.repository.InvoiceRepository;
 import com.moneyops.invoices.validator.InvoiceValidator;
+import com.moneyops.jpa.repository.InvoiceJpaRepository;
 import com.moneyops.clients.repository.ClientRepository;
 import com.moneyops.clients.mapper.ClientMapper;
 import com.moneyops.audit.service.AuditLogService;
-import com.moneyops.invites.EmailService;
+import com.moneyops.email.EmailService;
 import com.moneyops.organizations.repository.BusinessOrganizationRepository;
+import com.moneyops.queue.RedisQueueConfig;
+import com.moneyops.queue.RedisQueueService;
 import com.moneyops.security.team.TeamActionAuthorizationService;
 import com.moneyops.transactions.service.TransactionService;
 import org.junit.jupiter.api.Test;
@@ -34,6 +37,9 @@ public class InvoiceServiceTest {
 
     @Mock
     private InvoiceRepository invoiceRepository;
+
+    @Mock
+    private InvoiceJpaRepository invoiceJpaRepository;
 
     @Mock
     private ClientRepository clientRepository;
@@ -61,6 +67,12 @@ public class InvoiceServiceTest {
 
     @Mock
     private BusinessOrganizationRepository orgRepository;
+
+    @Mock
+    private RedisQueueService queueService;
+
+    @Mock
+    private RedisQueueConfig queueConfig;
 
     @InjectMocks
     private InvoiceService invoiceService;
@@ -99,6 +111,7 @@ public class InvoiceServiceTest {
         InvoiceDto dto = new InvoiceDto();
 
         when(invoiceRepository.findByIdAndOrgIdAndDeletedAtIsNull(id, orgId)).thenReturn(Optional.of(invoice));
+        when(invoiceJpaRepository.findByIdAndOrgId(id, orgId)).thenReturn(Optional.empty());
         when(invoiceMapper.toDto(invoice)).thenReturn(dto);
 
         InvoiceDto result = invoiceService.getInvoiceById(id, orgId);
@@ -126,6 +139,7 @@ public class InvoiceServiceTest {
         when(invoiceMapper.toDto(invoice)).thenReturn(new InvoiceDto());
         when(invoiceMapper.toEntity(any(InvoiceDto.class))).thenReturn(new Invoice());
         when(orgRepository.findByIdAndDeletedAtIsNull(orgId)).thenReturn(Optional.empty());
+        when(queueConfig.isQueuesEnabled()).thenReturn(false);
 
         InvoiceDto result = invoiceService.sendInvoice(id, orgId);
 
