@@ -51,52 +51,55 @@ public class ServiceTokenFilter extends OncePerRequestFilter {
 
         String serviceToken = request.getHeader("X-Service-Token");
 
-        if (StringUtils.hasText(serviceToken) && serviceToken.equals(expectedToken)) {
-            // Already authenticated? Don't double-authenticate.
-            if (SecurityContextHolder.getContext().getAuthentication() == null) {
+        // Populate OrgContext from headers for ALL requests (not just authenticated ones)
+        // so endpoints can access X-Org-Id and X-User-Id regardless of auth mechanism.
+        try {
+            String orgIdHeader = request.getHeader("X-Org-Id");
+            String userIdHeader = request.getHeader("X-User-Id");
 
-                // Build a minimal "service" authentication principal
-                UsernamePasswordAuthenticationToken auth =
-                        new UsernamePasswordAuthenticationToken(
-                                "ai-gateway-service",
-                                null,
-                                Collections.singletonList(new SimpleGrantedAuthority("ROLE_SERVICE"))
-                        );
-                SecurityContextHolder.getContext().setAuthentication(auth);
-
-                // Populate OrgContext so downstream services can resolve org/user
-                try {
-                    String orgIdHeader = request.getHeader("X-Org-Id");
-                    String userIdHeader = request.getHeader("X-User-Id");
-
-                    if (StringUtils.hasText(userIdHeader)) {
-                        userRepository.findByClerkIdAndDeletedAtIsNull(userIdHeader).ifPresentOrElse(user -> {
-                            OrgContext.setUserId(user.getId());
-                            if (user.getOrgId() != null) {
-                                OrgContext.setOrgId(user.getOrgId());
-                            } else if (StringUtils.hasText(orgIdHeader)) {
-                                OrgContext.setOrgId(orgIdHeader);
-                            }
-                        }, () -> {
-                            // Fallback: If no user record found, treat as new/unregistered user but set IDs
-                            OrgContext.setUserId(userIdHeader);
-                            if (StringUtils.hasText(orgIdHeader)) {
-                                OrgContext.setOrgId(orgIdHeader);
-                            }
-                        });
-                    } else if (StringUtils.hasText(orgIdHeader)) {
-                        OrgContext.setOrgId(orgIdHeader);
-                    }
-
-                    filterChain.doFilter(request, response);
-                } finally {
-                    OrgContext.clear();
+            if (StringUtils.hasText(serviceToken) && serviceToken.equals(expectedToken)) {
+                if (SecurityContextHolder.getContext().getAuthentication() == null) {
+                    // Build a minimal "service" authentication principal
+                    UsernamePasswordAuthenticationToken auth =
+                            new UsernamePasswordAuthenticationToken(
+                                    "ai-gateway-service",
+                                    null,
+                                    Collections.singletonList(new SimpleGrantedAuthority("ROLE_SERVICE"))
+                            );
+                    SecurityContextHolder.getContext().setAuthentication(auth);
                 }
-                return;
+                // Populate OrgContext from DB user record if possible
+                if (StringUtils.hasText(userIdHeader)) {
+                    userRepository.findById(userIdHeader).ifPresentOrElse(user -> {
+                        OrgContext.setUserId(user.getId());
+                        if (user.getOrgId() != null) {
+                            OrgContext.setOrgId(user.getOrgId());
+                        } else if (StringUtils.hasText(orgIdHeader)) {
+                            OrgContext.setOrgId(orgIdHeader);
+                        }
+                    }, () -> {
+                        OrgContext.setUserId(userIdHeader);
+                        if (StringUtils.hasText(orgIdHeader)) {
+                            OrgContext.setOrgId(orgIdHeader);
+                        }
+                    });
+                } else if (StringUtils.hasText(orgIdHeader)) {
+                    OrgContext.setOrgId(orgIdHeader);
+                }
+            } else {
+                // No valid service token — still populate OrgContext from headers
+                // to support OAuth2-authenticated frontend requests
+                if (StringUtils.hasText(userIdHeader)) {
+                    OrgContext.setUserId(userIdHeader);
+                }
+                if (StringUtils.hasText(orgIdHeader)) {
+                    OrgContext.setOrgId(orgIdHeader);
+                }
             }
-        }
 
-        // Not a service request — continue to the next filter (JWT or unauthenticated)
-        filterChain.doFilter(request, response);
+            filterChain.doFilter(request, response);
+        } finally {
+            OrgContext.clear();
+        }
     }
 }

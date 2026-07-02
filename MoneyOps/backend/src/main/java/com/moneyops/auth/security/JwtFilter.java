@@ -62,13 +62,7 @@ public class JwtFilter extends OncePerRequestFilter {
                 
                 final String currentUserId = userId;
 
-                // Lookup user by ID first (likely the case for JWT subject)
                 var userOpt = userRepository.findById(currentUserId);
-                
-                // Fallback: look up by clerkId
-                if (userOpt.isEmpty()) {
-                    userOpt = userRepository.findByClerkIdAndDeletedAtIsNull(currentUserId);
-                }
 
                 userOpt.ifPresentOrElse(user -> {
                     if (user.getDeletedAt() != null) {
@@ -101,18 +95,14 @@ public class JwtFilter extends OncePerRequestFilter {
                 OrgContext.clear();
             }
         } else {
-            // Fallback: If no valid internal token, check for a Clerk ID in headers for development/onboarding flow
+            // Fallback: If no valid internal token, check headers for development/onboarding flow
             String userIdHeader = request.getHeader("X-User-Id");
             String orgIdHeader = request.getHeader("X-Org-Id");
 
             if (userIdHeader != null) {
                 try {
                     final String idStr = userIdHeader;
-                    var userOpt = userRepository.findByClerkIdAndDeletedAtIsNull(idStr);
-                    
-                    if (userOpt.isEmpty()) {
-                        userOpt = userRepository.findById(idStr);
-                    }
+                    var userOpt = userRepository.findById(idStr);
 
                     userOpt.ifPresentOrElse(user -> {
                         if (user.getDeletedAt() != null) return;

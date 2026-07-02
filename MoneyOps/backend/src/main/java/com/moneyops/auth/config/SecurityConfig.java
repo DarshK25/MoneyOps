@@ -49,22 +49,24 @@ public class SecurityConfig {
         );
 
         http.sessionManagement(session -> 
-            session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+            session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
         );
 
         http.authorizeHttpRequests(auth -> auth
+            // Public endpoints — no auth required
             .requestMatchers(
-                "/api/auth/**",
-                "/api/onboarding/**",
-                "/api/org/**",
-                "/api/users/**",
-                "/api/invites/**",
-                "/api/documents/**",
-                "/api/invoices/**",
+                "/api/auth/login",
+                "/api/auth/register",
                 "/oauth2/**",
                 "/swagger-ui/**",
-                "/v3/api-docs/**"
+                "/v3/api-docs/**",
+                "/actuator/health",
+                "/actuator/ready"
             ).permitAll()
+            // Onboarding needs token (JWT from register/login)
+            .requestMatchers("/api/onboarding/**").authenticated()
+            // All other API routes require authentication
+            .requestMatchers("/api/**").authenticated()
             .anyRequest().authenticated()
         );
 

@@ -1,14 +1,13 @@
-// src/main/java/com/moneyops/auth/dto/TokenResponse.java
 package com.moneyops.auth.dto;
 
-import lombok.AllArgsConstructor;
 import lombok.Data;
 
 @Data
-@AllArgsConstructor
 public class TokenResponse {
-    private String accessToken;
-    private String refreshToken;
-    private String tokenType = "Bearer";
+    private String token;
+    private String userId;
+    private String email;
+    private String name;
+    private String orgId;
     private long expiresIn;
 }

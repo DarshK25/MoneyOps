@@ -1,6 +1,6 @@
 package com.moneyops.notifications;
 
-import com.moneyops.invites.EmailService;
+import com.moneyops.email.EmailService;
 import com.moneyops.notifications.dto.EmailRequest;
 import com.moneyops.shared.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;

@@ -35,6 +35,7 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
         String token = authService.handleOAuth2Login(userInfo);
 
         // Redirect to frontend with token
-        getRedirectStrategy().sendRedirect(request, response, "http://localhost:3000/oauth2/redirect?token=" + token);
+        String frontendUrl = System.getenv().getOrDefault("FRONTEND_URL", "http://localhost:3000");
+        getRedirectStrategy().sendRedirect(request, response, frontendUrl + "/oauth2/redirect?token=" + token);
     }
 }

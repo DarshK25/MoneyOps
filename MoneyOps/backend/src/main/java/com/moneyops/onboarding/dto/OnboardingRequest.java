@@ -13,10 +13,10 @@ import java.util.List;
 @Data
 public class OnboardingRequest {
 
-    // Always present (added by frontend from Clerk session)
-    private String clerkId;   // Clerk user ID e.g. "user_2abc123xyz"
-    private String email;     // user's email from Clerk
-    private String name;      // user's personal name from Clerk (not the business name)
+    // User ID from OAuth2 JWT
+    private String userId;
+    private String email;     // user's email
+    private String name;      // user's personal name (not the business name)
 
     // ── Step 1: BusinessInfoStep ───────────────────────────────────────────────
     private String legalName;           // company legal name (renamed from "name" by frontend)
