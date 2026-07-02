@@ -1,34 +1,76 @@
-############################
-# Monorepo root ignore file
-############################
-
-# Python virtual environments
+# Python
+**/__pycache__/
+**/*.pyc
+**/*.pyo
 **/venv/
+**/.venv/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.pyre/
 
-# Local runtime logs
-runtime-logs/
+# Java / JVM
+**/target/
+**/build/
+**/bin/
+**/.gradle/
+**/.mvn/
+**/*.class
+**/*.jar
+**/*.war
+**/*.ear
 
-# OS/editor junk
+# Node / JS
+**/node_modules/
+**/dist/
+**/.next/
+**/out/
+
+# Logs
+**/*.log
+**/*.log.*
+**/*.err
+**/*.out
+**/hs_err_pid*.log
+**/gc*.log
+
+# IDE
+**/.vscode/
+**/.idea/
+**/*.iml
+**/.settings/
+**/.classpath
+**/.project
+**/.factorypath
+**/.metadata/
+
+# OS
 .DS_Store
 Thumbs.db
+*.swp
+*.swo
+*~
 
-# Local env files (each service also has its own .gitignore)
+# Environment
 **/.env
 **/.env.local
+**/.env.*.local
 
-# Database files
+# Build artifacts (root level)
+BOOT-INF/
+META-INF/
+org/
+
+# Database
 *.db
 *.sqlite
 *.sqlite3
-**/data/*.db
 
-# Logs
-*.log.txt
-full_git_log.txt
-entire_git_history.txt
+# Runtime
+runtime-logs/
+*.pid
+*.proc.xml
 
-# Build artifacts
-**/target/
-**/build/
-**/dist/
-**/__pycache__/
+# Temp files
+*.tmp
+*.temp
