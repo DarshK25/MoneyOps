@@ -3,6 +3,8 @@ package com.moneyops.jpa.entity;
 import com.moneyops.jpa.converter.StringToUuidConverter;
 import jakarta.persistence.*;
 import lombok.Data;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 
@@ -47,4 +49,11 @@ public class ClientEntity {
 
     @Column(name = "updated_by")
     private String updatedBy;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "document_data")
+    private String documentData;
 }

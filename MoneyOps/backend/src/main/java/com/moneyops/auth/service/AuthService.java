@@ -1,4 +1,3 @@
-// src/main/java/com/moneyops/auth/service/AuthService.java
 package com.moneyops.auth.service;
 
 import com.moneyops.auth.dto.LoginRequest;
@@ -6,21 +5,24 @@ import com.moneyops.auth.dto.OAuthUserInfo;
 import com.moneyops.auth.dto.RegisterRequest;
 import com.moneyops.auth.dto.TokenResponse;
 import com.moneyops.auth.security.JwtProvider;
+import com.moneyops.jpa.entity.UserEntity;
+import com.moneyops.jpa.repository.UserJpaRepository;
+import com.moneyops.onboarding.service.OnboardingService;
 import com.moneyops.shared.exceptions.UnauthorizedException;
 import com.moneyops.shared.exceptions.ValidationException;
-import com.moneyops.users.entity.User;
-import com.moneyops.users.repository.UserRepository;
+import com.moneyops.shared.exceptions.ForbiddenException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Service
 public class AuthService {
 
     @Autowired
-    private UserRepository userRepository;
+    private UserJpaRepository userJpaRepository;
 
     @Autowired
     private JwtProvider jwtProvider;
@@ -28,17 +30,21 @@ public class AuthService {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private OnboardingService onboardingService;
+
     public TokenResponse login(LoginRequest request) {
-        User user = userRepository.findByEmailAndDeletedAtIsNull(request.getEmail())
+        UserEntity user = userJpaRepository.findByEmailAndDeletedAtIsNull(request.getEmail())
                 .orElseThrow(() -> new UnauthorizedException("Invalid email or password"));
 
         if (user.getPasswordHash() == null || !passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
             throw new UnauthorizedException("Invalid email or password");
         }
 
-        String token = jwtProvider.generateToken(user.getId(), user.getOrgId());
+        onboardingService.repairOrganizationLink(user.getId());
+
         TokenResponse response = new TokenResponse();
-        response.setToken(token);
+        response.setToken(jwtProvider.generateToken(user.getId(), user.getOrgId()));
         response.setUserId(user.getId());
         response.setEmail(user.getEmail());
         response.setName(user.getName());
@@ -47,20 +53,21 @@ public class AuthService {
     }
 
     public TokenResponse register(RegisterRequest request) {
-        if (userRepository.findByEmailAndDeletedAtIsNull(request.getEmail()).isPresent()) {
+        if (userJpaRepository.findByEmailAndDeletedAtIsNull(request.getEmail()).isPresent()) {
             throw new ValidationException("Email already registered");
         }
 
-        User user = new User();
-        ensureUuid(user);
+        UserEntity user = new UserEntity();
+        user.setId(UUID.randomUUID().toString());
         user.setName(request.getName());
         user.setEmail(request.getEmail());
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
-        user.setRole(User.Role.STAFF);
-        user.setStatus(User.Status.ACTIVE);
+        user.setRole("STAFF");
+        user.setStatus("ACTIVE");
         user.setCreatedBy("self");
         user.setUpdatedBy("self");
-        user = userRepository.save(user);
+        user.setCreatedAt(LocalDateTime.now());
+        user = userJpaRepository.save(user);
 
         String token = jwtProvider.generateToken(user.getId(), user.getOrgId());
         TokenResponse response = new TokenResponse();
@@ -73,25 +80,29 @@ public class AuthService {
     }
 
     public String handleOAuth2Login(OAuthUserInfo userInfo) {
-        User user = userRepository.findByEmailAndDeletedAtIsNull(userInfo.getEmail())
+        if (!userInfo.isEmailVerified()) {
+            throw new ForbiddenException("Email not verified by OAuth provider");
+        }
+
+        UserEntity user = userJpaRepository.findByEmailAndDeletedAtIsNull(userInfo.getEmail())
                 .orElseGet(() -> {
-                    User newUser = new User();
-                    ensureUuid(newUser);
+                    UserEntity newUser = new UserEntity();
+                    newUser.setId(UUID.randomUUID().toString());
                     newUser.setName(userInfo.getName());
                     newUser.setEmail(userInfo.getEmail());
-                    newUser.setRole(User.Role.STAFF);
-                    newUser.setStatus(User.Status.ACTIVE);
+                    newUser.setRole("STAFF");
+                    newUser.setStatus("ACTIVE");
                     newUser.setCreatedBy("oauth");
                     newUser.setUpdatedBy("oauth");
-                    return userRepository.save(newUser);
+                    newUser.setCreatedAt(LocalDateTime.now());
+                    return userJpaRepository.save(newUser);
                 });
 
-        return jwtProvider.generateToken(user.getId(), user.getOrgId());
-    }
+        user.setLastLoginAt(LocalDateTime.now());
+        userJpaRepository.save(user);
 
-    private void ensureUuid(User user) {
-        if (user.getId() == null || user.getId().isBlank()) {
-            user.setId(UUID.randomUUID().toString());
-        }
+        onboardingService.repairOrganizationLink(user.getId());
+
+        return jwtProvider.generateToken(user.getId(), user.getOrgId());
     }
 }

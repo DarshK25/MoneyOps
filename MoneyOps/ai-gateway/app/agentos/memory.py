@@ -235,14 +235,28 @@ class RedisStore:
     def _init_redis(self):
         try:
             import redis
+            import os
             from app.config import settings
             host = settings.REDIS_HOST or "127.0.0.1"
             port = settings.REDIS_PORT or 6379
             pwd = settings.REDIS_PASSWORD or None
             db = settings.REDIS_DB or 0
+            use_tls = getattr(settings, "REDIS_TLS", False)
+
+            # If standard Redis is localhost and Upstash credentials exist, use Upstash
+            if host in ("127.0.0.1", "localhost") and pwd is None:
+                upstash_url = os.getenv("UPSTASH_REDIS_REST_URL", "")
+                upstash_token = os.getenv("UPSTASH_REDIS_REST_TOKEN", "")
+                if upstash_url and upstash_token:
+                    host = upstash_url.replace("https://", "").replace("http://", "")
+                    port = 6379
+                    pwd = upstash_token
+                    use_tls = True
+
             self._client = redis.Redis(
                 host=host, port=port, db=db, password=pwd,
-                decode_responses=True, socket_connect_timeout=2,
+                ssl=use_tls,
+                decode_responses=True, socket_connect_timeout=5,
             )
             self._client.ping()
             self._available = True
@@ -318,8 +332,9 @@ class MongoStore:
 
     def _init_mongo(self):
         try:
+            import os
             from pymongo import MongoClient
-            uri = "mongodb://127.0.0.1:27017"
+            uri = os.getenv("MONGODB_URI", "mongodb://127.0.0.1:27017")
             client = MongoClient(uri, serverSelectionTimeoutMS=2000)
             client.server_info()
             self._db = client["moneyops"]

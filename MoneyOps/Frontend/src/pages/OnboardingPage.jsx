@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Building2, Users, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Progress } from "@/components/ui/progress";
@@ -17,6 +18,7 @@ const STEP_SEQUENCES = {
 };
 
 export default function OnboardingPage() {
+    const navigate = useNavigate();
     const { user } = useUser();
     const [mode, setMode] = useState("choose");
     const [currentStep, setCurrentStep] = useState("welcome");
@@ -67,7 +69,7 @@ export default function OnboardingPage() {
                 : "/api/onboarding/join-business";
             await api.post(endpoint, payload);
             toast.success("Onboarding completed! Redirecting to dashboard…");
-            setTimeout(() => { window.location.href = "/analytics"; }, 1500);
+            setTimeout(() => { navigate("/analytics", { replace: true }); }, 1500);
         } catch (error) {
             console.error("Onboarding error:", error);
             toast.error(error.message || "Failed to complete onboarding");

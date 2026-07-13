@@ -39,8 +39,8 @@ public class JwtTokenProvider {
         Date validity = new Date(now.getTime() + validityInMilliseconds);
         
         return Jwts.builder()
-            .subject(userId)
             .claims(claims)
+            .subject(userId)
             .issuedAt(now)
             .expiration(validity)
             .signWith(secretKey)

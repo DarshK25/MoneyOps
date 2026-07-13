@@ -9,15 +9,20 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 _redis_client: aioredis.Redis | None = None
+_redis_failed: bool = False
 
 
 async def get_redis() -> aioredis.Redis | None:
     """Get or create the Redis connection. Returns None if Redis is unavailable."""
-    global _redis_client
+    global _redis_client, _redis_failed
+    if _redis_failed:
+        return None
     if not settings.REDIS_HOST:
         return None
     if _redis_client is None:
         _redis_client = await _create_redis()
+        if _redis_client is None:
+            _redis_failed = True
     return _redis_client
 
 
@@ -38,7 +43,7 @@ async def _create_redis() -> aioredis.Redis | None:
             else:
                 url = f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB}"
 
-        client = aioredis.from_url(url, decode_responses=True, socket_connect_timeout=3)
+        client = aioredis.from_url(url, decode_responses=True, socket_connect_timeout=0.5)
         await client.ping()
         logger.info("redis_connected", host=settings.REDIS_HOST, tls=settings.REDIS_TLS)
         return client

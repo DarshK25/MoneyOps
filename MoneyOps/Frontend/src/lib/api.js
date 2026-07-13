@@ -29,20 +29,20 @@ class ApiClient {
       headers,
     });
 
-    if (response.status === 401) {
-      authClient.clearAuth();
-      if (typeof window !== "undefined") {
-        window.location.href = "/sign-in";
-      }
-      throw new Error("Unauthorized");
-    }
-
     const contentType = response.headers.get("content-type") || "";
     let data;
     if (contentType.includes("application/json")) {
       data = await response.json();
     } else {
       data = await response.blob();
+    }
+
+    if (response.status === 401 && !endpoint.includes('/auth/')) {
+      authClient.clearAuth();
+      if (typeof window !== "undefined") {
+        window.location.href = "/sign-in";
+      }
+      throw new Error(data.message || data.error || "Unauthorized");
     }
 
     if (!response.ok) {

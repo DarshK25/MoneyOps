@@ -74,3 +74,6 @@ runtime-logs/
 # Temp files
 *.tmp
 *.temp
+
+# Scripts with hardcoded credentials
+**/start.bat

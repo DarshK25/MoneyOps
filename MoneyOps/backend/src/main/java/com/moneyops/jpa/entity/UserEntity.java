@@ -3,6 +3,8 @@ package com.moneyops.jpa.entity;
 import com.moneyops.jpa.converter.StringToUuidConverter;
 import jakarta.persistence.*;
 import lombok.Data;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 
@@ -15,8 +17,8 @@ public class UserEntity {
     @Convert(converter = StringToUuidConverter.class)
     private String id;
 
-    @Column(name = "clerk_user_id")
-    private String clerkUserId;
+    @Column(name = "legacy_mongo_id")
+    private String legacyMongoId;
 
     private String email;
 
@@ -28,7 +30,29 @@ public class UserEntity {
 
     private String role;
 
-    @Column(columnDefinition = "jsonb")
+    private String status;
+
+    private String phone;
+
+    @Column(name = "onboarding_complete")
+    private Boolean onboardingComplete;
+
+    @Column(name = "last_login_at")
+    private LocalDateTime lastLoginAt;
+
+    @Column(name = "password_hash")
+    private String passwordHash;
+
+    @Column(name = "created_by")
+    private String createdBy;
+
+    @Column(name = "updated_by")
+    private String updatedBy;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
+    @JdbcTypeCode(SqlTypes.JSON)
     private String preferences;
 
     @Column(name = "created_at")

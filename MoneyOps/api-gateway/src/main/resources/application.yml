@@ -122,6 +122,10 @@ ai:
   gateway:
     url: ${AI_GATEWAY_URL:http://localhost:8005}
 
+voice:
+  service:
+    url: ${VOICE_SERVICE_URL:http://localhost:5001}
+
 management:
   endpoints:
     web:

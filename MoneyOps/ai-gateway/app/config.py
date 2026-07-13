@@ -83,6 +83,12 @@ class Settings(BaseSettings):
     CACHE_TTL_MEDIUM: int = 1800
     CACHE_TTL_LONG: int = 3600
 
+    # Semantic Cache
+    CACHE_SEMANTIC_ENABLED: bool = True
+    CACHE_SEMANTIC_THRESHOLD: float = 0.40
+    CACHE_SEMANTIC_TTL: int = 3600
+    CACHE_SEMANTIC_MAX_ENTRIES: int = 10000
+
     JWT_SECRET_KEY: str = "your-secret-key-change-in-production"
     JWT_ALGORITHM: str = "HS256"
 

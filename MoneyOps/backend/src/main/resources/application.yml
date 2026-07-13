@@ -39,6 +39,11 @@ spring:
       minimum-idle: 2
       connection-timeout: 10000
 
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: "0"
+
   jpa:
     hibernate:
       ddl-auto: ${DDL_AUTO:none}
@@ -96,7 +101,7 @@ grpc:
     port: ${GRPC_PORT:50051}
 
 jwt:
-  secret: ${JWT_SECRET:my-super-secret-key-that-is-at-least-256-bits-long-for-HS256-algorithm-must-be-longer}
+  secret: ${JWT_SECRET}
   expiration: ${JWT_EXPIRATION:86400000}
 
 # Internal service-to-service token is read directly from env var INTERNAL_SERVICE_TOKEN

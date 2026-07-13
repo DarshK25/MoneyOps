@@ -11,6 +11,7 @@ Provider Capabilities:
 from typing import Optional, List, Dict, Any, Tuple
 import json
 import re
+import asyncio
 import httpx
 from enum import Enum
 from dataclasses import dataclass, field
@@ -212,13 +213,54 @@ class MultiProviderClient:
         tool_choice: Optional[str] = None,
         use_complex_model: bool = False,
         task_type: Optional[TaskType] = None,
+        skip_cache: bool = False,
     ) -> Dict[str, Any]:
         """
         Chat completion with intelligent task-based routing.
         
         Args:
             task_type: Override automatic task classification
+            skip_cache: Bypass semantic cache for this call
         """
+        # Check semantic cache for non-tool queries
+        cached_response = None
+        last_user_msg = None
+        if not tools and not skip_cache and not response_format:
+            for msg in reversed(messages):
+                if msg.get("role") == "user":
+                    last_user_msg = msg.get("content", "")
+                    break
+            if last_user_msg:
+                try:
+                    from app.cache.semantic_cache import semantic_cache
+                    cached_entry = await semantic_cache.get(last_user_msg)
+                    if cached_entry:
+                        cached_response = {
+                            "choices": [{
+                                "message": {"role": "assistant", "content": cached_entry.response},
+                                "finish_reason": "stop",
+                            }],
+                            "model": "cached",
+                            "usage": {
+                                "prompt_tokens": 0,
+                                "completion_tokens": cached_entry.tokens_used,
+                                "total_tokens": cached_entry.tokens_used,
+                            },
+                            "_cached": True,
+                            "_source": "semantic_cache",
+                        }
+                        logger.info(
+                            "llm_cache_hit",
+                            query=last_user_msg[:60],
+                            provider=cached_entry.provider,
+                            tokens_saved=cached_entry.tokens_used,
+                        )
+                except Exception as e:
+                    logger.debug("llm_cache_check_failed", error=str(e))
+
+        if cached_response:
+            return cached_response
+
         # Classify task if not specified
         if task_type is None:
             task_type = self._classify_task(messages, max_tokens, response_format)
@@ -232,6 +274,8 @@ class MultiProviderClient:
                 continue
                 
             try:
+                import time as _time
+                _call_start = _time.time()
                 result = await self._call_provider(
                     provider_name=provider_name,
                     messages=messages,
@@ -240,12 +284,31 @@ class MultiProviderClient:
                     response_format=response_format,
                     use_complex=use_complex_model,
                 )
+                _call_duration = (_time.time() - _call_start) * 1000
                 
                 logger.info(
                     "llm_completion_success",
                     provider=provider_name,
                     task_type=task_type.value,
+                    duration_ms=round(_call_duration, 1),
                 )
+
+                # Cache the response for future queries
+                if last_user_msg and not tools and not response_format:
+                    try:
+                        content = result["choices"][0]["message"]["content"]
+                        token_count = result.get("usage", {}).get("total_tokens", 0)
+                        from app.cache.semantic_cache import semantic_cache
+                        asyncio.ensure_future(semantic_cache.set(
+                            query=last_user_msg,
+                            response=content,
+                            provider=provider_name,
+                            tokens_used=token_count,
+                            latency_ms=_call_duration,
+                        ))
+                    except Exception as e:
+                        logger.debug("llm_cache_store_failed", error=str(e))
+                
                 return result
                 
             except Exception as e:

@@ -8,7 +8,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.stereotype.Component;
+import org.springframework.util.AntPathMatcher;
+import org.springframework.util.PathMatcher;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebFilter;
 import org.springframework.web.server.WebFilterChain;
@@ -29,6 +34,8 @@ public class AuthenticationFilter implements WebFilter {
     private String publicEndpointsRaw;
 
     private List<String> publicEndpoints;
+
+    private final PathMatcher pathMatcher = new AntPathMatcher();
 
     @PostConstruct
     void initPublicEndpoints() {
@@ -55,6 +62,7 @@ public class AuthenticationFilter implements WebFilter {
         
         try {
             // Validate token and extract claims FROM THE TOKEN
+            Claims claims = jwtTokenProvider.validateToken(token);
             String userId = jwtTokenProvider.getUserIdFromToken(token);
             String orgId = jwtTokenProvider.getOrgIdFromToken(token);
             
@@ -74,7 +82,12 @@ public class AuthenticationFilter implements WebFilter {
             
             log.debug("Authenticated request for userId={}, orgId={}", userId, orgId);
             
-            return chain.filter(exchange.mutate().request(mutatedRequest).build());
+            // Populate Spring Security context so anyExchange().authenticated() works
+            UsernamePasswordAuthenticationToken auth =
+                new UsernamePasswordAuthenticationToken(userId, token, List.of(new SimpleGrantedAuthority("ROLE_USER")));
+            
+            return chain.filter(exchange.mutate().request(mutatedRequest).build())
+                .contextWrite(ReactiveSecurityContextHolder.withAuthentication(auth));
             
         } catch (SecurityException e) {
             log.error("Security validation failed: {}", e.getMessage());
@@ -89,7 +102,7 @@ public class AuthenticationFilter implements WebFilter {
     
     private boolean isPublicEndpoint(String path) {
         return publicEndpoints.stream()
-            .anyMatch(endpoint -> path.startsWith(endpoint.trim()));
+            .anyMatch(endpoint -> pathMatcher.match(endpoint.trim(), path));
     }
     
     private String extractToken(ServerHttpRequest request) {

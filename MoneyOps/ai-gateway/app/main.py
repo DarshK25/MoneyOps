@@ -240,6 +240,14 @@ if settings.ENVIRONMENT != "production":
         except ImportError:
             pass
 
+# Semantic Cache API
+try:
+    from app.api.v1 import cache as cache_router
+    app.include_router(cache_router.router, prefix="/api/v1", tags=["Cache"])
+    logger.info("cache_router_included")
+except ImportError as e:
+    logger.warning("cache_router_unavailable", error=str(e))
+
 
 # ============================================================================
 # Root endpoint

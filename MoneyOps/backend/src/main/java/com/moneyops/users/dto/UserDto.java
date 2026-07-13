@@ -12,5 +12,6 @@ public class UserDto {
     private String phone;
     private String role;
     private String status;
+    private String orgId;
     private LocalDateTime lastLoginAt;
 }

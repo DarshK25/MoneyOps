@@ -1,6 +1,6 @@
-// src/main/java/com/moneyops/users/controller/UserController.java
 package com.moneyops.users.controller;
 
+import com.moneyops.jpa.entity.UserEntity;
 import com.moneyops.users.dto.UserDto;
 import com.moneyops.users.dto.CreateInviteRequest;
 import com.moneyops.users.dto.AcceptInviteRequest;
@@ -36,7 +36,7 @@ public class UserController {
         if (userId == null) {
             return ResponseEntity.badRequest().build();
         }
-        com.moneyops.users.entity.User user = userService.findUserById(userId);
+        UserEntity user = userService.findUserById(userId);
         if (user == null) {
             return ResponseEntity.notFound().build();
         }
@@ -45,8 +45,9 @@ public class UserController {
         dto.setId(user.getId());
         dto.setName(user.getName());
         dto.setEmail(user.getEmail());
-        dto.setRole(user.getRole() != null ? user.getRole().name() : null);
-        dto.setStatus(user.getStatus() != null ? user.getStatus().name() : null);
+        dto.setRole(user.getRole());
+        dto.setStatus(user.getStatus());
+        dto.setOrgId(user.getOrgId());
         
         return ResponseEntity.ok(dto);
     }

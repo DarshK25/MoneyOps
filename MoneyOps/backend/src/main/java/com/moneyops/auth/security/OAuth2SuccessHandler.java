@@ -31,6 +31,7 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
         userInfo.setEmail(oauth2User.getAttribute("email"));
         userInfo.setName(oauth2User.getAttribute("name"));
         userInfo.setPicture(oauth2User.getAttribute("picture"));
+        userInfo.setEmailVerified(Boolean.TRUE.equals(oauth2User.getAttribute("email_verified")));
 
         String token = authService.handleOAuth2Login(userInfo);
 

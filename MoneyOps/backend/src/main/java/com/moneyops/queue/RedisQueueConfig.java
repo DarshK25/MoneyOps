@@ -6,7 +6,7 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class RedisQueueConfig {
 
-    @Value("${redis.queues.enabled:false}")
+    @Value("${spring.redis.queues.enabled:false}")
     private boolean queuesEnabled;
 
     public static final String QUEUE_EMAIL = "moneyops:queue:email";

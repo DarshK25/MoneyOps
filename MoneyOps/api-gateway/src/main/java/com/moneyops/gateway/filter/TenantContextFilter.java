@@ -18,6 +18,8 @@ import jakarta.annotation.PostConstruct;
 import java.util.Arrays;
 import java.util.List;
 
+import org.springframework.security.core.context.ReactiveSecurityContextHolder;
+
 /**
  * TenantContextFilter - Enforces Multi-Tenant Isolation
  * 
@@ -40,7 +42,7 @@ import java.util.List;
  */
 @Slf4j
 @Component
-@Order(Ordered.HIGHEST_PRECEDENCE + 2)  // Run after AuthenticationFilter
+@Order(Ordered.LOWEST_PRECEDENCE)  // Run after Security chain (AuthenticationFilter sets X-Org-Id from JWT)
 @RequiredArgsConstructor
 public class TenantContextFilter implements WebFilter {
     

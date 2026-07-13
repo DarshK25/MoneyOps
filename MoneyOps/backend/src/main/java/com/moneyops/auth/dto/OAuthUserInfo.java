@@ -9,4 +9,5 @@ public class OAuthUserInfo {
     private String email;
     private String name;
     private String picture;
+    private boolean emailVerified;
 }

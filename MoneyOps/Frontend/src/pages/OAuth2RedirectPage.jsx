@@ -4,6 +4,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
+const KNOWN_ERRORS = new Set(["access_denied", "server_error", "temporarily_unavailable"]);
+
 export default function OAuth2RedirectPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -14,19 +16,20 @@ export default function OAuth2RedirectPage() {
     const error = searchParams.get("error");
 
     if (error) {
-      toast.error("Authentication failed: " + error);
+      const message = KNOWN_ERRORS.has(error) ? error : "authentication_failed";
+      toast.error("Authentication failed: " + message);
       navigate("/sign-in");
       return;
     }
 
     if (token) {
-      // Store the token and fetch user data
+      window.history.replaceState({}, '', '/oauth2/redirect');
+
       const handleOAuthSuccess = async () => {
         try {
           const result = await setToken(token);
           if (result.success) {
-            toast.success("Signed in successfully!");
-            navigate("/analytics");
+            navigate("/analytics", { replace: true });
           } else {
             throw new Error(result.error || "Failed to authenticate");
           }

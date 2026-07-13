@@ -8,7 +8,6 @@ import time
 import re
 import hashlib
 
-from app.llm.multi_provider import llm_client as groq_client
 from app.schemas.intents import (
     Intent,
     IntentClassification,
@@ -32,8 +31,7 @@ class IntentClassifier:
     """
 
     def __init__(self):
-        self.groq = groq_client
-
+        self.groq = None
         self.intent_patterns = self._build_intent_patterns()
         self._cache: Dict[str, IntentClassification] = {}
 
@@ -264,6 +262,9 @@ class IntentClassifier:
         collected_entities: Optional[Dict[str, Any]] = None,
     ) -> IntentClassification:
         """LLM-based classification for complex cases"""
+        if self.groq is None:
+            from app.llm.multi_provider import llm_client as groq_client
+            self.groq = groq_client
         prompt = self._build_classification_prompt(user_input, conversation_history, business_context, locked_intent, collected_entities)
 
         # Use chat_completion_with_json to get a parsed JSON response from Groq

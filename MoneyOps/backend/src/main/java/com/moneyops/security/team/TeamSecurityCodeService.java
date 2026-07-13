@@ -1,14 +1,14 @@
 package com.moneyops.security.team;
 
 import com.moneyops.email.EmailService;
-import com.moneyops.organizations.entity.BusinessOrganization;
-import com.moneyops.organizations.repository.BusinessOrganizationRepository;
+import com.moneyops.jpa.entity.OrganizationEntity;
+import com.moneyops.jpa.entity.UserEntity;
+import com.moneyops.jpa.persistence.OrganizationDocumentStore;
+import com.moneyops.jpa.repository.UserJpaRepository;
 import com.moneyops.shared.exceptions.UnauthorizedException;
 import com.moneyops.shared.exceptions.ValidationException;
 import com.moneyops.users.entity.Invite;
-import com.moneyops.users.entity.User;
 import com.moneyops.users.repository.InviteRepository;
-import com.moneyops.users.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -23,15 +23,16 @@ import java.util.List;
 @Slf4j
 public class TeamSecurityCodeService {
 
-    private final BusinessOrganizationRepository orgRepository;
+    private final OrganizationDocumentStore organizationStore;
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
     private final InviteRepository inviteRepository;
-    private final UserRepository userRepository;
+    private final UserJpaRepository userJpaRepository;
 
     public void assertTeamActionCodeConfigured(String orgId) {
-        BusinessOrganization org = getOrgOrThrow(orgId);
-        if (org.getTeamActionCodeHash() == null || org.getTeamActionCodeHash().isBlank()) {
+        OrganizationEntity org = getOrgOrThrow(orgId);
+        String hash = organizationStore.getTeamActionCodeHash(org);
+        if (hash == null || hash.isBlank()) {
             throw new ValidationException("Team security code is not configured for this workspace.");
         }
     }
@@ -41,8 +42,8 @@ public class TeamSecurityCodeService {
             throw new ValidationException("Team security code is required.");
         }
 
-        BusinessOrganization org = getOrgOrThrow(orgId);
-        String storedHash = org.getTeamActionCodeHash();
+        OrganizationEntity org = getOrgOrThrow(orgId);
+        String storedHash = organizationStore.getTeamActionCodeHash(org);
         if (storedHash == null || storedHash.isBlank()) {
             throw new ValidationException("Team security code is not configured for this workspace.");
         }
@@ -57,14 +58,12 @@ public class TeamSecurityCodeService {
         if (rawTeamCode == null || rawTeamCode.isBlank()) {
             throw new ValidationException("Team security code cannot be empty.");
         }
-
-        // Basic sanity checks; keep it simple and allow a range for UX.
         if (rawTeamCode.length() < 4) {
             throw new ValidationException("Team security code must be at least 4 characters.");
         }
 
-        BusinessOrganization org = getOrgOrThrow(orgId);
-        String existingHash = org.getTeamActionCodeHash();
+        OrganizationEntity org = getOrgOrThrow(orgId);
+        String existingHash = organizationStore.getTeamActionCodeHash(org);
         boolean isUpdate = existingHash != null && !existingHash.isBlank();
 
         if (isUpdate) {
@@ -76,65 +75,39 @@ public class TeamSecurityCodeService {
             }
         }
 
-        org.setTeamActionCodeHash(passwordEncoder.encode(rawTeamCode));
-        org.setUpdatedAt(LocalDateTime.now());
-        
-        try {
-            orgRepository.save(org);
-            log.info("Team security code {} for organization {}", isUpdate ? "updated" : "set", orgId);
-            
-            // If updating existing code, notify all accepted members via email
-            if (isUpdate) {
-                notifyMembersOfCodeChange(orgId, rawTeamCode, org.getLegalName());
-            }
-        } catch (Exception e) {
-            log.error("Failed to save team security code for organization {}: {}", orgId, e.getMessage());
-            throw new RuntimeException("Failed to save team security code: " + e.getMessage(), e);
+        organizationStore.setTeamActionCodeHash(org, passwordEncoder.encode(rawTeamCode));
+        organizationStore.saveEntity(org);
+        log.info("Team security code {} for organization {}", isUpdate ? "updated" : "set", orgId);
+
+        if (isUpdate) {
+            notifyMembersOfCodeChange(orgId, rawTeamCode, org.getLegalName());
         }
     }
 
-    /**
-     * Sends email notifications to all accepted members when the team security code is changed.
-     * This ensures that members receive the updated code immediately after the owner changes it.
-     */
     private void notifyMembersOfCodeChange(String orgId, String newTeamCode, String orgName) {
         try {
-            // Get all accepted users in this organization
-            List<User> acceptedMembers = userRepository.findAllByOrgIdAndStatusAndDeletedAtIsNull(
-                    orgId, User.Status.ACTIVE
-            );
-            
-            for (User member : acceptedMembers) {
-                // Skip the owner from email notification (they already know)
-                if (member.getRole() == User.Role.OWNER) {
+            List<UserEntity> acceptedMembers = userJpaRepository.findByOrgIdAndStatusAndDeletedAtIsNull(orgId, "ACTIVE");
+
+            for (UserEntity member : acceptedMembers) {
+                if ("OWNER".equalsIgnoreCase(member.getRole())) {
                     continue;
                 }
-                
                 try {
                     String subject = "Team Security Code Updated - " + (orgName != null ? orgName : "MoneyOps");
                     String htmlContent = buildSecurityCodeChangeEmailContent(newTeamCode, orgName);
                     sendSecurityCodeChangeEmail(member.getEmail(), subject, htmlContent);
                 } catch (Exception e) {
-                    log.error("Failed to send security code change notification to {}: {}", 
-                              member.getEmail(), e.getMessage());
-                    // Continue with other members even if one fails
+                    log.error("Failed to send security code change notification to {}: {}", member.getEmail(), e.getMessage());
                 }
             }
         } catch (Exception e) {
-            log.error("Failed to notify members of code change for organization {}: {}", 
-                      orgId, e.getMessage());
-            // Don't fail the entire operation if member notification fails
+            log.error("Failed to notify members of code change for organization {}: {}", orgId, e.getMessage());
         }
     }
 
     private void sendSecurityCodeChangeEmail(String toEmail, String subject, String htmlContent) {
-        try {
-            log.info("Sending security code change notification to {}", toEmail);
-            emailService.sendSecurityCodeChangeEmail(toEmail, subject, htmlContent);
-        } catch (Exception e) {
-            log.error("Error sending security code change email: {}", e.getMessage());
-            throw e;
-        }
+        log.info("Sending security code change notification to {}", toEmail);
+        emailService.sendSecurityCodeChangeEmail(toEmail, subject, htmlContent);
     }
 
     private String buildSecurityCodeChangeEmailContent(String newTeamCode, String orgName) {
@@ -150,8 +123,8 @@ public class TeamSecurityCodeService {
                "</div>";
     }
 
-    private BusinessOrganization getOrgOrThrow(String orgId) {
-        return orgRepository.findByIdAndDeletedAtIsNull(orgId)
+    private OrganizationEntity getOrgOrThrow(String orgId) {
+        return organizationStore.findById(orgId)
                 .orElseThrow(() -> new UnauthorizedException("Organization not found."));
     }
 }
