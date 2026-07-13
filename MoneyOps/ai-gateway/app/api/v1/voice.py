@@ -182,7 +182,7 @@ async def process_voice(request: VoiceProcessRequest, fastapi_request: Request):
 @router.post("/voice/dialog-response")
 async def process_voice_dialog_response(request: VoiceDialogResponseRequest):
     try:
-        session = session_manager.get_session(request.session_id)
+        session = await session_manager.get_session(request.session_id)
         fields = dict(request.fields or {})
 
         if request.dialog_id == "invoice_preview_form":

@@ -391,7 +391,7 @@ async def test_business_context_prefers_org_profile_over_status(monkeypatch):
 @pytest.mark.asyncio
 async def test_business_context_followup_uses_cached_profile():
     agent = IntelligentAgent()
-    session = session_manager.get_session("sess-5", "user-a", "org-a", business_id=1)
+    session = await session_manager.get_session("sess-5", "user-a", "org-a", business_id=1)
     session.last_tool = "get_business_context"
     session.last_business_profile = {
         "name": "VoltNest Energy Private Limited",
@@ -399,7 +399,7 @@ async def test_business_context_followup_uses_cached_profile():
         "sector": "B2B commercial EV charging",
         "services": "EV charging infrastructure design and installation",
     }
-    session_manager.save_session(session)
+    await session_manager.save_session(session)
 
     message = await agent._tool_get_business_context(
         {
@@ -416,7 +416,7 @@ async def test_business_context_followup_uses_cached_profile():
 @pytest.mark.asyncio
 async def test_market_followup_uses_cached_results():
     agent = IntelligentAgent()
-    session = session_manager.get_session("sess-6", "user-a", "org-a", business_id=1)
+    session = await session_manager.get_session("sess-6", "user-a", "org-a", business_id=1)
     session.last_tool = "search_market"
     session.last_business_profile = {
         "name": "VoltNest Energy Private Limited",
@@ -427,7 +427,7 @@ async def test_market_followup_uses_cached_results():
         "New EV infra incentives announced in India",
         "Commercial fleet electrification picks up in hospitality",
     ]
-    session_manager.save_session(session)
+    await session_manager.save_session(session)
 
     message = await agent._tool_search_market(
         {

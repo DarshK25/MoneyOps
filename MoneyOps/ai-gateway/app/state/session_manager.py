@@ -16,13 +16,6 @@ except ImportError:
     logger.warning("Redis not available for session manager")
 
 
-class _ImmediateAwaitable:
-    def __await__(self):
-        if False:
-            yield None
-        return None
-
-
 class VoiceSession(BaseModel):
     session_id: str
     user_id: str
@@ -52,11 +45,6 @@ class VoiceSession(BaseModel):
     last_invoice_mentioned: Optional[str] = None
     last_response_context: Optional[str] = None
 
-    def __await__(self):
-        if False:
-            yield self
-        return self
-
     def mark_active(self):
         self.last_active = time.time()
 
@@ -70,7 +58,7 @@ class SessionManager:
     async def _get_redis_key(self, session_id: str) -> str:
         return f"session:{session_id}"
 
-    def get_session(
+    async def get_session(
         self,
         session_id: str,
         user_id: str = "unknown",
@@ -97,10 +85,9 @@ class SessionManager:
         self._sessions[session_id] = session
         return session
 
-    def save_session(self, session: VoiceSession):
+    async def save_session(self, session: VoiceSession):
         session.mark_active()
         self._sessions[session.session_id] = session
-        return _ImmediateAwaitable()
 
     async def add_turn(self, session_id: str, role: str, content: str, intent: str = None):
         session = self._sessions.get(session_id)

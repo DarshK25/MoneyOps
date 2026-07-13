@@ -38,7 +38,7 @@ class IntelligentAgent:
         session_id = args.get("session_id")
         raw_text = (args.get("raw_text") or "").lower()
         if session_id:
-            session = session_manager.get_session(session_id, args.get("user_id", "unknown"), args.get("org_id", "unknown"))
+            session = await session_manager.get_session(session_id, args.get("user_id", "unknown"), args.get("org_id", "unknown"))
             profile = session.last_business_profile or {}
             if profile and "sector" in raw_text:
                 return f"{profile.get('name', 'Your business')} sits in {profile.get('sector')}."
@@ -61,7 +61,7 @@ class IntelligentAgent:
         return "Your detailed business profile is still missing."
 
     async def _tool_search_market(self, args: Dict[str, Any]) -> str:
-        session = session_manager.get_session(args.get("session_id", "default"), args.get("user_id", "unknown"), args.get("org_id", "unknown"))
+        session = await session_manager.get_session(args.get("session_id", "default"), args.get("user_id", "unknown"), args.get("org_id", "unknown"))
         profile = session.last_business_profile or {}
         results = session.last_market_results or []
         if args.get("followup") and results:
