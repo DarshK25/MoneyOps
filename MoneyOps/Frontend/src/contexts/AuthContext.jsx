@@ -25,16 +25,18 @@ export function AuthProvider({ children }) {
 
   const signIn = async (email, password) => {
     try {
-      const { data } = await api.post('/api/auth/login', { email, password });
+      const { data: body } = await api.post('/api/auth/login', { email, password });
+      const payload = body.data || body;
       const userData = {
-        id: data.userId || data.id,
-        email: data.email,
-        fullName: data.name || data.fullName,
-        firstName: data.firstName || data.name?.split(' ')[0],
-        primaryEmailAddress: { emailAddress: data.email }
+        id: payload.userId || payload.id,
+        email: payload.email,
+        fullName: payload.name || payload.fullName,
+        firstName: payload.firstName || payload.name?.split(' ')[0],
+        orgId: payload.orgId || null,
+        primaryEmailAddress: { emailAddress: payload.email }
       };
 
-      authClient.setAuth(userData, data.token);
+      authClient.setAuth(userData, payload.token);
       setUser(userData);
       setIsSignedIn(true);
       return { success: true };
@@ -50,7 +52,7 @@ export function AuthProvider({ children }) {
       return await signIn(email, password);
     } catch (error) {
       console.error('Sign up error:', error);
-      return { success: false };
+      return { success: false, error: error.message || error };
     }
   };
 
@@ -66,15 +68,16 @@ export function AuthProvider({ children }) {
 
   const setToken = async (token) => {
     try {
-      // Temporarily store token so api client picks it up
       localStorage.setItem('moneyops_auth_token', token);
-      const { data: userData } = await api.get('/api/users/me');
+      const { data: body } = await api.get('/api/users/me');
+      const payload = body.data || body;
       const formattedUser = {
-        id: userData.id,
-        email: userData.email,
-        fullName: userData.name || userData.fullName,
-        firstName: userData.firstName || userData.name?.split(' ')[0],
-        primaryEmailAddress: { emailAddress: userData.email }
+        id: payload.id,
+        email: payload.email,
+        fullName: payload.name || payload.fullName,
+        firstName: payload.firstName || payload.name?.split(' ')[0],
+        orgId: payload.orgId || null,
+        primaryEmailAddress: { emailAddress: payload.email }
       };
 
       authClient.setAuth(formattedUser, token);
@@ -134,6 +137,6 @@ export function useAuth() {
     signOut: context.signOut,
     getToken: context.getToken,
     setToken: context.setToken,
-    orgId: context.user?.orgId || context.user?.id // Fallback to userId for orgId
+    orgId: context.user?.orgId || null
   };
 }

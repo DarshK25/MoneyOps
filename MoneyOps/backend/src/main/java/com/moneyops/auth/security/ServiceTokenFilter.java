@@ -37,11 +37,11 @@ import java.util.Collections;
 public class ServiceTokenFilter extends OncePerRequestFilter {
 
     /** Injected from INTERNAL_SERVICE_TOKEN env var / property. */
-    @Value("${INTERNAL_SERVICE_TOKEN:moneyops-internal-service-secret}")
+    @Value("${INTERNAL_SERVICE_TOKEN:#{null}}")
     private String expectedToken;
 
     @org.springframework.beans.factory.annotation.Autowired
-    private com.moneyops.users.repository.UserRepository userRepository;
+    private com.moneyops.jpa.repository.UserJpaRepository userJpaRepository;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -70,7 +70,7 @@ public class ServiceTokenFilter extends OncePerRequestFilter {
                 }
                 // Populate OrgContext from DB user record if possible
                 if (StringUtils.hasText(userIdHeader)) {
-                    userRepository.findById(userIdHeader).ifPresentOrElse(user -> {
+                    userJpaRepository.findById(userIdHeader).ifPresentOrElse(user -> {
                         OrgContext.setUserId(user.getId());
                         if (user.getOrgId() != null) {
                             OrgContext.setOrgId(user.getOrgId());
