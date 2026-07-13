@@ -1,102 +1,93 @@
-# MoneyOps — Financial SaaS Platform
+# MoneyOps Financial SaaS Platform
+
+Intelligent finance orchestration platform with AI agents, voice-to-action pipeline, and multi-tenant architecture.
 
 ## Architecture Overview
 
+| Service | Framework | Port | Description |
+|:---|:---|:---:|:---|
+| **Frontend** | React + Vite + Tailwind | 5173 | Admin dashboard with AI workspace, voice controls |
+| **API Gateway** | Spring Cloud Gateway (Java 17) | 8002 | JWT auth, rate limiting, tenant isolation, routing |
+| **Backend Core** | Spring Boot (Java 17) | 8000 | REST + gRPC + JPA + MongoDB dual-write |
+| **AI Gateway** | FastAPI (Python) | 8005 | Multi-agent orchestrator, LLM multi-provider, semantic cache |
+| **Voice Service** | LiveKit Agents (Python) | 5001 | WebRTC, STT/TTS, VAD, voice-to-action pipeline |
+
+## Quick Start
+
+```bash
+# Prerequisites
+# Java 17, Python 3.10+, Node 18+, PostgreSQL (Neon), MongoDB Atlas, Redis
+
+# 1. Environment
+cp .env.example .env
+# Edit .env with your API keys
+
+# 2. Install dependencies
+cd MoneyOps/Frontend && npm install
+cd ../backend && ./mvnw clean install -DskipTests
+cd ../api-gateway && ./mvnw clean install -DskipTests
+cd ../ai-gateway && pip install -r requirements.txt
+cd ../voice-service && pip install -r requirements.txt
+
+# 3. Start services (from repo root)
+.\start.ps1
 ```
-┌─────────────┐     ┌──────────────┐     ┌──────────────┐
-│  Frontend    │────>│  API Gateway  │────>│   Backend    │
-│  (React/Vite)│     │  (Spring Cloud)│    │  (Spring Boot)│
-│  Port 3000   │     │  Port 8002    │     │  Port 8000   │
-└─────────────┘     └──────────────┘     └──────────────┘
-       │                                       │
-       │    ┌──────────────────────────┐       │
-       └───>│     AI Gateway           │<──────┘
-            │     (FastAPI)            │  gRPC :50051
-            │     Port 8005            │  HTTP :8000
-            └──────────────────────────┘
-                     │
-            ┌────────┴────────┐
-            │                  │
-       ┌────┴────┐      ┌─────┴─────┐
-       │ MongoDB │      │ PostgreSQL │
-       │ (Atlas) │      │  (Neon)    │
-       └─────────┘      └───────────┘
-```
-
-## Services
-
-| Service | Language | Port | Description |
-|---------|----------|------|-------------|
-| **Backend** | Java 17 / Spring Boot 3.2 | 8000 | Core business logic, REST API, MongoDB + PostgreSQL |
-| **AI Gateway** | Python 3.11 / FastAPI | 8005 | Multi-agent orchestration, LLM routing, gRPC server |
-| **Frontend** | React 18 / Vite 7 | 3000 | Web UI, dashboard, analytics |
-| **API Gateway** | Java 17 / Spring Cloud Gateway | 8002 | API routing, JWT validation, rate limiting |
-| **Voice Service** | Python / FastAPI | 8003 | Voice processing, STT/TTS (LiveKit) |
-
-## Communication
-
-- **Frontend → Backend**: HTTP REST (JSON)
-- **Frontend → AI Gateway**: HTTP REST (JSON)
-- **AI Gateway → Backend**: gRPC (primary, port 50051) + HTTP fallback (port 8000)
-- **All services**: JWT-based auth via `Authorization: Bearer <token>`
-
-## Data Stores
-
-- **MongoDB Atlas** (primary): invoices, transactions, clients, users, organizations, budgets, documents, audit logs, org memory
-- **PostgreSQL / Neon** (relational): users, organizations, clients (structured queries)
-- **Pinecone** (vector): agent memory, compliance rules, semantic search
-- **In-memory** (fallback): Redis sessions, rate limiting (Redis TBD)
 
 ## Agent System
 
-The AI Gateway hosts a multi-agent orchestration system:
+The AI Gateway runs **5 domain executors** coordinated by a **Master Orchestrator (CEO Agent)**:
 
-| Agent | Role | Capabilities |
-|-------|------|-------------|
-| **FinanceOps** | Financial operations | Invoices, payments, expenses, balances, summaries |
-| **Compliance** | Regulatory | GST, TDS, tax filing, compliance deadlines |
-| **Collections** | Receivables | Payment reminders, overdue escalation, aging analysis |
-| **TReDS** | Working capital | Invoice discounting, marketplace rates |
-| **Growth** | Strategy | Revenue forecasting, upsell, churn risk, optimization |
+| Executor | Role | Key Tools |
+|:---|:---|:---|
+| **FinanceOps** | Invoices, payments, expenses | `create_invoice`, `record_payment`, `get_financial_summary` |
+| **Compliance** | GST, TDS, tax compliance | `check_compliance`, `get_compliance_status` |
+| **Collections** | Overdue reminders, follow-ups | `send_collection_reminder`, `get_overdue_action_plan` |
+| **TReDS** | Invoice discounting, working capital | `get_invoice_discounting_offers` |
+| **Growth** | Forecast, churn, upsell | `get_cash_flow_forecast`, `get_growth_opportunities` |
 
-**Key features:**
-- Multi-agent execution plans (sequential delegation)
-- Cross-agent shared context (namespace-isolated memory)
-- Decision evaluation — agents assess business impact before acting
-- Goal-oriented routing — orchestrator derives business goals from health metrics
-- BusinessContextProvider — real-time health scores, risk/opportunity detection
+### AgentOS Framework
+- Message bus for inter-agent communication
+- Decision engine for strategic planning
+- Governance for policy enforcement
+- Audit registry for execution tracing
+- Memory (Pinecone + Redis) for cross-session state
 
-## Getting Started
+## Voice Pipeline
 
-```powershell
-# 1. Start all services
-.\start.ps1
-
-# 2. Verify
-curl http://localhost:8000/api/auth/register -X POST -H "Content-Type: application/json" -d '{"email":"demo@test.com","password":"test123","name":"Demo"}'
-curl http://localhost:8005/api/v1/health
-curl http://localhost:3000
-
-# 3. Chat with agents
-curl http://localhost:8005/api/v1/agent/chat -X POST -H "Content-Type: application/json" -d '{"message":"show me my financial summary","org_id":"<org_id>","user_id":"<user_id>"}'
+```
+User > LiveKit > VAD (Silero) > STT (Deepgram/Groq) > AI Gateway
+  > Master Orchestrator > Domain Executor > Backend
+  > Response > TTS (ElevenLabs/Deepgram) > User
 ```
 
-## Environment Variables
+The voice-service handles only audio I/O; all business logic is in the AI Gateway.
 
-See `.env.example` in each service for required configuration. Key variables:
+## Authentication
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `MONGODB_URI` | `mongodb://localhost:27017/moneyops` | MongoDB connection string |
-| `DATABASE_URL` | `jdbc:postgresql://localhost:5432/moneyops` | PostgreSQL connection string |
-| `JWT_SECRET` | (must be 32+ chars) | JWT signing key |
-| `GROQ_API_KEY` | — | LLM provider key |
-| `REDIS_HOST` | (empty = in-memory) | Redis host |
-| `GRPC_PORT` | `50051` | gRPC server port |
+- **JWT**: Custom token-based auth with configurable expiry
+- **OAuth2**: Google OAuth2 login with redirect flow
+- **Service Tokens**: Internal service-to-service authentication
+- **Multi-Tenant**: Org-scoped data isolation via X-Org-Id
+
+## Data Stores
+
+| Store | Usage |
+|:---|:---|
+| PostgreSQL (Neon) | JPA entities, Flyway migrations |
+| MongoDB Atlas | Document storage for flexible schemas |
+| Redis | Session state, rate limiting, job queue |
+| Pinecone | Semantic cache for LLM queries |
 
 ## CI/CD
 
-GitHub Actions at `.github/workflows/ci.yml`:
-- Python lint (ruff, flake8) + tests (pytest, coverage)
-- Java build + tests (Maven)
-- Runs on PR to `MoneyOps/**`
+GitHub Actions workflows for backend, api-gateway, ai-gateway, and frontend with:
+- Build & test
+- Docker image build & push
+- Multi-service integration tests
+
+## Documentation
+
+- `docs/architecture.md` - Full system architecture
+- `docs/MoneyOps_Database_Schema.md` - Database schema reference
+- `docs/test_endpoints.md` - API endpoint reference
+- `docs/enterprise_upgrade_guide.md` - Production hardening guide

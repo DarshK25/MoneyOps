@@ -1,14 +1,16 @@
 # MoneyOps: Intelligent Finance Orchestration Architecture
 
 ## Executive Summary
-MoneyOps is **NOT** just a CRUD API. It is a distributed, intelligent orchestration system designed to autonomously manage financial operations through AI agents.
+MoneyOps is a distributed intelligent orchestration system for financial operations through AI agents.
 
 **Key capabilities:**
-- **Multi-provider LLM Orchestration** (Groq, Anthropic, etc.)
-- **Domain-Specific Agents** (Finance, Compliance, Sales)
-- **Voice-to-Action Pipeline** (LiveKit → Voice Service → AI Gateway → Backend)
-- **Complex State Management** (User, Business, and Session Context)
-- **Event-Driven Workflow Engine**
+- **Multi-provider LLM Orchestration** (Groq, Cerebras, Gemini)
+- **Domain-Specific Executor Agents** (FinanceOps, Compliance, Collections, TReDS, Growth)
+- **Voice-to-Action Pipeline** (LiveKit > Voice Service > AI Gateway > Backend)
+- **Multi-Tenant State Management** (User, Org, and Session Context)
+- **Redis-backed Event & Queue System**
+- **gRPC Inter-Service Communication**
+- **OAuth2 + JWT Authentication**
 
 ---
 
@@ -17,192 +19,281 @@ MoneyOps is **NOT** just a CRUD API. It is a distributed, intelligent orchestrat
 ```mermaid
 graph TD
     subgraph Clients
-        WebApp[Web App (Chat/Admin)]
+        WebApp[Web App (React/Vite)]
         VoiceClient[Voice Client (Mobile/Web)]
     end
 
-    subgraph "Voice Service (Python/LiveKit)"
+    subgraph "API Gateway (Spring Cloud Gateway)"
+        JWT_AUTH[JWT Authentication Filter]
+        RATE_LIMIT[Rate Limit Filter]
+        TENANT[Tenant Isolation Filter]
+        ROUTER[Route to Service]
+    end
+
+    subgraph "Voice Service (Python/LiveKit Agents)"
         LiveKit[LiveKit Server]
-        STT[STT Service (AssemblyAI)]
-        TTS[TTS Service (Cartesia)]
+        STT[STT: Deepgram / Groq Whisper]
+        TTS[TTS: ElevenLabs / Deepgram / Cartesia]
+        VAD[VAD: Silero VAD]
+        GUARD[Premature Confirmation Guard]
     end
 
     subgraph "AI Gateway (Python/FastAPI) - The Core"
         API_GW[FastAPI Layer]
-        Router[Agent Router]
+        ROUTER_AG[Agent Router]
+        CEO[CEO Master Orchestrator]
         
-        subgraph Agents
-            FinAgent[Finance Agent]
-            CompAgent[Compliance Agent]
-            SaleAgent[Sales Agent]
+        subgraph ExecutorAgents
+            FINANCE[FinanceOps Executor]
+            COMPLIANCE[Compliance Executor]
+            COLLECTIONS[Collections Executor]
+            TREDS[TReDS Executor]
+            GROWTH[Growth Executor]
         end
         
-        ToolReg[Tool Registry]
-        Context[Context Manager]
-        LLM_Adapter[LLM Adapter (Groq/Claude)]
+        subgraph AgentOS
+            MSGBUS[Message Bus]
+            DECISION[Decision Engine]
+            GOVERNANCE[Governance]
+            OBSERVATION[Audit Registry]
+            MEMORY[Agent Memory]
+        end
+
+        LLM[LLM Multi-Provider Adapter]
+        SEMCACHE[Semantic Cache]
     end
 
     subgraph "Backend Core (Java/Spring Boot)"
-        SpringAPI[Spring Boot REST API]
-        Auth[Security/Auth]
-        BizLogic[Domain Logic]
+        AUTH[Auth / JWT / OAuth2]
+        REST[REST Controllers]
+        GRPC[gRPC Services]
+        JPA[JPA Repositories (PostgreSQL)]
+        MONGO[MongoDB Document Store]
+        QUEUE[Redis Queue Workers]
     end
 
-    subgraph Infrastructure
-        Postgres[(PostgreSQL)]
-        Redis[(Redis Cache)]
-        Kafka{Kafka Event Bus}
-        Celery[Workflow Workers]
+    subgraph DataStores
+        PG[(PostgreSQL / Neon)]
+        MDB[(MongoDB Atlas)]
+        REDIS[(Redis Cache + Queue + Session)]
+        PINECONE[(Pinecone Vector DB)]
+        KAFKA[(Kafka Event Bus - Config Only)]
     end
 
-    %% Connections
-    WebApp -->|HTTP/REST| API_GW
+    WebApp -->|HTTP| JWT_AUTH
+    JWT_AUTH --> RATE_LIMIT
+    RATE_LIMIT --> TENANT
+    TENANT --> ROUTER
+
+    ROUTER -->|/api/v1/**| API_GW
+    ROUTER -->|/api/auth/**| AUTH
+    ROUTER -->|/api/**| REST
+    ROUTER -->|/voice/**| LiveKit
+
     VoiceClient -->|WebRTC| LiveKit
-    LiveKit <--> STT
-    LiveKit <--> TTS
-    LiveKit -->|HTTP Stream| API_GW
-    
-    API_GW --> LLM_Adapter
-    LLM_Adapter -->|External API| Groq[Groq/LLM Provider]
-    
-    API_GW -->|HTTP/REST| SpringAPI
-    SpringAPI --> Postgres
-    SpringAPI --> Kafka
-    Kafka --> Celery
-    Celery -->|Async Call| API_GW
+    LiveKit --> STT
+    LiveKit --> TTS
+    LiveKit --> VAD
+    LiveKit -->|HTTP| API_GW
+
+    API_GW --> CEO
+    CEO --> FINANCE
+    CEO --> COMPLIANCE
+    CEO --> COLLECTIONS
+    CEO --> TREDS
+    CEO --> GROWTH
+
+    CEO --> LLM
+    LLM -->|Groq/Cerebras/Gemini| LLMProv[LLM Providers]
+
+    FINANCE -->|gRPC| GRPC
+    REST --> MDB
+    REST -->|Dual Write| JPA
+    JPA --> PG
+    QUEUE --> REDIS
+
+    CEO --> MSGBUS
+    MSGBUS --> DECISION
+    DECISION --> GOVERNANCE
+    GOVERNANCE --> OBSERVATION
+    OBSERVATION --> MEMORY
+
+    API_GW --> SEMCACHE
+    SEMCACHE --> PINECONE
+    SEMCACHE --> REDIS
 
     classDef core fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef agent fill:#aef,stroke:#333,stroke-width:1px;
     classDef infra fill:#ddd,stroke:#333,stroke-width:1px;
-    class API_GW,SpringAPI,LiveKit core;
-    class Postgres,Redis,Kafka,Celery infra;
+    class CEO,API_GW,GRPC core;
+    class FINANCE,COMPLIANCE,COLLECTIONS,TREDS,GROWTH agent;
+    class PG,MDB,REDIS,PINECONE infra;
 ```
 
 ---
 
-## 2. The Decision Pipeline (Detailed Flow)
-
-This requires **orchestration**, not just API calls. Here is the lifecycle of a single user request:
+## 2. Decision Pipeline (Detailed Execution Flow)
 
 ```mermaid
 sequenceDiagram
     participant User
-    participant Gateway as AI Gateway
-    participant Router as Intent Router (LLM)
-    participant Agent as Finance Agent
-    participant Adapter as Backend Adapter
-    participant Backend as Spring Boot Core
+    participant GW as API Gateway
+    participant AIG as AI Gateway
+    participant CEO as Master Orchestrator
+    participant Exec as Domain Executor
+    participant LLM as LLM Provider
+    participant BE as Backend Core
+    participant DB as PostgreSQL/Mongo
 
-    User->>Gateway: "What is my current balance?"
+    User->>GW: "Create invoice for Acme Corp for ₹50,000"
+    GW->>GW: JWT Validation + Tenant Isolation + Rate Limit
+    
+    GW->>AIG: POST /api/v1/voice/process
+    AIG->>AIG: VoiceProcessor
     
     rect rgb(240, 248, 255)
-        note right of Gateway: 1. Intent Classification
-        Gateway->>Router: Classify(Input)
-        Router-->>Gateway: Intent: BALANCE_CHECK
+        note over AIG,CEO: 1. Orchestration
+        AIG->>CEO: MasterOrchestrator.process()
+        CEO->>CEO: LLM Select Executor
+        CEO->>CEO: Create ExecutionPlan
+        CEO->>Exec: Delegate to FinanceOps Executor
     end
     
     rect rgb(255, 240, 245)
-        note right of Gateway: 2. Agent Routing
-        Gateway->>Agent: Execute(Intent, Context)
-        Agent->>Agent: Check Permissions & Tools
+        note over CEO,LLM: 2. Tool Selection & Execution
+        Exec->>Exec: Parse intent + extract entities
+        Exec->>Exec: Select create_invoice tool
+        Exec->>BE: gRPC CreateInvoice(client, amount, items)
+        BE->>DB: INSERT invoice + line_items
+        DB-->>BE: Invoice created
+        BE-->>Exec: { id, invoiceNumber, status }
+        Exec-->>CEO: ExecutionResult(success=true)
     end
     
     rect rgb(240, 255, 240)
-        note right of Gateway: 3. Tool Execution
-        Agent->>Adapter: get_balance(org_id)
-        Adapter->>Backend: GET /api/transactions/summary
-        Backend-->>Adapter: { "netProfit": 10000, ... }
-        Adapter-->>Agent: { "balance": 10000 }
-    end
-    
-    rect rgb(255, 250, 240)
-        note right of Gateway: 4. Response Generation
-        Agent->>Gateway: Format Response
-        Gateway-->>User: "Your current balance is ₹10,000."
+        note over AIG,User: 3. Response
+        CEO-->>AIG: { message, data, ui_event }
+        AIG-->>GW: 200 { response_text, ui_event }
+        GW-->>User: Voice response + UI update
     end
 ```
 
 ---
 
-## 3. Agent System Design (Phase 4)
+## 3. AgentOS Architecture (Phase 4+)
 
-We implemented an extensible **Agent System** where each agent is a specialized decision maker.
+### Core Components
 
-### Class Structure
+1. **AgentOS Framework** (in `app/agentos/`):
+   - **Message Bus** (`message_bus.py`): Inter-agent message passing with REQUEST/RESPONSE/EVENT types
+   - **Decision Engine** (`decision.py`): Strategic planning and conflict resolution
+   - **Governance** (`governance.py`): Policy enforcement and approval workflows
+   - **Observation** (`observation.py`): Audit trail and execution logging
+   - **Memory** (`memory.py`): Persistent cross-session agent state (Pinecone + Redis)
+   - **Identity** (`identity.py`): Agent identity registry
 
-```mermaid
-classDiagram
-    class BaseAgent {
-        +get_supported_intents()
-        +get_tools()
-        +process(intent, entities, context)
-        #_build_success_response()
-        #_build_error_response()
-    }
+2. **Domain Executors** (in `app/agents/`):
+   - `FinanceExecutor`: Invoices, payments, expenses, financial summaries
+   - `ComplianceExecutor`: GST filing, tax compliance, TDS validation
+   - `CollectionsExecutor`: Payment reminders, overdue tracking
+   - `TReDSExecutor`: Invoice discounting, working capital
+   - `GrowthExecutor`: Revenue forecast, churn prediction, upsell opportunities
 
-    class FinanceAgent {
-        +process()
-        -_handle_create_invoice()
-        -_handle_check_balance()
-        -_handle_record_payment()
-    }
+3. **CEO Master Orchestrator** (`master_orchestrator.py`):
+   - LLM-driven executor selection
+   - Morning briefing and evening summary generation
+   - Agent coordination and cross-agent data synthesis
+   - Never executes actions directly - always delegates
 
-    class ToolRegistry {
-        +register_tool(tool)
-        +get_tool(name)
-        +execute_tool(name, params)
-    }
+### Key Design Patterns
 
-    class BackendHttpAdapter {
-        +create_invoice()
-        +get_clients()
-        +get_balance()
-        -_request(method, url)
-    }
+| Pattern | Implementation |
+|:---|:---|
+| **Agent Abstraction** | Domain logic hidden inside specialized executors. Router only selects which executor to invoke. |
+| **Backend Adapter** | Unified gRPC + HTTP adapter for backend calls with error normalization. |
+| **Stateless Gateway** | Session state stored in Redis + in-memory, enabling horizontal scaling. |
+| **Tool Registry** | Each executor exposes tools registered in a central directory. |
+| **Semantic Cache** | Pinecone + Redis semantic caching reduces LLM calls for similar queries. |
+| **Multi-Provider LLM** | Groq primary, Cerebras/Gemini fallback providers. |
 
-    BaseAgent <|-- FinanceAgent
-    FinanceAgent ..> ToolRegistry : uses
-    FinanceAgent ..> BackendHttpAdapter : uses
+---
+
+## 4. Voice Pipeline Architecture
+
+```
+User Speech > WebRTC > LiveKit Server > VAD (Silero)
+  > STT (Deepgram/Groq Whisper) > AI Gateway /voice/process
+  > Master Orchestrator > Domain Executor > Backend API
+  > Response > TTS (ElevenLabs/Deepgram/Cartesia) > User Hears
 ```
 
-### Key Components
+The voice-service handles only audio I/O (STT, TTS, VAD). All business logic resides in the AI Gateway.
 
-1.  **BaseAgent**: The abstract ancestor. Provides standard response formatting, error handling, and interface definitions.
-2.  **ToolRegistry**: A central directory of all available capabilities (`create_invoice`, `check_balance`, etc.). It handles parameter validation before execution.
-3.  **BackendHttpAdapter**: The bridge to the Java Backend. It handles:
-    *   Authentication (passing JWTs)
-    *   Error Normalization (converting Backend errors to Gateway exceptions)
-    *   Type Safety (Pydantic models)
-
----
-
-## 4. Why This Architecture?
-
-| Challenge | Our Solution |
-| :--- | :--- |
-| **Complexity** | **Agent Abstraction**: Hides logic inside specialized agents. The Router just picks the right agent. |
-| **Reliability** | **Backend Adapter**: Centralized error handling and retries. If the backend fails, we handle it gracefully. |
-| **Scalability** | **Stateless Gateway**: The Gateway stores state in Redis/Context, enabling horizontal scaling of the Python service. |
-| **Flexibility** | **Tool Registry**: Adding a new feature (e.g., "Tax Calculation") just means registering a new Tool, not rewriting the orchestrator. |
+### Voice Guards
+- **Premature Confirmation Guard**: Prevents false confirmations during COLLECTING/CONFIRMING stages
+- **STT Confidence Gate**: Blocks low-confidence transcriptions (< 0.7)
+- **Voice Turn Debouncing**: 600ms silence detection before processing
+- **Utterance Buffering**: Incomplete utterance detection with 2s flush timer
+- **Technical Leak Sanitizer**: Strips internal error messages from voice responses
 
 ---
 
-## 5. Deployment View
+## 5. Data Flow & Storage
+
+| Store | Technology | Purpose |
+|:---|:---|:---|
+| **Primary** | PostgreSQL (Neon) | JPA entities: users, orgs, clients, invoices |
+| **Document** | MongoDB Atlas | Flexible document storage for complex queries |
+| **Cache** | Redis | Session state, rate limiting, queue jobs |
+| **Vector** | Pinecone | Semantic cache embeddings for LLM queries |
+| **Events** | Kafka (configured) | Event bus (configured, queue workers use Redis) |
+
+### Dual-Write Pattern
+The backend writes to MongoDB for operational use and PostgreSQL (via JPA) for reporting. This enables gradual migration to PostgreSQL as primary while maintaining MongoDB compatibility.
+
+---
+
+## 6. Deployment Topology
 
 ```mermaid
 graph LR
     subgraph "Dev Environment"
-        DevPC[Developer/Test Machine]
+        Frontend[React Dev Server :5173]
+        APIGW[API Gateway :8002]
+        AIGW[AI Gateway :8005]
+        BACKEND[Backend Core :8000]
+        VOICE[Voice Service :5001]
+        PG[(Neon PostgreSQL)]
+        MDB[(MongoDB Atlas)]
+        REDIS[(Redis)]
     end
     
     subgraph "Production (Docker/K8s)"
         LB[Load Balancer]
+        GW_Pods[API Gateway Pods x2]
+        AI_Pods[AI Gateway Pods x3]
+        BE_Pods[Backend Core Pods x2]
+        Worker_Pods[Redis Queue Workers x2]
+        Voice_Func[Voice Service Functions]
         
-        GW_Pod[AI Gateway Pods (x3)]
-        BE_Pod[Backend Core Pods (x2)]
-        Worker_Pod[Celery Workers (x2)]
-        
-        LB --> GW_Pod
-        GW_Pod --> BE_Pod
-        BE_Pod --> Worker_Pod
+        LB --> GW_Pods
+        GW_Pods --> AI_Pods
+        GW_Pods --> BE_Pods
+        AI_Pods --> BE_Pods
+        BE_Pods --> Worker_Pods
+        AI_Pods --> Voice_Func
     end
 ```
+
+---
+
+## 7. Service Communication Matrix
+
+| Source | Target | Protocol | Port |
+|:---|:---|:---|:---|
+| Frontend | API Gateway | HTTP/REST | 8002 |
+| API Gateway | Backend Core | HTTP/REST | 8000 |
+| API Gateway | AI Gateway | HTTP/REST | 8005 |
+| Voice Service | AI Gateway | HTTP/REST | 8005 |
+| AI Gateway | Backend Core | gRPC | 50051 |
+| AI Gateway | LLM Providers | HTTP | External |
