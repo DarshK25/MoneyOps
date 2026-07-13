@@ -75,5 +75,25 @@ runtime-logs/
 *.tmp
 *.temp
 
+# Temporary / rewrite scripts
+**/rewrite*.py
+**/rewrite2.py
+
+# Benchmark artifacts
+benchmarks/
+
+# Generated output files
+proxy.js
+run-audit.js
+run2.js
+*_err.log
+*_out.log
+*_stderr.txt
+*_stdout.txt
+gw_out.txt
+
 # Scripts with hardcoded credentials
 **/start.bat
+
+# Coverage data
+.coverage
