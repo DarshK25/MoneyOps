@@ -20,7 +20,7 @@ class ConversationTurn:
 class VoiceSession:
     session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     user_id:Optional[str] = None
-    ord_id : Optional[str] = None
+    org_id : Optional[str] = None
     started_at:datetime = field(default_factory=datetime.now)
     last_active_at:datetime = field(default_factory=datetime.now)
     conversation_history: List[ConversationTurn] = field(default_factory=list)
@@ -73,9 +73,9 @@ class VoiceSession:
         def create_session(
                 self,
                 user_id: Optional[str] = None,
-                ord_id: Optional[str] = None,
+                org_id: Optional[str] = None,
         )   ->  VoiceSession: 
-            session = VoiceSession(user_id=user_id, ord_id=ord_id)
+            session = VoiceSession(user_id=user_id, org_id=org_id)
             self.sessions[session.session_id] = session
             
             logger.info(

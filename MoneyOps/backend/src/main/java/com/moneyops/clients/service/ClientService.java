@@ -3,15 +3,10 @@ package com.moneyops.clients.service;
 import com.moneyops.clients.dto.ClientDto;
 import com.moneyops.clients.entity.Client;
 import com.moneyops.clients.mapper.ClientMapper;
-import com.moneyops.clients.repository.ClientRepository;
 import com.moneyops.clients.validator.ClientValidator;
 import com.moneyops.audit.service.AuditLogService;
-import com.moneyops.jpa.entity.ClientEntity;
-import com.moneyops.jpa.repository.ClientJpaRepository;
+import com.moneyops.jpa.persistence.ClientDocumentStore;
 import com.moneyops.security.team.TeamActionAuthorizationService;
-import com.moneyops.users.repository.UserRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -30,13 +25,8 @@ import org.apache.commons.text.similarity.JaroWinklerSimilarity;
 @Transactional
 public class ClientService {
 
-    private static final Logger log = LoggerFactory.getLogger(ClientService.class);
-
     @Autowired
-    private ClientRepository clientRepository;
-
-    @Autowired
-    private ClientJpaRepository clientJpaRepository;
+    private ClientDocumentStore clientStore;
 
     @Autowired
     private ClientMapper clientMapper;
@@ -48,23 +38,13 @@ public class ClientService {
     private TeamActionAuthorizationService teamActionAuthorizationService;
 
     @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
     private AuditLogService auditLogService;
 
     public List<ClientDto> getAllClients(String orgId) {
-        if (orgId == null || orgId.isBlank()) throw new com.moneyops.shared.exceptions.UnauthorizedException("Missing organization context");
-        var jpaClients = clientJpaRepository.findByOrgId(orgId);
-        if (!jpaClients.isEmpty()) {
-            log.debug("Read clients from PostgreSQL");
-            return jpaClients.stream()
-                    .map(this::toClientDto)
-                    .collect(Collectors.toList());
+        if (orgId == null || orgId.isBlank()) {
+            throw new com.moneyops.shared.exceptions.UnauthorizedException("Missing organization context");
         }
-        log.warn("Falling back to MongoDB for clients");
-        return clientRepository.findAllByOrgIdAndDeletedAtIsNull(orgId)
-                .stream()
+        return clientStore.findAllByOrgId(orgId).stream()
                 .map(clientMapper::toDto)
                 .collect(Collectors.toList());
     }
@@ -84,38 +64,24 @@ public class ClientService {
     }
 
     public ClientDto getClientById(String id, String orgId) {
-        var jpaClient = clientJpaRepository.findByIdAndOrgId(id, orgId);
-        if (jpaClient.isPresent()) {
-            log.debug("Read client {} from PostgreSQL", id);
-            return toClientDto(jpaClient.get());
-        }
-        log.warn("Falling back to MongoDB for client {}", id);
-        Client client = clientRepository.findByIdAndOrgIdAndDeletedAtIsNull(id, orgId)
+        Client client = clientStore.findByIdAndOrgId(id, orgId)
                 .orElseThrow(() -> new RuntimeException("Client not found"));
         return clientMapper.toDto(client);
     }
 
     public ClientDto createClient(ClientDto dto, String orgId, String createdBy) {
-        if (orgId == null || orgId.isBlank()) throw new com.moneyops.shared.exceptions.UnauthorizedException("Missing organization context");
-
+        if (orgId == null || orgId.isBlank()) {
+            throw new com.moneyops.shared.exceptions.UnauthorizedException("Missing organization context");
+        }
         if (createdBy == null || createdBy.isBlank()) {
             throw new com.moneyops.shared.exceptions.UnauthorizedException("Missing user context");
         }
 
         var creator = teamActionAuthorizationService.assertUserCanCreateSensitiveAction(
-                orgId,
-                createdBy,
-                dto.getTeamActionCode()
-        );
+                orgId, createdBy, dto.getTeamActionCode());
 
         if (dto.getSource() == null || dto.getSource().isBlank()) {
             dto.setSource("MANUAL");
-        }
-
-        if (dto.getIdempotencyKey() != null
-            && dto.getEmail() != null
-            && !dto.getEmail().isBlank()
-            && clientRepository.existsByEmailAndOrgIdAndDeletedAtIsNull(dto.getEmail(), orgId)) {
         }
 
         if (dto.getStatus() == null || dto.getStatus().trim().isEmpty()) {
@@ -125,12 +91,11 @@ public class ClientService {
 
         Client client = clientMapper.toEntity(dto);
         if (client.getEmail() != null && !client.getEmail().isBlank()
-            && clientRepository.existsByEmailAndOrgIdAndDeletedAtIsNull(client.getEmail(), orgId)) {
-            throw new RuntimeException("Client with this email already exists");
+                && clientStore.existsByEmailAndOrgId(client.getEmail(), orgId)) {
+            throw new BusinessRuleException("Client with this email already exists");
         }
 
         client.setOrgId(orgId);
-
         client.setCreatedBy(creator.userId());
         client.setCreatedByEmail(creator.email());
         client.setCreatedByRole(creator.role());
@@ -138,15 +103,14 @@ public class ClientService {
         client.setCreatedAt(LocalDateTime.now());
         client.setUpdatedAt(LocalDateTime.now());
 
-        Client saved = clientRepository.save(client);
-        saveClientJpa(saved);
+        Client saved = clientStore.save(client);
         auditLogService.logCreate("CLIENT", saved.getId(), saved);
         return clientMapper.toDto(saved);
     }
 
     public ClientDto updateClient(String id, ClientDto dto, String orgId, String updatedBy) {
         clientValidator.validate(dto);
-        Client client = clientRepository.findByIdAndOrgIdAndDeletedAtIsNull(id, orgId)
+        Client client = clientStore.findByIdAndOrgId(id, orgId)
                 .orElseThrow(() -> new RuntimeException("Client not found"));
 
         client.setName(dto.getName());
@@ -169,19 +133,16 @@ public class ClientService {
         if (dto.getStatus() != null) {
             client.setStatus(Client.Status.valueOf(dto.getStatus()));
         }
+        client.setUpdatedBy(updatedBy);
 
-        Client saved = clientRepository.save(client);
-        saveClientJpa(saved);
+        Client saved = clientStore.save(client);
         return clientMapper.toDto(saved);
     }
 
     public void deleteClient(String id, String orgId) {
-        Client client = clientRepository.findByIdAndOrgIdAndDeletedAtIsNull(id, orgId)
+        clientStore.findByIdAndOrgId(id, orgId)
                 .orElseThrow(() -> new RuntimeException("Client not found"));
-
-        client.setDeletedAt(LocalDateTime.now());
-        clientRepository.save(client);
-        clientJpaRepository.deleteById(id);
+        clientStore.softDelete(id, orgId);
     }
 
     public List<ClientDto> searchClients(String orgId, String search) {
@@ -190,22 +151,23 @@ public class ClientService {
         }
 
         String query = search.trim().toLowerCase();
-
-        List<Client> candidates = clientRepository.searchByOrgIdWithFilters(orgId, query);
+        List<Client> candidates = clientStore.findAllByOrgId(orgId).stream()
+                .filter(c -> matchesQuery(c, query))
+                .collect(Collectors.toList());
 
         if (candidates.isEmpty()) {
-            candidates = clientRepository.findAllByOrgIdAndDeletedAtIsNull(orgId);
+            candidates = clientStore.findAllByOrgId(orgId);
         }
 
-        final List<com.moneyops.clients.entity.Client> finalCandidates = candidates;
+        final List<Client> finalCandidates = candidates;
         JaroWinklerSimilarity similarity = new JaroWinklerSimilarity();
 
         return candidates.stream()
                 .map(client -> {
                     ClientDto dto = clientMapper.toDto(client);
                     double nameScore = similarity.apply(query, client.getName().toLowerCase());
-                    double emailScore = client.getEmail() != null ?
-                            similarity.apply(query, client.getEmail().toLowerCase()) : 0;
+                    double emailScore = client.getEmail() != null
+                            ? similarity.apply(query, client.getEmail().toLowerCase()) : 0;
                     double bestScore = Math.max(nameScore, emailScore);
                     dto.setSearchScore(bestScore);
                     return new ScoredClient(dto, bestScore);
@@ -216,6 +178,12 @@ public class ClientService {
                 .collect(Collectors.toList());
     }
 
+    private boolean matchesQuery(Client client, String query) {
+        return (client.getName() != null && client.getName().toLowerCase().contains(query))
+                || (client.getEmail() != null && client.getEmail().toLowerCase().contains(query))
+                || (client.getCompany() != null && client.getCompany().toLowerCase().contains(query));
+    }
+
     private static class ScoredClient {
         ClientDto client;
         double score;
@@ -223,46 +191,5 @@ public class ClientService {
             this.client = client;
             this.score = score;
         }
-    }
-
-    private void saveClientJpa(Client client) {
-        try {
-            ClientEntity entity = new ClientEntity();
-            entity.setId(client.getId());
-            entity.setOrgId(client.getOrgId());
-            entity.setName(client.getName());
-            entity.setGstin(client.getGstin());
-            entity.setEmail(client.getEmail());
-            entity.setPhoneNumber(client.getPhoneNumber());
-            entity.setCompany(client.getCompany());
-            entity.setCurrency(client.getCurrency());
-            entity.setNotes(client.getNotes());
-            entity.setStatus(client.getStatus() != null ? client.getStatus().name() : "ACTIVE");
-            entity.setCreatedAt(client.getCreatedAt());
-            entity.setUpdatedAt(client.getUpdatedAt());
-            entity.setCreatedBy(client.getCreatedBy());
-            entity.setUpdatedBy(client.getUpdatedBy());
-            clientJpaRepository.save(entity);
-            log.debug("Client {} written to PostgreSQL", client.getId());
-        } catch (Exception e) {
-            log.error("Failed to write client {} to PostgreSQL: {}", client.getId(), e.getMessage());
-        }
-    }
-
-    private ClientDto toClientDto(ClientEntity entity) {
-        ClientDto dto = new ClientDto();
-        dto.setId(entity.getId());
-        dto.setOrgId(entity.getOrgId());
-        dto.setName(entity.getName());
-        dto.setGstin(entity.getGstin());
-        dto.setEmail(entity.getEmail());
-        dto.setPhoneNumber(entity.getPhoneNumber());
-        dto.setCompany(entity.getCompany());
-        dto.setCurrency(entity.getCurrency());
-        dto.setNotes(entity.getNotes());
-        dto.setStatus(entity.getStatus());
-        dto.setCreatedAt(entity.getCreatedAt());
-        dto.setUpdatedAt(entity.getUpdatedAt());
-        return dto;
     }
 }

@@ -3,6 +3,7 @@ package com.moneyops.invoices.controller;
 import com.moneyops.invoices.dto.InvoiceDto;
 import com.moneyops.invoices.dto.RecurringInvoiceDto;
 import com.moneyops.invoices.service.RecurringInvoiceService;
+import com.moneyops.shared.exceptions.BusinessRuleException;
 import com.moneyops.shared.utils.OrgContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -21,7 +22,7 @@ public class RecurringInvoiceController {
     public ResponseEntity<RecurringInvoiceDto> createRecurringInvoice(@RequestBody RecurringInvoiceDto dto) {
         String orgId = OrgContext.getOrgId();
         String userId = OrgContext.getUserId();
-        if (orgId == null) throw new RuntimeException("Organization context missing");
+        if (orgId == null) throw new BusinessRuleException("Organization context missing");
 
         RecurringInvoiceDto created = recurringInvoiceService.createRecurringInvoice(dto, orgId, userId);
         return ResponseEntity.ok(created);

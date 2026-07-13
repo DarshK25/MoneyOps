@@ -1,80 +1,91 @@
 package com.moneyops.onboarding.service;
 
+import com.moneyops.jpa.entity.OrganizationEntity;
+import com.moneyops.jpa.entity.UserEntity;
+import com.moneyops.jpa.repository.OrganizationJpaRepository;
+import com.moneyops.jpa.repository.UserJpaRepository;
 import com.moneyops.onboarding.dto.OnboardingRequest;
 import com.moneyops.onboarding.dto.OnboardingStatusResponse;
-import com.moneyops.organizations.entity.BusinessOrganization;
-import com.moneyops.organizations.repository.BusinessOrganizationRepository;
-import com.moneyops.users.entity.User;
+import com.moneyops.shared.exceptions.ConflictException;
+import com.moneyops.shared.exceptions.NotFoundException;
+import com.moneyops.shared.exceptions.ValidationException;
 import com.moneyops.users.entity.Invite;
-import com.moneyops.users.repository.UserRepository;
 import com.moneyops.users.repository.InviteRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class OnboardingService {
 
-    private final UserRepository userRepository;
-    private final BusinessOrganizationRepository orgRepository;
+    private final UserJpaRepository userJpaRepository;
+    private final OrganizationJpaRepository orgJpaRepository;
     private final InviteRepository inviteRepository;
-    private final org.springframework.data.mongodb.core.MongoTemplate mongoTemplate;
     private final PasswordEncoder passwordEncoder;
+    private final ObjectMapper objectMapper;
 
-    // ── Status check ──────────────────────────────────────────────────────────
+    // ── Status check (READ ONLY) ───────────────────────────────────
 
     public OnboardingStatusResponse getStatus(String userId) {
-        Optional<User> userOpt = userRepository.findById(userId);
+        Optional<UserEntity> userOpt = userJpaRepository.findById(userId);
 
         if (userOpt.isEmpty()) {
             return new OnboardingStatusResponse(false, null, null, "New user — onboarding required");
         }
 
-        User user = userOpt.get();
-        String orgId = user.getOrgId();
-
-        // Healing: If user has no orgId at all, check if they created one
-        if (orgId == null) {
-            log.info("User {} has no orgId, checking for created organizations", user.getEmail());
-            var createdOrgs = orgRepository.findAllByCreatedByAndDeletedAtIsNull(user.getId());
-            if (!createdOrgs.isEmpty()) {
-                orgId = createdOrgs.get(0).getId();
-                user.setOrgId(orgId);
-                user.setOnboardingComplete(true);
-                userRepository.save(user);
-                log.info("Healed user {} with orgId {}", user.getEmail(), orgId);
-            }
-        }
-
-        boolean hasOrg = orgId != null;
-        boolean isComplete = user.isOnboardingComplete() || hasOrg;
+        UserEntity user = userOpt.get();
+        boolean hasOrg = user.getOrgId() != null;
+        boolean isComplete = Boolean.TRUE.equals(user.getOnboardingComplete()) || hasOrg;
 
         return new OnboardingStatusResponse(
                 isComplete,
                 user.getId(),
-                hasOrg ? orgId : null,
+                hasOrg ? user.getOrgId() : null,
                 isComplete ? "Onboarding complete" : "Onboarding incomplete"
         );
     }
 
-    // ── Create business ───────────────────────────────────────────────────────
+    // ── Repair (call during login/OAuth) ───────────────────────────
+
+    public void repairOrganizationLink(String userId) {
+        UserEntity user = userJpaRepository.findById(userId).orElse(null);
+        if (user == null || user.getOrgId() != null) {
+            return;
+        }
+        var createdOrgs = orgJpaRepository.findByCreatedByAndDeletedAtIsNull(user.getId());
+        if (!createdOrgs.isEmpty()) {
+            String orgId = createdOrgs.get(0).getId();
+            user.setOrgId(orgId);
+            user.setOnboardingComplete(true);
+            userJpaRepository.save(user);
+            log.info("Repaired org link for userId={} → orgId={}", userId, orgId);
+        }
+    }
+
+    // ── Create business ────────────────────────────────────────────
 
     public OnboardingStatusResponse createBusiness(OnboardingRequest req) {
         log.info("Creating business for userId={}, legalName={}", req.getUserId(), req.getLegalName());
-        
-        BusinessOrganization org = new BusinessOrganization();
+
+        OrganizationEntity org = new OrganizationEntity();
+        org.setId(UUID.randomUUID().toString());
         org.setLegalName(req.getLegalName());
         org.setTradingName(req.getTradingName());
         org.setBusinessType(req.getBusinessType());
         org.setIndustry(req.getIndustry());
         if (req.getRegistrationDate() != null && !req.getRegistrationDate().isEmpty()) {
-            org.setRegistrationDate(java.time.LocalDate.parse(req.getRegistrationDate()));
+            org.setRegistrationDate(LocalDate.parse(req.getRegistrationDate()));
         }
         org.setAnnualTurnover(req.getAnnualTurnover());
         org.setPrimaryEmail(req.getPrimaryEmail());
@@ -83,7 +94,6 @@ public class OnboardingService {
         org.setEmployeeCount(req.getNumberOfEmployees());
         org.setRegisteredAddress(req.getRegisteredAddress());
 
-        // Regulatory info
         org.setPanNumber(req.getPanNumber());
         org.setStateOfRegistration(req.getStateOfRegistration());
         org.setGstRegistered(Boolean.TRUE.equals(req.getGstRegistered()));
@@ -96,29 +106,39 @@ public class OnboardingService {
         org.setIecCode(req.getIecCode());
         org.setProfessionalTaxReg(req.getProfessionalTaxReg());
 
-        // Context
-        org.setPrimaryActivity(req.getPrimaryActivity());
-        org.setTargetMarket(req.getTargetMarket());
-        org.setKeyProducts(req.getKeyProducts());
-        org.setCurrentChallenges(req.getCurrentChallenges());
-        org.setAccountingMethod(req.getAccountingMethod());
-        org.setFyStartMonth(req.getFyStartMonth() != null ? req.getFyStartMonth() : 4);
-        org.setPreferredLanguage(req.getPreferredLanguage() != null ? req.getPreferredLanguage() : "en");
+        // Store non-column fields in settings JSONB
+        Map<String, Object> settings = new HashMap<>();
+        settings.put("primaryActivity", req.getPrimaryActivity());
+        settings.put("targetMarket", req.getTargetMarket());
+        settings.put("keyProducts", req.getKeyProducts());
+        settings.put("currentChallenges", req.getCurrentChallenges());
+        settings.put("accountingMethod", req.getAccountingMethod());
+        settings.put("fyStartMonth", req.getFyStartMonth() != null ? req.getFyStartMonth() : 4);
+        settings.put("preferredLanguage", req.getPreferredLanguage() != null ? req.getPreferredLanguage() : "en");
 
-        // Team Security Code (set by owner during onboarding)
+        // Team Security Code
         if (req.getTeamActionCode() != null && !req.getTeamActionCode().trim().isEmpty()) {
-            org.setTeamActionCodeHash(passwordEncoder.encode(req.getTeamActionCode()));
+            settings.put("teamActionCodeHash", passwordEncoder.encode(req.getTeamActionCode()));
             log.info("Team security code set for organization during onboarding");
         }
 
-        User user = getOrCreateUser(req);
+        try {
+            org.setSettings(objectMapper.writeValueAsString(settings));
+        } catch (Exception e) {
+            log.warn("Failed to serialize settings JSON: {}", e.getMessage());
+            org.setSettings("{}");
+        }
+
+        org.setCreatedAt(LocalDateTime.now());
+
+        UserEntity user = getOrCreateUser(req);
         org.setCreatedBy(user.getId());
 
-        BusinessOrganization savedOrg = orgRepository.save(org);
+        OrganizationEntity savedOrg = orgJpaRepository.save(org);
         user.setOrgId(savedOrg.getId());
         user.setOnboardingComplete(true);
-        user.setRole(User.Role.OWNER);
-        userRepository.save(user);
+        user.setRole("OWNER");
+        userJpaRepository.save(user);
 
         return new OnboardingStatusResponse(
                 true,
@@ -128,50 +148,49 @@ public class OnboardingService {
         );
     }
 
-    // ── Join business ─────────────────────────────────────────────────────────
+    // ── Join business ──────────────────────────────────────────────
 
     public Map<String, Object> verifyInvite(String code) {
         Invite invite = inviteRepository.findByTokenAndDeletedAtIsNull(code)
-                .orElseThrow(() -> new RuntimeException("Invalid or expired invite code"));
+                .orElseThrow(() -> new NotFoundException("Invalid or expired invite code"));
 
         if (invite.getStatus() != Invite.InviteStatus.PENDING) {
-            throw new RuntimeException("This invite code has already been used");
+            throw new ConflictException("This invite code has already been used");
         }
 
         if (invite.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new RuntimeException("This invite code has expired");
+            throw new ValidationException("This invite code has expired");
         }
 
-        BusinessOrganization org = orgRepository.findByIdAndDeletedAtIsNull(invite.getOrgId())
-                .orElseThrow(() -> new RuntimeException("Organisation no longer exists"));
+        OrganizationEntity org = orgJpaRepository.findById(invite.getOrgId())
+                .orElseThrow(() -> new NotFoundException("Organisation no longer exists"));
 
         return Map.of(
                 "valid", true,
-                "businessName", org.getLegalName(),
+                "businessName", org.getLegalName() != null ? org.getLegalName() : org.getName(),
                 "role", invite.getRole()
         );
     }
 
     public OnboardingStatusResponse joinBusiness(OnboardingRequest req) {
         log.info("User userId={} joining via code={}", req.getUserId(), req.getInviteCode());
-        
+
         Invite invite = inviteRepository.findByTokenAndDeletedAtIsNull(req.getInviteCode())
-                .orElseThrow(() -> new RuntimeException("Invalid invite code"));
+                .orElseThrow(() -> new NotFoundException("Invalid invite code"));
 
         if (invite.getStatus() != Invite.InviteStatus.PENDING) {
-            throw new RuntimeException("Invite code already used");
+            throw new ConflictException("Invite code already used");
         }
 
-        BusinessOrganization org = orgRepository.findByIdAndDeletedAtIsNull(invite.getOrgId())
-                .orElseThrow(() -> new RuntimeException("Organisation not found"));
+        OrganizationEntity org = orgJpaRepository.findById(invite.getOrgId())
+                .orElseThrow(() -> new NotFoundException("Organisation not found"));
 
-        User user = getOrCreateUser(req);
+        UserEntity user = getOrCreateUser(req);
         user.setOrgId(org.getId());
         user.setOnboardingComplete(true);
-        user.setRole(invite.getRole());
-        userRepository.save(user);
+        user.setRole(invite.getRole().name());
+        userJpaRepository.save(user);
 
-        // Mark invite as accepted
         invite.setStatus(Invite.InviteStatus.ACCEPTED);
         invite.setUpdatedAt(LocalDateTime.now());
         inviteRepository.save(invite);
@@ -184,12 +203,22 @@ public class OnboardingService {
         );
     }
 
-    private User getOrCreateUser(OnboardingRequest req) {
-        return userRepository.findById(req.getUserId()).orElseGet(() -> {
-            User newUser = new User();
+    private UserEntity getOrCreateUser(OnboardingRequest req) {
+        if (req.getEmail() != null && !req.getEmail().isBlank()) {
+            var byEmail = userJpaRepository.findByEmailAndDeletedAtIsNull(req.getEmail());
+            if (byEmail.isPresent()) {
+                return byEmail.get();
+            }
+        }
+        return userJpaRepository.findById(req.getUserId()).orElseGet(() -> {
+            UserEntity newUser = new UserEntity();
+            newUser.setId(UUID.randomUUID().toString());
             newUser.setEmail(req.getEmail());
             newUser.setName(req.getName());
-            return userRepository.save(newUser);
+            newUser.setRole("STAFF");
+            newUser.setStatus("ACTIVE");
+            newUser.setCreatedAt(LocalDateTime.now());
+            return userJpaRepository.save(newUser);
         });
     }
 }

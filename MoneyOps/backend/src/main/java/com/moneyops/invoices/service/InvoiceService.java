@@ -1,9 +1,9 @@
 // src/main/java/com/moneyops/invoices/service/InvoiceService.java
 package com.moneyops.invoices.service;
 
-import com.moneyops.clients.repository.ClientRepository;
-import com.moneyops.jpa.entity.InvoiceEntity;
-import com.moneyops.jpa.repository.InvoiceJpaRepository;
+import com.moneyops.jpa.persistence.ClientDocumentStore;
+import com.moneyops.jpa.persistence.InvoiceDocumentStore;
+import com.moneyops.jpa.persistence.OrganizationDocumentStore;
 import com.lowagie.text.Document;
 import com.lowagie.text.DocumentException;
 import com.lowagie.text.Element;
@@ -22,11 +22,8 @@ import com.moneyops.invoices.entity.InvoiceStatus;
 import com.moneyops.invoices.mapper.InvoiceMapper;
 import com.moneyops.clients.mapper.ClientMapper;
 import com.moneyops.clients.dto.ClientDto;
-import com.moneyops.invoices.repository.InvoiceRepository;
 import com.moneyops.invoices.validator.InvoiceValidator;
 import com.moneyops.email.EmailService;
-import com.moneyops.organizations.entity.BusinessOrganization;
-import com.moneyops.organizations.repository.BusinessOrganizationRepository;
 import com.moneyops.queue.RedisQueueConfig;
 import com.moneyops.queue.RedisQueueService;
 import com.moneyops.security.team.TeamActionAuthorizationService;
@@ -57,9 +54,9 @@ import java.util.stream.Collectors;
 @Transactional
 public class InvoiceService {
 
-    private final InvoiceRepository invoiceRepository;
-    private final InvoiceJpaRepository invoiceJpaRepository;
-    private final ClientRepository clientRepository;
+    private final InvoiceDocumentStore invoiceStore;
+    
+    private final ClientDocumentStore clientStore;
     private final InvoiceMapper invoiceMapper;
     private final ClientMapper clientMapper;
     private final InvoiceValidator invoiceValidator;
@@ -67,29 +64,21 @@ public class InvoiceService {
     private final com.moneyops.transactions.service.TransactionService transactionService;
     private final TeamActionAuthorizationService teamActionAuthorizationService;
     private final EmailService emailService;
-    private final BusinessOrganizationRepository orgRepository;
+    private final OrganizationDocumentStore orgStore;
     private final RedisQueueService queueService;
     private final RedisQueueConfig queueConfig;
 
     public org.springframework.data.domain.Page<InvoiceDto> getAllInvoices(String orgId, int page, int size) {
         if (orgId == null || orgId.isBlank()) throw new com.moneyops.shared.exceptions.UnauthorizedException("Missing organization context");
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<Invoice> invoicePage = invoiceRepository.findAllByOrgIdAndDeletedAtIsNull(orgId, pageable);
+        Page<Invoice> invoicePage = invoiceStore.findAllByOrgId(orgId, pageable);
         List<InvoiceDto> dtoList = populateClientDetails(invoicePage.getContent(), orgId);
         return new org.springframework.data.domain.PageImpl<>(dtoList, pageable, invoicePage.getTotalElements());
     }
 
     public List<InvoiceDto> getAllInvoices(String orgId) {
         if (orgId == null || orgId.isBlank()) throw new com.moneyops.shared.exceptions.UnauthorizedException("Missing organization context");
-        var jpaInvoices = invoiceJpaRepository.findByOrgId(orgId);
-        if (!jpaInvoices.isEmpty()) {
-            log.debug("Read invoices from PostgreSQL");
-            return jpaInvoices.stream()
-                    .map(this::toInvoiceDto)
-                    .collect(Collectors.toList());
-        }
-        log.warn("Falling back to MongoDB for invoices");
-        return populateClientDetails(invoiceRepository.findAllByOrgIdAndDeletedAtIsNull(orgId), orgId);
+        return populateClientDetails(invoiceStore.findAllByOrgId(orgId), orgId);
     }
 
     public void validateAndCalculate(InvoiceDto dto) {
@@ -101,13 +90,13 @@ public class InvoiceService {
         
         if (status != null && !status.trim().isEmpty()) {
             InvoiceStatus targetStatus = InvoiceStatus.valueOf(status.toUpperCase());
-            Page<Invoice> invoicePage = invoiceRepository.findByOrgIdAndStatusAndDeletedAtIsNull(orgId, targetStatus, pageable);
+            Page<Invoice> invoicePage = invoiceStore.findByOrgIdAndStatus(orgId, targetStatus, pageable);
             List<InvoiceDto> dtoList = populateClientDetails(invoicePage.getContent(), orgId);
             return new org.springframework.data.domain.PageImpl<>(dtoList, pageable, invoicePage.getTotalElements());
         }
         
         if (clientId != null && !clientId.trim().isEmpty()) {
-            Page<Invoice> invoicePage = invoiceRepository.findAllByOrgIdAndClientIdAndDeletedAtIsNull(orgId, clientId, pageable);
+            Page<Invoice> invoicePage = invoiceStore.findByOrgIdAndClientId(orgId, clientId, pageable);
             List<InvoiceDto> dtoList = populateClientDetails(invoicePage.getContent(), orgId);
             return new org.springframework.data.domain.PageImpl<>(dtoList, pageable, invoicePage.getTotalElements());
         }
@@ -115,7 +104,7 @@ public class InvoiceService {
         // For client name search, use existing method (already optimized with fuzzy matching)
         if (clientName != null && !clientName.trim().isEmpty()) {
             final String query = clientName.toLowerCase().trim();
-            var clients = clientRepository.findAllByOrgIdAndDeletedAtIsNull(orgId);
+            var clients = clientStore.findAllByOrgId(orgId);
             org.apache.commons.text.similarity.JaroWinklerSimilarity similarity = new org.apache.commons.text.similarity.JaroWinklerSimilarity();
             
             var matchedClientIds = clients.stream()
@@ -123,7 +112,7 @@ public class InvoiceService {
                 .map(com.moneyops.clients.entity.Client::getId)
                 .collect(Collectors.toSet());
                 
-            List<Invoice> filtered = invoiceRepository.findAllByOrgIdAndDeletedAtIsNull(orgId).stream()
+            List<Invoice> filtered = invoiceStore.findAllByOrgId(orgId).stream()
                 .filter(inv -> inv.getClientId() != null && matchedClientIds.contains(inv.getClientId()))
                 .collect(Collectors.toList());
             List<InvoiceDto> dtoList = populateClientDetails(filtered, orgId);
@@ -134,15 +123,8 @@ public class InvoiceService {
     }
 
     public InvoiceDto getInvoiceById(String id, String orgId) {
-        var jpaInvoice = invoiceJpaRepository.findByIdAndOrgId(id, orgId);
-        if (jpaInvoice.isPresent()) {
-            log.debug("Read invoice {} from PostgreSQL", id);
-            return toInvoiceDto(jpaInvoice.get());
-        }
-        log.warn("Falling back to MongoDB for invoice {}", id);
-        Invoice invoice = invoiceRepository.findByIdAndOrgIdAndDeletedAtIsNull(id, orgId)
+        Invoice invoice = invoiceStore.findByIdAndOrgId(id, orgId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found"));
-
         return populateClientDetails(invoice);
     }
 
@@ -167,14 +149,14 @@ public class InvoiceService {
 
         // ✨ Idempotency check 
         if (dto.getIdempotencyKey() != null) {
-            var existing = invoiceRepository.findByOrgIdAndInvoiceNumberAndDeletedAtIsNull(orgId, dto.getInvoiceNumber());
+            var existing = invoiceStore.findByOrgIdAndInvoiceNumber(orgId, dto.getInvoiceNumber());
             if (existing.isPresent()) return populateClientDetails(existing.get());
         }
 
         invoiceValidator.validate(dto);
 
         if (dto.getClientId() != null) {
-            clientRepository.findByIdAndOrgIdAndDeletedAtIsNull(dto.getClientId(), orgId).ifPresentOrElse(client -> {
+            clientStore.findByIdAndOrgId(dto.getClientId(), orgId).ifPresentOrElse(client -> {
                 // Lock in the snapshot data
                 dto.setClientName(client.getName());
                 dto.setClientEmail(client.getEmail());
@@ -209,14 +191,13 @@ public class InvoiceService {
         // Recalculate totals server-side (do not trust frontend)
         recalculateInvoiceTotals(invoice);
 
-        Invoice saved = invoiceRepository.save(invoice);
-        saveInvoiceJpa(saved);
+        Invoice saved = invoiceStore.save(invoice);
         auditLogService.logCreate("INVOICE", saved.getId(), saved);
         return populateClientDetails(saved);
     }
 
     public InvoiceDto updateInvoice(String id, InvoiceDto dto, String orgId) {
-        Invoice existing = invoiceRepository.findByIdAndOrgIdAndDeletedAtIsNull(id, orgId)
+        Invoice existing = invoiceStore.findByIdAndOrgId(id, orgId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found"));
 
         if (existing.getStatus() != InvoiceStatus.DRAFT) {
@@ -238,13 +219,12 @@ public class InvoiceService {
 
         // Since items are embedded, simply saving the updated invoice includes its items
         recalculateInvoiceTotals(updated); // Recalculate totals after item changes
-        Invoice saved = invoiceRepository.save(updated);
-        saveInvoiceJpa(saved);
+        Invoice saved = invoiceStore.save(updated);
         return populateClientDetails(saved);
     }
 
     public void deleteInvoice(String id, String orgId) {
-        Invoice invoice = invoiceRepository.findByIdAndOrgIdAndDeletedAtIsNull(id, orgId)
+        Invoice invoice = invoiceStore.findByIdAndOrgId(id, orgId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found"));
 
         if (invoice.getStatus() == InvoiceStatus.PAID) {
@@ -252,13 +232,11 @@ public class InvoiceService {
         }
 
         // ✨ Soft Delete
-        invoice.setDeletedAt(LocalDateTime.now());
-        invoiceRepository.save(invoice);
-        invoiceJpaRepository.deleteById(id);
+        invoiceStore.softDelete(id, orgId);
     }
 
     public InvoiceDto sendInvoice(String id, String orgId) {
-        Invoice invoice = invoiceRepository.findByIdAndOrgIdAndDeletedAtIsNull(id, orgId)
+        Invoice invoice = invoiceStore.findByIdAndOrgId(id, orgId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found"));
 
         if (invoice.getClientEmail() == null || invoice.getClientEmail().isBlank()) {
@@ -298,14 +276,13 @@ public class InvoiceService {
             invoice.setStatus(InvoiceStatus.SENT);
         }
         invoice.setUpdatedAt(LocalDateTime.now());
-        Invoice saved = invoiceRepository.save(invoice);
-        saveInvoiceJpa(saved);
+        Invoice saved = invoiceStore.save(invoice);
         auditLogService.logUpdate("INVOICE", saved.getId(), beforeUpdate, saved);
         return populateClientDetails(saved);
     }
 
     public void sendFollowUpEmail(String id, String orgId) {
-        Invoice invoice = invoiceRepository.findByIdAndOrgIdAndDeletedAtIsNull(id, orgId)
+        Invoice invoice = invoiceStore.findByIdAndOrgId(id, orgId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found"));
 
         if (invoice.getClientEmail() == null || invoice.getClientEmail().isBlank()) {
@@ -350,7 +327,7 @@ public class InvoiceService {
     }
 
     public InvoiceDto markPaid(String id, String orgId) {
-        Invoice invoice = invoiceRepository.findByIdAndOrgIdAndDeletedAtIsNull(id, orgId)
+        Invoice invoice = invoiceStore.findByIdAndOrgId(id, orgId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found"));
 
         if (invoice.getStatus() != InvoiceStatus.SENT) {
@@ -362,8 +339,7 @@ public class InvoiceService {
         invoice.setAmountPaid(invoice.getTotalAmount());
         invoice.setBalanceDue(BigDecimal.ZERO);
         invoice.setUpdatedAt(LocalDateTime.now());
-        Invoice saved = invoiceRepository.save(invoice);
-        saveInvoiceJpa(saved);
+        Invoice saved = invoiceStore.save(invoice);
         return populateClientDetails(saved);
     }
 
@@ -377,7 +353,7 @@ public class InvoiceService {
             return new byte[0];
         }
 
-        Invoice invoice = invoiceRepository.findByIdAndOrgIdAndDeletedAtIsNull(id, orgId)
+        Invoice invoice = invoiceStore.findByIdAndOrgId(id, orgId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found"));
 
         String orgName = getOrganizationDisplayName(orgId);
@@ -463,23 +439,22 @@ public class InvoiceService {
             document.close();
             return outputStream.toByteArray();
         } catch (DocumentException | java.io.IOException ex) {
-            throw new RuntimeException("Failed to generate invoice PDF", ex);
+            throw new com.moneyops.shared.exceptions.BusinessRuleException("Failed to generate invoice PDF", ex);
         }
     }
 
     public List<InvoiceDto> getOverdueInvoices(String orgId) {
-        List<Invoice> overdue = invoiceRepository.findOverdueByOrgId(orgId, LocalDate.now());
+        List<Invoice> overdue = invoiceStore.findOverdueByOrgId(orgId, LocalDate.now());
         for (Invoice invoice : overdue) {
             invoice.setStatus(InvoiceStatus.OVERDUE);
-            invoiceRepository.save(invoice);
-            saveInvoiceJpa(invoice);
+            invoiceStore.save(invoice);
         }
         return populateClientDetails(overdue, orgId);
     }
 
     // InvoiceItem operations
     public InvoiceItemDto addItem(String invoiceId, InvoiceItemDto itemDto, String orgId) {
-        Invoice invoice = invoiceRepository.findByIdAndOrgIdAndDeletedAtIsNull(invoiceId, orgId)
+        Invoice invoice = invoiceStore.findByIdAndOrgId(invoiceId, orgId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found"));
 
         if (invoice.getStatus() != InvoiceStatus.DRAFT) {
@@ -511,15 +486,14 @@ public class InvoiceService {
         // Recalculate invoice totals
         recalculateInvoiceTotals(invoice);
 
-        invoiceRepository.save(invoice);
-        saveInvoiceJpa(invoice);
+        invoiceStore.save(invoice);
         return invoiceMapper.toItemDto(item);
     }
 
     public void updateItem(String itemId, InvoiceItemDto itemDto, String orgId) {
         // Need to find which invoice contains this item
         // In MongoDB we usually know the invoice ID, but if only itemId is provided:
-        Invoice invoice = invoiceRepository.findAllByOrgIdAndDeletedAtIsNull(orgId).stream()
+        Invoice invoice = invoiceStore.findAllByOrgId(orgId).stream()
                 .filter(inv -> inv.getItems() != null && inv.getItems().stream().anyMatch(i -> i.getId().equals(itemId)))
                 .findFirst()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found in any invoice for this org"));
@@ -550,12 +524,11 @@ public class InvoiceService {
 
         // Recalculate invoice totals
         recalculateInvoiceTotals(invoice);
-        invoiceRepository.save(invoice);
-        saveInvoiceJpa(invoice);
+        invoiceStore.save(invoice);
     }
 
     public void deleteItem(String itemId, String orgId) {
-        Invoice invoice = invoiceRepository.findAllByOrgIdAndDeletedAtIsNull(orgId).stream()
+        Invoice invoice = invoiceStore.findAllByOrgId(orgId).stream()
                 .filter(inv -> inv.getItems() != null && inv.getItems().stream().anyMatch(i -> i.getId().equals(itemId)))
                 .findFirst()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found in any invoice for this org"));
@@ -568,8 +541,7 @@ public class InvoiceService {
 
         // Recalculate invoice totals
         recalculateInvoiceTotals(invoice);
-        invoiceRepository.save(invoice);
-        saveInvoiceJpa(invoice);
+        invoiceStore.save(invoice);
     }
 
     private void recalculateInvoiceTotals(Invoice invoice) {
@@ -595,35 +567,9 @@ public class InvoiceService {
         invoice.setUpdatedAt(LocalDateTime.now());
     }
 
-    private void saveInvoiceJpa(Invoice invoice) {
-        try {
-            InvoiceEntity entity = new InvoiceEntity();
-            entity.setId(invoice.getId());
-            entity.setOrgId(invoice.getOrgId());
-            entity.setClientId(invoice.getClientId());
-            entity.setInvoiceNumber(invoice.getInvoiceNumber());
-            entity.setStatus(invoice.getStatus() != null ? invoice.getStatus().name() : null);
-            entity.setTotalAmount(invoice.getTotalAmount());
-            entity.setCreatedAt(invoice.getCreatedAt());
-            invoiceJpaRepository.save(entity);
-            log.debug("Invoice {} written to PostgreSQL", invoice.getId());
-        } catch (Exception e) {
-            log.error("Failed to write invoice {} to PostgreSQL: {}", invoice.getId(), e.getMessage());
-        }
-    }
 
-    private InvoiceDto toInvoiceDto(InvoiceEntity entity) {
-        InvoiceDto dto = new InvoiceDto();
-        dto.setId(entity.getId());
-        dto.setOrgId(entity.getOrgId());
-        dto.setClientId(entity.getClientId());
-        dto.setInvoiceNumber(entity.getInvoiceNumber());
-        if (entity.getStatus() != null) {
-            dto.setStatus(entity.getStatus());
-        }
-        dto.setTotalAmount(entity.getTotalAmount());
-        return dto;
-    }
+
+
 
     private InvoiceDto populateClientDetails(Invoice invoice) {
         InvoiceDto dto = invoiceMapper.toDto(invoice);
@@ -631,7 +577,7 @@ public class InvoiceService {
         // If snapshot exists, it's already in the DTO from mapping.
         // We only fallback to lookup if snapshot is missing (for legacy data).
         if (dto.getClientName() == null && invoice.getClientId() != null) {
-            clientRepository.findByIdAndOrgIdAndDeletedAtIsNull(invoice.getClientId(), invoice.getOrgId())
+            clientStore.findByIdAndOrgId(invoice.getClientId(), invoice.getOrgId())
                     .ifPresentOrElse(client -> {
                         dto.setClientName(client.getName());
                         dto.setClientEmail(client.getEmail());
@@ -651,7 +597,7 @@ public class InvoiceService {
     }
 
     private String getOrganizationDisplayName(String orgId) {
-        return orgRepository.findByIdAndDeletedAtIsNull(orgId)
+        return orgStore.findById(orgId)
                 .map(org -> {
                     if (org.getTradingName() != null && !org.getTradingName().isBlank()) {
                         return org.getTradingName();
@@ -777,17 +723,10 @@ public class InvoiceService {
     }
 
     public com.moneyops.transactions.dto.TransactionDto recordPayment(String id, com.moneyops.transactions.dto.TransactionDto paymentDto, String orgId, String userId) {
-        Invoice invoice = invoiceRepository.findByIdAndOrgIdAndDeletedAtIsNull(id, orgId)
+        Invoice invoice = invoiceStore.findByIdAndOrgId(id, orgId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found"));
 
-        if (paymentDto.getIdempotencyKey() != null && !paymentDto.getIdempotencyKey().isBlank()) {
-            var existingPayment = transactionService.getTransactionRepository()
-                    .findByOrgIdAndInvoiceIdAndIdempotencyKeyAndDeletedAtIsNull(orgId, id, paymentDto.getIdempotencyKey());
-            if (existingPayment.isPresent()) {
-                return transactionService.getTransactionMapper().toDto(existingPayment.get());
-            }
-        }
-        
+
         paymentDto.setInvoiceId(id);
         paymentDto.setClientId(invoice.getClientId());
         paymentDto.setType("INCOME");
@@ -822,8 +761,7 @@ public class InvoiceService {
         }
 
         invoice.setUpdatedAt(LocalDateTime.now());
-        invoiceRepository.save(invoice);
-        saveInvoiceJpa(invoice);
+        invoiceStore.save(invoice);
 
         return createdTransaction;
     }

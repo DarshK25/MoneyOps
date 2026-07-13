@@ -4,6 +4,7 @@ import com.moneyops.invoices.entity.Invoice;
 import com.moneyops.invoices.repository.InvoiceRepository;
 import com.moneyops.payments.dto.CreateOrderRequest;
 import com.moneyops.payments.dto.RazorpayOrderResponse;
+import com.moneyops.shared.exceptions.BusinessRuleException;
 import com.razorpay.Order;
 import com.razorpay.RazorpayClient;
 import com.razorpay.Utils;
@@ -26,7 +27,7 @@ public class RazorpayService {
 
     public RazorpayOrderResponse createOrder(CreateOrderRequest request) {
         if (razorpayClient == null) {
-            throw new RuntimeException("Razorpay not configured");
+            throw new BusinessRuleException("Razorpay not configured");
         }
 
         try {
@@ -50,7 +51,7 @@ public class RazorpayService {
 
             return response;
         } catch (Exception e) {
-            throw new RuntimeException("Failed to create Razorpay order: " + e.getMessage(), e);
+            throw new BusinessRuleException("Failed to create Razorpay order: " + e.getMessage(), e);
         }
     }
 

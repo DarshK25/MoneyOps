@@ -2,6 +2,7 @@ package com.moneyops.invoices.controller;
 
 import com.moneyops.invoices.dto.InvoiceDto;
 import com.moneyops.invoices.service.InvoiceService;
+import com.moneyops.shared.exceptions.BusinessRuleException;
 import com.moneyops.shared.utils.OrgContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -27,7 +28,7 @@ public class InvoiceController {
         String orgId = OrgContext.getOrgId();
         String userId = OrgContext.getUserId();
         
-        if (orgId == null) throw new RuntimeException("Organization context missing");
+        if (orgId == null) throw new BusinessRuleException("Organization context missing");
         
         InvoiceDto created = invoiceService.createInvoice(dto, orgId, userId);
         return ResponseEntity.ok(created);

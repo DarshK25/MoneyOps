@@ -3,6 +3,7 @@ package com.moneyops.queue;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.moneyops.queue.dto.JobDto;
+import com.moneyops.shared.exceptions.BusinessRuleException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -45,7 +46,7 @@ public class RedisQueueService {
             return job.getJobId();
         } catch (JsonProcessingException e) {
             log.error("Failed to serialize job for queue {}", queueName, e);
-            throw new RuntimeException("Failed to push job to queue", e);
+            throw new BusinessRuleException("Failed to push job to queue", e);
         }
     }
 

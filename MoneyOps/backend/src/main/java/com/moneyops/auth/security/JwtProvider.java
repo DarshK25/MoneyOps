@@ -1,4 +1,3 @@
-// src/main/java/com/moneyops/auth/security/JwtProvider.java
 package com.moneyops.auth.security;
 
 import io.jsonwebtoken.*;
@@ -39,40 +38,38 @@ public class JwtProvider {
         }
 
         return Jwts.builder()
-                .setSubject(userId)
-                .addClaims(claims)
-                .setIssuedAt(now)
-                .setExpiration(expiryDate)
+                .claims(claims)
+                .subject(userId)
+                .issuedAt(now)
+                .expiration(expiryDate)
                 .signWith(getSigningKey())
                 .compact();
     }
 
     public String getUserIdFromToken(String token) {
-        Claims claims = Jwts.parserBuilder()
-                .setSigningKey(getSigningKey())
+        Claims claims = Jwts.parser()
+                .verifyWith(getSigningKey())
                 .build()
-                .parseClaimsJws(token)
-                .getBody();
-
+                .parseSignedClaims(token)
+                .getPayload();
         return claims.getSubject();
     }
 
     public String getOrgIdFromToken(String token) {
-        Claims claims = Jwts.parserBuilder()
-                .setSigningKey(getSigningKey())
+        Claims claims = Jwts.parser()
+                .verifyWith(getSigningKey())
                 .build()
-                .parseClaimsJws(token)
-                .getBody();
-
+                .parseSignedClaims(token)
+                .getPayload();
         return claims.get("orgId", String.class);
     }
 
     public boolean validateToken(String token) {
         try {
-            Jwts.parserBuilder()
-                    .setSigningKey(getSigningKey())
+            Jwts.parser()
+                    .verifyWith(getSigningKey())
                     .build()
-                    .parseClaimsJws(token);
+                    .parseSignedClaims(token);
             return true;
         } catch (JwtException | IllegalArgumentException e) {
             return false;

@@ -2,19 +2,20 @@ package com.moneyops.users.service;
 
 import com.moneyops.audit.service.AuditLogService;
 import com.moneyops.email.EmailService;
+import com.moneyops.jpa.entity.OrganizationEntity;
 import com.moneyops.jpa.entity.UserEntity;
+import com.moneyops.jpa.repository.OrganizationJpaRepository;
 import com.moneyops.jpa.repository.UserJpaRepository;
-import com.moneyops.organizations.repository.BusinessOrganizationRepository;
 import com.moneyops.users.dto.UserDto;
 import com.moneyops.users.dto.CreateInviteRequest;
 import com.moneyops.users.dto.AcceptInviteRequest;
-import com.moneyops.users.entity.User;
 import com.moneyops.users.entity.Invite;
-import com.moneyops.users.mapper.UserMapper;
-import com.moneyops.users.repository.UserRepository;
 import com.moneyops.users.repository.InviteRepository;
 import com.moneyops.users.validator.UserValidator;
 import com.moneyops.users.validator.InviteValidator;
+import com.moneyops.shared.exceptions.ConflictException;
+import com.moneyops.shared.exceptions.NotFoundException;
+import com.moneyops.shared.exceptions.BusinessRuleException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,16 +34,10 @@ public class UserService {
     private static final Logger log = LoggerFactory.getLogger(UserService.class);
 
     @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
     private UserJpaRepository userJpaRepository;
 
     @Autowired
     private InviteRepository inviteRepository;
-
-    @Autowired
-    private UserMapper userMapper;
 
     @Autowired
     private UserValidator userValidator;
@@ -57,118 +52,101 @@ public class UserService {
     private EmailService emailService;
 
     @Autowired
-    private BusinessOrganizationRepository orgRepository;
+    private OrganizationJpaRepository orgJpaRepository;
 
     public List<UserDto> getAllUsers(String orgId) {
-        var jpaUsers = userJpaRepository.findByOrgId(orgId);
-        if (!jpaUsers.isEmpty()) {
-            log.debug("Read users from PostgreSQL");
-            return jpaUsers.stream()
-                    .map(this::toUserDto)
-                    .collect(Collectors.toList());
-        }
-        log.warn("Falling back to MongoDB for users");
-        return userRepository.findAllByOrgIdAndDeletedAtIsNull(orgId)
+        return userJpaRepository.findByOrgIdAndDeletedAtIsNull(orgId)
                 .stream()
-                .map(userMapper::toDto)
+                .map(this::toUserDto)
                 .collect(Collectors.toList());
     }
 
     public UserDto getUserById(String id, String orgId) {
-        try {
-            var jpaUser = userJpaRepository.findByIdAndOrgId(id, orgId);
-            if (jpaUser.isPresent()) {
-                log.debug("Read user {} from PostgreSQL", id);
-                return toUserDto(jpaUser.get());
-            }
-        } catch (IllegalArgumentException ex) {
-            log.warn("Skipping PostgreSQL user lookup for non-UUID id {}", id);
-        }
-        log.warn("Falling back to MongoDB for user {}", id);
-        User user = userRepository.findByIdAndOrgIdAndDeletedAtIsNull(id, orgId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        return userMapper.toDto(user);
+        UserEntity user = userJpaRepository.findByIdAndOrgId(id, orgId)
+                .orElseThrow(() -> new NotFoundException("User not found"));
+        return toUserDto(user);
     }
 
-    public User findUserById(String id) {
-        try {
-            var jpaUser = userJpaRepository.findById(id);
-            if (jpaUser.isPresent()) {
-                log.debug("Read user {} from PostgreSQL", id);
-                return toUser(jpaUser.get());
-            }
-        } catch (IllegalArgumentException ex) {
-            log.warn("Skipping PostgreSQL user lookup for non-UUID id {}", id);
-        }
-        return userRepository.findById(id).orElse(null);
+    public UserEntity findUserById(String id) {
+        return userJpaRepository.findById(id).orElse(null);
     }
 
     public UserDto createUser(UserDto dto, String orgId, String createdBy) {
         userValidator.validate(dto);
-        if (userRepository.existsByEmailAndOrgIdAndDeletedAtIsNull(dto.getEmail(), orgId)) {
-            throw new RuntimeException("User with this email already exists");
+        if (userJpaRepository.findByEmailAndOrgId(dto.getEmail(), orgId).isPresent()) {
+            throw new ConflictException("User with this email already exists");
         }
 
-        User user = userMapper.toEntity(dto);
+        UserEntity user = new UserEntity();
+        user.setName(dto.getName());
+        user.setEmail(dto.getEmail());
+        user.setPhone(dto.getPhone());
+        user.setRole(dto.getRole());
+        user.setStatus("ACTIVE");
         user.setOrgId(orgId);
         user.setCreatedBy(createdBy);
+        user.setCreatedAt(LocalDateTime.now());
 
-        User saved = userRepository.save(user);
-        saveUserJpa(saved);
+        UserEntity saved = userJpaRepository.save(user);
         auditLogService.logCreate("User", saved.getId(), saved);
-        return userMapper.toDto(saved);
+        return toUserDto(saved);
     }
 
     public UserDto updateUser(String id, UserDto dto, String orgId, String updatedBy) {
         userValidator.validate(dto);
-        User user = userRepository.findByIdAndOrgIdAndDeletedAtIsNull(id, orgId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        UserEntity user = userJpaRepository.findByIdAndOrgId(id, orgId)
+                .orElseThrow(() -> new NotFoundException("User not found"));
 
-        User oldUser = new User();
-        oldUser.setName(user.getName());
-        oldUser.setEmail(user.getEmail());
-        oldUser.setRole(user.getRole());
-        oldUser.setStatus(user.getStatus());
+        String oldName = user.getName();
+        String oldEmail = user.getEmail();
+        String oldRole = user.getRole();
+        String oldStatus = user.getStatus();
 
         user.setName(dto.getName());
         user.setEmail(dto.getEmail());
-        user.setRole(User.Role.valueOf(dto.getRole()));
-        user.setStatus(User.Status.valueOf(dto.getStatus()));
+        user.setRole(dto.getRole());
+        user.setStatus(dto.getStatus());
         user.setUpdatedBy(updatedBy);
+        user.setUpdatedAt(LocalDateTime.now());
 
-        User saved = userRepository.save(user);
-        saveUserJpa(saved);
+        UserEntity saved = userJpaRepository.save(user);
+        UserEntity oldUser = new UserEntity();
+        oldUser.setName(oldName);
+        oldUser.setEmail(oldEmail);
+        oldUser.setRole(oldRole);
+        oldUser.setStatus(oldStatus);
         auditLogService.logUpdate("User", saved.getId(), oldUser, saved);
-        return userMapper.toDto(saved);
+        return toUserDto(saved);
     }
 
     public void deleteUser(String id, String orgId) {
-        User user = userRepository.findByIdAndOrgIdAndDeletedAtIsNull(id, orgId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        UserEntity user = userJpaRepository.findByIdAndOrgId(id, orgId)
+                .orElseThrow(() -> new NotFoundException("User not found"));
 
         user.setDeletedAt(LocalDateTime.now());
-        userRepository.save(user);
-        userJpaRepository.deleteById(id);
+        userJpaRepository.save(user);
 
         auditLogService.logDelete("User", id, user);
     }
 
     public List<UserDto> searchUsers(String orgId, String search) {
-        return userRepository.searchByOrgIdWithFilters(orgId, search)
+        return userJpaRepository.findByOrgIdAndDeletedAtIsNull(orgId)
                 .stream()
-                .map(userMapper::toDto)
+                .filter(u -> u.getName() != null && u.getName().toLowerCase().contains(search.toLowerCase())
+                        || u.getEmail() != null && u.getEmail().toLowerCase().contains(search.toLowerCase()))
+                .map(this::toUserDto)
                 .collect(Collectors.toList());
     }
 
     public Invite createInvite(CreateInviteRequest request, String orgId, String createdBy) {
         userValidator.validateInvite(request);
         if (inviteRepository.existsByEmailAndOrgIdAndStatusAndDeletedAtIsNull(request.getEmail(), orgId, Invite.InviteStatus.PENDING)) {
-            throw new RuntimeException("Invite already exists for this email");
+            throw new ConflictException("Invite already exists for this email");
         }
 
         Invite invite = new Invite();
         invite.setEmail(request.getEmail());
-        invite.setRole(User.Role.valueOf(request.getRole()));
+        invite.setRole(com.moneyops.users.entity.User.Role.valueOf(request.getRole()));
         invite.setToken(UUID.randomUUID().toString().substring(0, 8).toUpperCase());
         invite.setExpiresAt(LocalDateTime.now().plusDays(7));
         invite.setStatus(Invite.InviteStatus.PENDING);
@@ -178,8 +156,8 @@ public class UserService {
         Invite saved = inviteRepository.save(invite);
 
         try {
-            var org = orgRepository.findByIdAndDeletedAtIsNull(orgId).orElse(null);
-            String orgName = org != null ? org.getLegalName() : "MoneyOps";
+            var org = orgJpaRepository.findById(orgId);
+            String orgName = org.map(OrganizationEntity::getName).orElse("MoneyOps");
             emailService.sendInviteEmail(saved.getEmail(), saved.getToken(), orgName, saved.getRole().name());
         } catch (Exception e) {
             log.warn("Failed to send invite email to {}: {}", saved.getEmail(), e.getMessage());
@@ -192,32 +170,32 @@ public class UserService {
         inviteValidator.validateAcceptInvite(request);
 
         Invite invite = inviteRepository.findByTokenAndDeletedAtIsNull(request.getToken())
-                .orElseThrow(() -> new RuntimeException("Invalid invite token"));
+                .orElseThrow(() -> new NotFoundException("Invalid invite token"));
 
         if (invite.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new RuntimeException("Invite has expired");
+            throw new BusinessRuleException("Invite has expired");
         }
 
         if (Invite.InviteStatus.PENDING != invite.getStatus()) {
-            throw new RuntimeException("Invite has already been used");
+            throw new ConflictException("Invite has already been used");
         }
 
-        User user = new User();
+        UserEntity user = new UserEntity();
         user.setName(request.getName());
         user.setEmail(invite.getEmail());
         user.setPhone(request.getPhone());
-        user.setRole(invite.getRole());
-        user.setStatus(User.Status.ACTIVE);
+        user.setRole(invite.getRole().name());
+        user.setStatus("ACTIVE");
         user.setOrgId(invite.getOrgId());
         user.setCreatedBy(invite.getCreatedBy());
+        user.setCreatedAt(LocalDateTime.now());
 
-        User saved = userRepository.save(user);
-        saveUserJpa(saved);
+        UserEntity saved = userJpaRepository.save(user);
 
         invite.setStatus(Invite.InviteStatus.ACCEPTED);
         inviteRepository.save(invite);
 
-        return userMapper.toDto(saved);
+        return toUserDto(saved);
     }
 
     public List<Invite> getPendingInvites(String orgId) {
@@ -226,37 +204,19 @@ public class UserService {
 
     public Invite getInviteByToken(String token) {
         Invite invite = inviteRepository.findByTokenAndDeletedAtIsNull(token)
-                .orElseThrow(() -> new RuntimeException("Invalid invite token"));
+                .orElseThrow(() -> new NotFoundException("Invalid invite token"));
 
         if (invite.getStatus() != Invite.InviteStatus.PENDING) {
-            throw new RuntimeException("Invite has already been used");
+            throw new ConflictException("Invite has already been used");
         }
 
         if (invite.getExpiresAt().isBefore(LocalDateTime.now())) {
             invite.setStatus(Invite.InviteStatus.EXPIRED);
             inviteRepository.save(invite);
-            throw new RuntimeException("Invite has expired");
+            throw new BusinessRuleException("Invite has expired");
         }
 
         return invite;
-    }
-
-    private void saveUserJpa(User user) {
-        try {
-            UserEntity entity = new UserEntity();
-            entity.setId(user.getId());
-            entity.setClerkUserId(user.getId());
-            entity.setEmail(user.getEmail());
-            entity.setName(user.getName());
-            entity.setOrgId(user.getOrgId());
-            entity.setRole(user.getRole() != null ? user.getRole().name() : null);
-            entity.setCreatedAt(user.getCreatedAt());
-            entity.setUpdatedAt(user.getUpdatedAt());
-            userJpaRepository.save(entity);
-            log.debug("User {} written to PostgreSQL", user.getId());
-        } catch (Exception e) {
-            log.error("Failed to write user {} to PostgreSQL: {}", user.getId(), e.getMessage());
-        }
     }
 
     private UserDto toUserDto(UserEntity entity) {
@@ -264,19 +224,11 @@ public class UserService {
         dto.setId(entity.getId());
         dto.setName(entity.getName());
         dto.setEmail(entity.getEmail());
+        dto.setPhone(entity.getPhone());
         dto.setRole(entity.getRole());
+        dto.setStatus(entity.getStatus());
+        dto.setLastLoginAt(entity.getLastLoginAt());
+        dto.setOrgId(entity.getOrgId());
         return dto;
-    }
-
-    private User toUser(UserEntity entity) {
-        User user = new User();
-        user.setId(entity.getId());
-        user.setName(entity.getName());
-        user.setEmail(entity.getEmail());
-        user.setOrgId(entity.getOrgId());
-        if (entity.getRole() != null) {
-            user.setRole(User.Role.valueOf(entity.getRole()));
-        }
-        return user;
     }
 }

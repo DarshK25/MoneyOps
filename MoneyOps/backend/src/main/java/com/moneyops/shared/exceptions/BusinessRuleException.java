@@ -10,4 +10,8 @@ public class BusinessRuleException extends ApiException {
     public BusinessRuleException(String rule, String details) {
         super("Business rule violation: " + rule + " - " + details);
     }
+
+    public BusinessRuleException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }
