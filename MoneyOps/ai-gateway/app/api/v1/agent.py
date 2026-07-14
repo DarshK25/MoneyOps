@@ -52,16 +52,36 @@ async def chat_with_agent(request: AgentRequest):
     True agent-native execution endpoint.
     Executors make REAL API calls to complete financial operations.
     """
-    result = await master_orchestrator.process(
-        user_message=request.message,
-        context={
-            "org_id": request.org_id,
-            "user_id": request.user_id,
-            "business_id": request.business_id or "1",
-            "session_id": request.session_id,
-            **(request.context or {}),
-        },
-    )
+    try:
+        result = await asyncio.wait_for(
+            master_orchestrator.process(
+                user_message=request.message,
+                context={
+                    "org_id": request.org_id,
+                    "user_id": request.user_id,
+                    "business_id": request.business_id or "1",
+                    "session_id": request.session_id,
+                    **(request.context or {}),
+                },
+            ),
+            timeout=30.0,  # 30 second timeout
+        )
+    except asyncio.TimeoutError:
+        logger.error("agent_chat_timeout", session_id=request.session_id)
+        return AgentResponseModel(
+            message="The request timed out. Please try a simpler query or check your connection.",
+            success=False,
+            agent_type="timeout",
+            errors=["Request timed out after 30 seconds"],
+        )
+    except Exception as e:
+        logger.error("agent_chat_error", error=str(e), session_id=request.session_id)
+        return AgentResponseModel(
+            message=f"An error occurred: {str(e)}",
+            success=False,
+            agent_type="error",
+            errors=[str(e)],
+        )
 
     return AgentResponseModel(
         message=result["message"],

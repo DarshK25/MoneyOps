@@ -404,7 +404,6 @@ export default function InvoicesPage() {
                     ))}
                 </div>
             )}
-        </div>
 
         {totalPages > 1 && (
             <div className="flex items-center justify-center gap-2 mt-6">
@@ -429,3 +428,4 @@ export default function InvoicesPage() {
         )}
     </div>
 );
+}
