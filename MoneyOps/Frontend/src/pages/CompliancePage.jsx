@@ -212,8 +212,8 @@ export default function CompliancePage() {
                 api.get("/api/transactions").catch(() => []),
             ]);
 
-            const normalizedInvoices = Array.isArray(invoicesData) ? invoicesData : invoicesData?.content || invoicesData?.data || [];
-            const normalizedTransactions = Array.isArray(transactionsData) ? transactionsData : transactionsData?.transactions || [];
+            const normalizedInvoices = Array.isArray(invoicesData) ? invoicesData : invoicesData?.data?.content || invoicesData?.content || invoicesData?.data || [];
+            const normalizedTransactions = Array.isArray(transactionsData) ? transactionsData : transactionsData?.data?.content || transactionsData?.transactions || [];
             const fallback = deriveComplianceFallback(normalizedInvoices, normalizedTransactions, gstData, tdsData);
             const finalGstSummary = (!Array.isArray(gstData.invoiceBreakdown) || gstData.invoiceBreakdown.length === 0 || !Array.isArray(gstData.expenseBreakdown) || gstData.expenseBreakdown.length === 0)
                 ? fallback.gstSummary

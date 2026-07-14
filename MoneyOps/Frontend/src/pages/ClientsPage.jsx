@@ -200,7 +200,7 @@ export default function ClientsPage() {
         try {
             setLoading(true);
             const data = await api.get("/api/clients");
-            setClients(Array.isArray(data) ? data : data?.content || []);
+            setClients(Array.isArray(data) ? data : data?.data?.content || data?.content || []);
         } catch {
             toast.error("Failed to load clients");
             setClients([]);

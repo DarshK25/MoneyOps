@@ -92,9 +92,9 @@ export default function AnalyticsPage() {
                 api.get("/api/transactions").catch(() => ({ content: [] })),
             ]);
 
-            const clients = clientsData.content || clientsData.data || clientsData || [];
-            const invoices = invoicesData.content || invoicesData.data || invoicesData || [];
-            const transactions = transactionsData.content || transactionsData.data || transactionsData || [];
+            const clients = clientsData?.data?.content || clientsData?.content || clientsData?.data || clientsData || [];
+            const invoices = invoicesData?.data?.content || invoicesData?.content || invoicesData?.data || invoicesData || [];
+            const transactions = transactionsData?.data?.content || transactionsData?.content || transactionsData?.data || transactionsData || [];
 
             const revenue = Number(metrics?.revenue || 0);
             const expenses = Number(metrics?.expenses || 0);

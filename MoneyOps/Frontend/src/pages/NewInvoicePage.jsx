@@ -179,7 +179,7 @@ export default function NewInvoicePage() {
     const fetchClients = async () => {
         try {
             const data = await api.get("/api/clients");
-            setClients(Array.isArray(data) ? data : data?.content || []);
+            setClients(Array.isArray(data) ? data : data?.data?.content || data?.content || []);
         } catch { setClients([]); }
         finally { setLoadingClients(false); }
     };

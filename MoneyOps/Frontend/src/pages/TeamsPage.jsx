@@ -45,7 +45,7 @@ export default function TeamsPage() {
             if (!internalOrgId) return;
 
             const memData = await api.get("/api/users", { orgId: internalOrgId });
-            const membersList = Array.isArray(memData) ? memData : (memData.content || memData.data || []);
+            const membersList = Array.isArray(memData) ? memData : (memData?.data?.content || memData?.content || memData?.data || []);
             setMembers(membersList);
 
             const currentUser = membersList.find(m => m.id === internalUserId);

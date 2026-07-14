@@ -153,14 +153,14 @@ export default function InvoiceDetailPage() {
     const fetchLogs = async (invoiceId) => {
         try {
             const d = await api.get(`/api/invoices/${invoiceId}/logs`);
-            setLogs(Array.isArray(d) ? d : (d.content || d.data || []));
+            setLogs(Array.isArray(d) ? d : (d?.data?.content || d?.content || d?.data || []));
         } catch (error) { console.error(error); }
     };
 
     const fetchPayments = async (invoiceId) => {
         try {
             const d = await api.get(`/api/invoices/${invoiceId}/payments`);
-            setPayments(Array.isArray(d) ? d : (d.content || d.data || []));
+            setPayments(Array.isArray(d) ? d : (d?.data?.content || d?.content || d?.data || []));
         } catch (error) { console.error(error); }
     };
 

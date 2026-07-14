@@ -74,15 +74,16 @@ export function VoiceCallAgent({ agentType = "orchestrator" }) {
                 auth_token: sessionToken || "",
             });
             const data = await api.get("/api/v1/voice/token", { user_id: userId, org_id: orgId, metadata });
-            if (!data.token || !data.url) throw new Error("Invalid token response: missing token or url");
+            const body = data?.data || data;
+            if (!body.token || !body.url) throw new Error("Invalid token response: missing token or url");
             sessionMetaRef.current = {
                 id: `voice-${Date.now()}`,
                 startedAt: new Date().toISOString(),
             };
             transcriptRef.current = [];
             actionLogRef.current = [];
-            setToken(data.token);
-            setUrl(data.url);
+            setToken(body.token);
+            setUrl(body.url);
             setIsConnect(true);
             setIsProcessing(false);
         } catch (error) {

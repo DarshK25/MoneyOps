@@ -19,7 +19,7 @@ export default function MarketResearchPage() {
         setLoading(true);
         try {
             const json = await api.get("/api/v1/market/intelligence", { org_uuid: orgId, business_id: 1, user_id: userId || "" });
-            setData(json);
+            setData(json.data || json);
         } catch {
             setData({ data: [], highlights: [] });
         } finally {

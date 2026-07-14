@@ -64,7 +64,7 @@ export default function RecurringInvoicesPage() {
         try {
             setLoading(true);
             const data = await api.get("/api/recurring-invoices");
-            setRecurringInvoices(Array.isArray(data) ? data : data?.content || []);
+            setRecurringInvoices(Array.isArray(data) ? data : data?.data?.content || data?.content || []);
         } catch {
             toast.error("Failed to load recurring invoices");
             setRecurringInvoices([]);
@@ -76,7 +76,7 @@ export default function RecurringInvoicesPage() {
     const fetchClients = async () => {
         try {
             const data = await api.get("/api/clients");
-            setClients(Array.isArray(data) ? data : data?.content || []);
+            setClients(Array.isArray(data) ? data : data?.data?.content || data?.content || []);
         } catch {
             // Ignore client fetch errors
         }

@@ -40,8 +40,8 @@ export default function DocumentsPage() {
                 api.get("/api/documents", { businessId: bId, showPrivate: false }).catch(() => ({ documents: [] })),
                 api.get("/api/documents", { businessId: bId, showPrivate: true }).catch(() => ({ documents: [] })),
             ]);
-            setSharedDocuments(sharedData.documents || []);
-            setPrivateDocuments(privateData.documents || []);
+            setSharedDocuments(sharedData?.data?.documents || sharedData?.documents || []);
+            setPrivateDocuments(privateData?.data?.documents || privateData?.documents || []);
         } catch (e) {
             console.error("Error fetching documents", e);
             toast.error("Failed to refresh documents");

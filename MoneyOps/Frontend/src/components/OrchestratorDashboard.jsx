@@ -59,6 +59,7 @@ function formatDateTime(value) {
 
 function normalizeCollection(payload) {
   if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data?.content)) return payload.data.content;
   if (Array.isArray(payload?.content)) return payload.content;
   if (Array.isArray(payload?.data)) return payload.data;
   if (Array.isArray(payload?.items)) return payload.items;

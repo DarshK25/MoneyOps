@@ -127,10 +127,10 @@ export default function TransactionsPage() {
                 api.get("/api/org/my").catch(() => ({ data: null })),
             ]);
 
-            const txns = Array.isArray(txData) ? txData : txData?.content || txData.transactions || [];
+            const txns = Array.isArray(txData) ? txData : txData?.data?.content || txData?.content || txData.transactions || [];
             setTransactions(txns);
 
-            const invs = Array.isArray(invoiceData) ? invoiceData : invoiceData?.content || invoiceData?.data || [];
+            const invs = Array.isArray(invoiceData) ? invoiceData : invoiceData?.data?.content || invoiceData?.content || invoiceData?.data || [];
             setInvoices(invs);
 
             setOrgName(orgData?.data?.legalName || "MoneyOps Workspace");

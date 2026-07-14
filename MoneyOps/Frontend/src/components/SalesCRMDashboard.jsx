@@ -46,8 +46,8 @@ export function SalesCRMDashboard({ businessId, onRefresh }) {
                 api.get("/api/finance-intelligence/metrics", { businessId }).catch(() => null),
             ]);
 
-            setClients(cr.content || cr.data || cr || []);
-            setInvoices(ir.content || ir.data || ir || []);
+            setClients(cr?.data?.content || cr.content || cr.data || cr || []);
+            setInvoices(ir?.data?.content || ir.content || ir.data || ir || []);
             setMetricsData(metricsData);
         } catch (error) {
             console.error("Failed to fetch CRM data:", error);

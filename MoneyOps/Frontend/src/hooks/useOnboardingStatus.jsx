@@ -20,7 +20,8 @@ export function OnboardingProvider({ children }) {
         setLoading(true);
         try {
             const json = await api.get('/api/onboarding/status', { userId: user.id });
-            const data = json.data ?? json;
+            const body = json.data ?? json;
+            const data = body.data ?? body;
             setComplete(data.onboardingComplete ?? false);
             setUserId(data.userId ?? null);
             setOrgId(data.orgId ?? null);

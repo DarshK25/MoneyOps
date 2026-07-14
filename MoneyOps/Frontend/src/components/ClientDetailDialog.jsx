@@ -55,7 +55,7 @@ export default function ClientDetailDialog({ client, onClose, onUpdate, onDelete
       setLoadingInvoices(true);
       const id = client.id || client._id;
       const data = await api.get("/api/invoices", { clientId: id });
-      setInvoices(data.content || data.data || data || []);
+      setInvoices(data?.data?.content || data.content || data.data || data || []);
     } catch (err) {
       console.error(err);
     } finally {

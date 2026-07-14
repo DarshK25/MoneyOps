@@ -66,7 +66,7 @@ export default function InvoicesPage() {
         try {
             setLoading(true);
             const data = await api.get("/api/invoices");
-            setInvoices(Array.isArray(data) ? data : data?.content || []);
+            setInvoices(Array.isArray(data) ? data : data?.data?.content || data?.content || []);
         } catch {
             toast.error("Failed to load invoices");
             setInvoices([]);

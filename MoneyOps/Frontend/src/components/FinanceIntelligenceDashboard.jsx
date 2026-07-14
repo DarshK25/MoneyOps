@@ -84,12 +84,17 @@ export function FinanceIntelligenceDashboard({ businessId: initialBusinessId }) 
     async function fetchFinanceData() {
         setRefreshing(true);
         try {
-            const [metricsData, budgets, insights, ledger] = await Promise.all([
+            const [metricsRes, budgetsRes, insightsRes, ledgerRes] = await Promise.all([
                 api.get("/api/finance-intelligence/metrics", { businessId }).catch(() => null),
                 api.get("/api/finance-intelligence/budget", { businessId }).catch(() => []),
                 api.get("/api/finance-intelligence/insights", { businessId }).catch(() => []),
                 api.get("/api/finance-intelligence/ledger", { businessId }).catch(() => []),
             ]);
+
+            const metricsData = metricsRes?.data || metricsRes;
+            const budgets = Array.isArray(budgetsRes) ? budgetsRes : (budgetsRes?.data || budgetsRes);
+            const insights = Array.isArray(insightsRes) ? insightsRes : (insightsRes?.data || insightsRes);
+            const ledger = Array.isArray(ledgerRes) ? ledgerRes : (ledgerRes?.data || ledgerRes);
 
             if (metricsData) {
                 const totalRevenue = metricsData.revenue || 0;

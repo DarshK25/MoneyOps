@@ -82,7 +82,7 @@ export function ComplianceDashboard({ businessId, data, onRefresh, initialTab = 
             if (!businessId || !internalUserId || !internalOrgId) return;
             try {
                 const json = await api.get("/api/deadlines", { businessId });
-                setDeadlines(json.deadlines || []);
+                setDeadlines(json?.data?.deadlines || json?.deadlines || []);
             } catch (error) {
                 console.error(error);
                 setDeadlines([]);
