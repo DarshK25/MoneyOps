@@ -95,5 +95,10 @@ gw_out.txt
 # Scripts with hardcoded credentials
 **/start.bat
 
+# Ad-hoc utility scripts (one-time use, not part of the app)
+start_all.*
+verify_stack.*
+START_HERE.md
+
 # Coverage data
 .coverage
