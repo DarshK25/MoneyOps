@@ -205,7 +205,7 @@ export default function OrchestratorChatPage() {
     setSending(true);
 
     try {
-      const payload = await api.post("/api/v1/agent/chat", {
+      const response = await api.post("/api/v1/agent/chat", {
         message: text,
         session_id: session.id,
         org_id: internalOrgId,
@@ -217,6 +217,8 @@ export default function OrchestratorChatPage() {
           preferences,
         },
       });
+
+      const payload = response.data;
 
       const actions = extractActions(payload);
       const agentMessage = {

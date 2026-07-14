@@ -13,4 +13,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 EXPOSE 8003
-CMD ["python", "-m", "app.agent.entrypoint", "start"]
+CMD ["python", "start_services.py"]

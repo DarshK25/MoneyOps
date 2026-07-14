@@ -72,13 +72,15 @@ spring:
 
 
   kafka:
-    enabled: ${KAFKA_ENABLED:false}
+    enabled: ${KAFKA_ENABLED:true}
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:
       group-id: ${KAFKA_CONSUMER_GROUP_ID:moneyops-group}
       auto-offset-reset: earliest
     producer:
       retries: 3
+      acks: all
+      enable-idempotence: true
     properties:
       security.protocol: ${KAFKA_SECURITY_PROTOCOL:PLAINTEXT}
       sasl.mechanism: ${KAFKA_SASL_MECHANISM:PLAIN}

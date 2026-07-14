@@ -495,8 +495,11 @@ class NotificationServicer(moneyops_pb2_grpc.NotificationServiceServicer):
             )
 
 
-async def serve(port: int = 50052):
+async def serve(port: int = None):
     """Start the gRPC server."""
+    if port is None:
+        from app.config import settings
+        port = settings.GRPC_SERVER_PORT
     server = grpc.aio.server(options=[
         ('grpc.max_send_message_length', 50 * 1024 * 1024),
         ('grpc.max_receive_message_length', 50 * 1024 * 1024),

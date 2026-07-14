@@ -657,7 +657,8 @@ def prewarm(proc: JobProcess):
 
 
 # ── Entry ─────────────────────────────────────────────────────────────────────
-if __name__ == "__main__":
+def main():
+    """Main entry point for voice service worker."""
     logger.info(
         "starting_voice_service",
         app_name=settings.APP_NAME,
@@ -670,3 +671,7 @@ if __name__ == "__main__":
             prewarm_fnc=prewarm
         )
     )
+
+
+if __name__ == "__main__":
+    main()

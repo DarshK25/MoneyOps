@@ -53,8 +53,8 @@ class Settings(BaseSettings):
     INTERNAL_SERVICE_TOKEN: str = "moneyops-internal-ai-gateway-service-secret-2024"
 
     GRPC_ENABLED: bool = True
-    GRPC_SERVER_HOST: str = "127.0.0.1"
-    GRPC_SERVER_PORT: int = 50051
+    GRPC_SERVER_HOST: str = "0.0.0.0"
+    GRPC_SERVER_PORT: int = 50052
     GRPC_CLIENT_HOST: str = "127.0.0.1"
     GRPC_CLIENT_PORT: int = 50051
 
