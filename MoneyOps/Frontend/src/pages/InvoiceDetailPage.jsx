@@ -144,7 +144,7 @@ export default function InvoiceDetailPage() {
     const fetchInvoice = async (invoiceId) => {
         try {
             const data = await api.get(`/api/invoices/${invoiceId}`);
-            setInvoice(data);
+            setInvoice(data?.data || data);
         } catch (error) {
             console.error(error);
             toast.error("Could not load invoice");

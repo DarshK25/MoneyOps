@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { Loader2, RefreshCw, Download, TrendingUp, TrendingDown, DollarSign, FileText, Target, Activity, CheckCircle, AlertTriangle, Plus, X, Edit2 } from "lucide-react";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -51,6 +52,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 export function FinanceIntelligenceDashboard({ businessId: initialBusinessId }) {
+    const navigate = useNavigate();
     const { user } = useUser();
     const { orgId } = useOnboardingStatus();
     
@@ -319,7 +321,23 @@ export function FinanceIntelligenceDashboard({ businessId: initialBusinessId }) 
                                             </div>
                                             <p className="text-sm text-[#A0A0A0]">{insight.message}</p>
                                             {insight.actionable && insight.action && (
-                                                <button className="mt-2 text-xs text-[#4CBB17] hover:underline font-medium">{insight.action} →</button>
+                                                <button
+                                                    className="mt-2 text-xs text-[#4CBB17] hover:underline font-medium"
+                                                    onClick={() => {
+                                                        const title = (insight.title || "").toLowerCase();
+                                                        if (title.includes("collection") || title.includes("capital") || title.includes("overdue")) {
+                                                            navigate("/invoices");
+                                                        } else if (title.includes("expense") || title.includes("cost") || title.includes("spend")) {
+                                                            navigate("/workspace/transactions");
+                                                        } else if (title.includes("budget") || title.includes("baseline")) {
+                                                            navigate("/workspace/settings");
+                                                        } else if (title.includes("tax") || title.includes("gst") || title.includes("compliance")) {
+                                                            navigate("/finance/compliance");
+                                                        } else {
+                                                            navigate("/workspace/overview");
+                                                        }
+                                                    }}
+                                                >{insight.action} →</button>
                                             )}
                                         </div>
                                     </div>
