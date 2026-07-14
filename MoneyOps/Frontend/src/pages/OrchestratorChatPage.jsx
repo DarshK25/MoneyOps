@@ -342,7 +342,7 @@ export default function OrchestratorChatPage() {
           <div className="flex items-center justify-between border-b border-[#2A2A2A] px-5 py-4">
             <div className="flex items-center gap-3">
               <button
-                onClick={() => navigate("/orchestrator")}
+                onClick={() => navigate("/agent")}
 
                 className="rounded-lg border border-[#2A2A2A] p-2 text-[#A0A0A0] transition-colors hover:text-white"
               >

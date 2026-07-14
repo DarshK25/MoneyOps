@@ -173,6 +173,21 @@ export default function AnalyticsPage() {
         }
     };
 
+    // Fetch AI insights once after data loads
+    useEffect(() => {
+        if (data && !aiInsights.length && !aiLoading) {
+            const revenue = Number(data.kpis?.[0]?.value?.replace(/[₹,]/g, "") || 0);
+            const netProfit = Number(data.kpis?.[1]?.value?.replace(/[₹,]/g, "") || 0);
+            const expenses = Number(data.kpis?.[2]?.value?.replace(/[₹,]/g, "") || 0);
+            const collectionRate = Number(data.kpis?.[0]?.change?.replace(/[^0-9.]/g, "") || 0);
+            const totalClients = Number(data.kpis?.[3]?.value || 0);
+            const totalInvoices = Number(data.kpis?.[3]?.change?.replace(/[^0-9]/g, "") || 0);
+
+            // We need invoices data - fetch it or use a simpler approach
+            fetchAiInsights(revenue, expenses, netProfit, collectionRate, totalClients, totalInvoices, [], []);
+        }
+    }, [data]);
+
     const fetchAiInsights = async (revenue, expenses, netProfit, collectionRate, totalClients, totalInvoices, invoices, clients) => {
         if (aiLoading) return;
         setAiLoading(true);
@@ -230,21 +245,6 @@ Return JSON array: [{type: "warning|opportunity|success", title: "...", message:
     }
 
     const { kpis, revenueByCategory, monthlyTrends, clientMetrics } = data;
-
-    // Fetch AI insights once after data loads
-    useEffect(() => {
-        if (data && !aiInsights.length && !aiLoading) {
-            const revenue = Number(data.kpis?.[0]?.value?.replace(/[₹,]/g, "") || 0);
-            const netProfit = Number(data.kpis?.[1]?.value?.replace(/[₹,]/g, "") || 0);
-            const expenses = Number(data.kpis?.[2]?.value?.replace(/[₹,]/g, "") || 0);
-            const collectionRate = Number(data.kpis?.[0]?.change?.replace(/[^0-9.]/g, "") || 0);
-            const totalClients = Number(data.kpis?.[3]?.value || 0);
-            const totalInvoices = Number(data.kpis?.[3]?.change?.replace(/[^0-9]/g, "") || 0);
-
-            // We need invoices data - fetch it or use a simpler approach
-            fetchAiInsights(revenue, expenses, netProfit, collectionRate, totalClients, totalInvoices, [], []);
-        }
-    }, [data]);
 
     return (
         <div className="flex flex-col gap-6">

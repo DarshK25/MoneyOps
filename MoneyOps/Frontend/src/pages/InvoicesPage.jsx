@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +19,9 @@ import {
     Download,
     MoreVertical,
     Search,
-    Trash2
+    Trash2,
+    ChevronLeft,
+    ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -56,25 +58,38 @@ export default function InvoicesPage() {
     const [activeTab, setActiveTab] = useState("all");
     const [searchQuery, setSearchQuery] = useState("");
     const [actionLoading, setActionLoading] = useState(null);
+    const [page, setPage] = useState(0);
+    const [totalPages, setTotalPages] = useState(1);
+    const pageSize = 20;
 
     useEffect(() => {
         if (internalUserId && internalOrgId) {
             fetchInvoices();
         }
-    }, [internalUserId, internalOrgId]);
+    }, [internalUserId, internalOrgId, activeTab, page, searchQuery]);
 
-    const fetchInvoices = async () => {
+    const fetchInvoices = useCallback(async () => {
         try {
             setLoading(true);
-            const data = await api.get("/api/invoices");
-            setInvoices(Array.isArray(data) ? data : data?.data?.content || data?.content || []);
+            const params = new URLSearchParams({
+                page: page.toString(),
+                size: pageSize.toString(),
+            });
+            if (activeTab !== "all") params.append("status", activeTab.toUpperCase());
+            if (searchQuery) params.append("search", searchQuery);
+
+            const data = await api.get(`/api/invoices?${params.toString()}`);
+            const content = data?.data?.content || data?.content || data || [];
+            setInvoices(Array.isArray(content) ? content : []);
+            setTotalPages(data?.data?.totalPages || data?.totalPages || 1);
         } catch {
             toast.error("Failed to load invoices");
             setInvoices([]);
+            setTotalPages(1);
         } finally {
             setLoading(false);
         }
-    };
+    }, [activeTab, page, searchQuery]);
 
     const handleViewInvoice = (invoice) => {
         const id = invoice.id || invoice._id;
@@ -390,5 +405,27 @@ export default function InvoicesPage() {
                 </div>
             )}
         </div>
-    );
-}
+
+        {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 mt-6">
+                <button
+                    onClick={() => setPage(p => Math.max(0, p - 1))}
+                    disabled={page === 0}
+                    className="mo-btn-secondary flex items-center gap-2 disabled:opacity-50"
+                >
+                    <ChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="text-sm text-[#A0A0A0]">
+                    Page {page + 1} of {totalPages}
+                </span>
+                <button
+                    onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                    disabled={page >= totalPages - 1}
+                    className="mo-btn-secondary flex items-center gap-2 disabled:opacity-50"
+                >
+                    <ChevronRight className="h-4 w-4" />
+                </button>
+            </div>
+        )}
+    </div>
+);
