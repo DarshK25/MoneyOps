@@ -1,6 +1,6 @@
 """
 MoneyOps Voice Service - Agent Entrypoint
-==========================================
+=========================================
 Architecture (livekit-agents 1.4.2):
   User speaks → VAD → STT (Groq Whisper)
              → [user_input_transcribed event]
@@ -18,6 +18,7 @@ import uuid
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 from dotenv import load_dotenv
+from contextlib import asynccontextmanager
 
 # Load voice-service-local .env before any app imports. Fall back to monorepo root.
 _service_env = Path(__file__).resolve().parents[2] / ".env"
@@ -74,6 +75,113 @@ setup_logging(settings.LOG_LEVEL)
 logger = get_logger(__name__)
 
 
+# ── Health Check Server (runs in same event loop) ────────────────────────────
+_health_state = {
+    "stt_ready": False,
+    "tts_ready": False,
+    "stt_provider": None,
+    "tts_provider": None,
+    "ai_gateway_reachable": False,
+    "livekit_reachable": False,
+}
+
+async def _run_health_server():
+    """Run a lightweight aiohttp health check server on port 8003"""
+    from aiohttp import web
+    
+    async def health(request):
+        all_healthy = all([
+            _health_state["stt_ready"],
+            _health_state["tts_ready"],
+            _health_state["ai_gateway_reachable"],
+        ])
+        return web.json_response({
+            "status": "healthy" if all_healthy else "degraded",
+            "version": settings.VERSION,
+            "checks": _health_state.copy(),
+        })
+    
+    async def ready(request):
+        ready = all([
+            _health_state["stt_ready"],
+            _health_state["tts_ready"],
+            _health_state["ai_gateway_reachable"],
+        ])
+        if not ready:
+            return web.json_response({
+                "status": "not_ready",
+                "checks": _health_state.copy(),
+            }, status=503)
+        return web.json_response({"status": "ready", "checks": _health_state.copy()})
+    
+    async def live(request):
+        return web.json_response({"status": "alive"})
+    
+    app = web.Application()
+    app.router.add_get("/health", health)
+    app.router.add_get("/health/ready", ready)
+    app.router.add_get("/health/live", live)
+    app.router.add_get("/", lambda r: web.json_response({
+        "name": "MoneyOps Voice Service",
+        "version": settings.VERSION,
+        "endpoints": {"health": "/health", "health_live": "/health/live", "health_ready": "/health/ready"}
+    }))
+    
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", 8003)
+    await site.start()
+    logger.info("health_server_started", port=8003)
+    return runner
+
+
+async def _run_startup_checks():
+    """Run all startup health checks and warm up providers"""
+    global _health_state
+    
+    # Check AI Gateway connectivity
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{settings.AI_GATEWAY_URL}/api/v1/health/live")
+            _health_state["ai_gateway_reachable"] = resp.status_code == 200
+    except Exception as e:
+        logger.warning("ai_gateway_health_check_failed", error=str(e))
+        _health_state["ai_gateway_reachable"] = False
+    
+    # Check LiveKit connectivity
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(settings.LIVEKIT_URL.replace("wss://", "https://").replace("ws://", "http://") + "/health")
+            _health_state["livekit_reachable"] = resp.status_code == 200
+    except Exception as e:
+        logger.warning("livekit_health_check_failed", error=str(e))
+        _health_state["livekit_reachable"] = False
+    
+    # Pre-warm STT and TTS providers
+    try:
+        from app.agent.entrypoint import _create_stt, _create_tts
+        logger.info("warming_stt_provider")
+        stt = _create_stt()
+        _health_state["stt_ready"] = True
+        _health_state["stt_provider"] = settings.STT_PROVIDER or "auto"
+        logger.info("stt_provider_warmed", provider=_health_state["stt_provider"])
+    except Exception as e:
+        logger.error("stt_warmup_failed", error=str(e))
+        _health_state["stt_ready"] = False
+    
+    try:
+        logger.info("warming_tts_provider")
+        tts = _create_tts()
+        _health_state["tts_ready"] = True
+        _health_state["tts_provider"] = settings.TTS_PROVIDER or "auto"
+        logger.info("tts_provider_warmed", provider=_health_state["tts_provider"])
+    except Exception as e:
+        logger.error("tts_warmup_failed", error=str(e))
+        _health_state["tts_ready"] = False
+
+
 # ── Bug 8: Premature Confirmation Guard ───────────────────────────────────────
 from app.agent.guard import premature_confirmation_guard, FORBIDDEN_PREMATURE_PHRASES
 
@@ -86,7 +194,13 @@ from app.agent.guard import premature_confirmation_guard, FORBIDDEN_PREMATURE_PH
 async def entrypoint(ctx: JobContext):
     logger.info("voice_session_starting", room=ctx.room.name)
 
-    # Connect to the LiveKit room (v1.4.2 — no room_options param on connect())
+    # Start health check server in background
+    health_runner = await _run_health_server()
+    
+    # Run startup checks
+    await _run_startup_checks()
+
+    # Connect to the LiveKit room
     await ctx.connect()
 
     # Wait for the frontend user to join so we can read their metadata.
@@ -105,7 +219,7 @@ async def entrypoint(ctx: JobContext):
     session_id = str(uuid.uuid4())
     conversation_history: list = []
 
-    # ── Build STT, TTS, LLM ──────────────────────────────────────────────────
+    # ── Build STT, TTS ──────────────────────────────────────────────────
     # Reuse prewarmed plugins if available
     stt = ctx.proc.userdata.get("stt") or _create_stt()
     tts = ctx.proc.userdata.get("tts") or _create_tts()
@@ -189,7 +303,6 @@ async def entrypoint(ctx: JobContext):
             if re.search(pattern, text, re.IGNORECASE):
                 logger.warning("technical_voice_sanitizer_blocked", pattern=pattern, preview=text[:160])
                 return "I hit a snag there. Could you try again?"
-
         return text
 
     async def _process_and_say(text: str) -> None:
@@ -337,7 +450,7 @@ async def entrypoint(ctx: JobContext):
              confidence = ev.confidence
         elif hasattr(ev, "alternatives") and ev.alternatives:
              confidence = ev.alternatives[0].confidence
-             
+              
         logger.info("utterance_received", text=text, confidence=confidence)
         
         if len(text.strip()) < 2:
@@ -366,8 +479,6 @@ async def entrypoint(ctx: JobContext):
         agent=Agent(instructions="MoneyOps Voice Agent"),
         room_input_options=RoomInputOptions(
             # Prevent session from ending after replying, so user can follow up
-            # (although standard attribute might be different depending on core library version, 
-            # this prevents default close)
         ),
     )
 

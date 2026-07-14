@@ -358,14 +358,14 @@ class FinanceExecutor(BaseExecutor):
 
         return state
 
-    def _classify_action(self, user_request: str) -> str:
+def _classify_action(self, user_request: str) -> str:
         if any(w in user_request for w in ["create invoice", "new invoice", "add invoice"]):
             return "create invoice"
         elif any(w in user_request for w in ["record payment", "mark paid", "payment received"]):
             return "record payment"
         elif any(w in user_request for w in ["record expense", "add expense", "spent"]):
             return "record expense"
-        elif any(w in user_request for w in ["balance", "cash position", "how much"]):
+        elif any(w in user_request for w in ["balance", "cash position", "how much", "revenue", "profit", "financial", "earnings", "income"]):
             return "check balance"
         elif any(w in user_request for w in ["invoice", "pending", "overdue", "due"]):
             return "query invoices"

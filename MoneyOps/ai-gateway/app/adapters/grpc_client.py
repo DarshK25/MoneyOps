@@ -10,11 +10,18 @@ import asyncio
 from app.grpc.gen import moneyops_pb2, moneyops_pb2_grpc
 from app.grpc.gen.moneyops_pb2 import (  # noqa: F401
     GetInvoicesRequest,
+    GetInvoiceRequest,
     CreateInvoiceRequest,
     MarkPaidRequest,
     InvoiceItem as GrpcInvoiceItem,
     InvoiceStatus,
+    GetClientsRequest,
+    CreateClientRequest,
+    GetFinanceMetricsRequest,
+    FinancialSummaryRequest,
+    Empty,
 )
+from app.config import settings
 
 
 class GRPCClient:
@@ -23,15 +30,17 @@ class GRPCClient:
     Uses protocol buffers for efficient serialization.
     """
 
-    def __init__(self, host: str = "127.0.0.1:50051"):
-        self.host = host
+    def __init__(self, host: str = None, port: int = None):
+        self.host = host or settings.GRPC_CLIENT_HOST
+        self.port = port or settings.GRPC_CLIENT_PORT
         self.channel = None
         self._connect()
 
     def _connect(self):
         """Create gRPC channel with connection pooling"""
+        target = f"{self.host}:{self.port}"
         self.channel = grpc.aio.insecure_channel(
-            self.host,
+            target,
             options=[
                 ('grpc.max_send_message_length', 50 * 1024 * 1024),  # 50MB
                 ('grpc.max_receive_message_length', 50 * 1024 * 1024),
@@ -45,10 +54,7 @@ class GRPCClient:
         org_id: str,
         status: Optional[str] = None
     ) -> Dict[str, Any]:
-        """
-        Get invoices via gRPC.
-        Replaces HTTP call in backend_adapter.py
-        """
+        """Get invoices via gRPC."""
         try:
             stub = moneyops_pb2_grpc.InvoiceServiceStub(self.channel)
 
@@ -88,6 +94,57 @@ class GRPCClient:
                 return {
                     "success": True,
                     "data": invoices,
+                    "source": "grpc",
+                }
+            else:
+                error_msg = response.error.message if response.error else "Unknown error"
+                return {
+                    "success": False,
+                    "error": f"gRPC error: {error_msg}",
+                    "source": "grpc",
+                }
+        except grpc.RpcError as e:
+            return {
+                "success": False,
+                "error": f"gRPC error: {e.code()}: {e.details()}",
+                "source": "grpc",
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "source": "grpc",
+            }
+
+    async def get_invoice(
+        self,
+        invoice_id: str,
+        org_id: str
+    ) -> Dict[str, Any]:
+        """Get a single invoice via gRPC."""
+        try:
+            stub = moneyops_pb2_grpc.InvoiceServiceStub(self.channel)
+            request = GetInvoiceRequest(
+                invoice_id=invoice_id,
+                org_id=org_id,
+            )
+            response = await stub.GetInvoice(request, timeout=30)
+
+            if response.success:
+                inv = response.invoice
+                return {
+                    "success": True,
+                    "data": {
+                        "id": inv.id,
+                        "invoiceNumber": inv.invoice_number,
+                        "clientId": inv.client_id,
+                        "orgId": inv.org_id,
+                        "totalAmount": inv.total_amount,
+                        "status": inv.status,
+                        "dueDate": inv.due_date,
+                        "createdAt": inv.created_at,
+                        "description": inv.description,
+                    },
                     "source": "grpc",
                 }
             else:
@@ -195,6 +252,205 @@ class GRPCClient:
                         "invoiceNumber": inv.invoice_number,
                         "status": inv.status,
                         "totalAmount": inv.total_amount,
+                    },
+                    "source": "grpc",
+                }
+            else:
+                error_msg = response.error.message if response.error else "Unknown error"
+                return {
+                    "success": False,
+                    "error": f"gRPC error: {error_msg}",
+                    "source": "grpc",
+                }
+        except grpc.RpcError as e:
+            return {
+                "success": False,
+                "error": f"gRPC error: {e.code()}: {e.details()}",
+                "source": "grpc",
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "source": "grpc",
+            }
+
+    async def get_clients(
+        self,
+        org_id: str,
+        limit: int = 100
+    ) -> Dict[str, Any]:
+        """Get clients via gRPC."""
+        try:
+            stub = moneyops_pb2_grpc.ClientServiceStub(self.channel)
+            request = GetClientsRequest(
+                org_id=org_id,
+                limit=limit,
+            )
+            response = await stub.GetClients(request, timeout=30)
+
+            if response.success:
+                clients = []
+                for client in response.clients:
+                    clients.append({
+                        "id": client.id,
+                        "name": client.display_name,
+                        "email": client.email,
+                        "status": client.status,
+                        "orgId": client.org_id,
+                    })
+                return {
+                    "success": True,
+                    "data": clients,
+                    "source": "grpc",
+                }
+            else:
+                error_msg = response.error.message if response.error else "Unknown error"
+                return {
+                    "success": False,
+                    "error": f"gRPC error: {error_msg}",
+                    "source": "grpc",
+                }
+        except grpc.RpcError as e:
+            return {
+                "success": False,
+                "error": f"gRPC error: {e.code()}: {e.details()}",
+                "source": "grpc",
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "source": "grpc",
+            }
+
+    async def create_client(
+        self,
+        org_id: str,
+        client_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Create client via gRPC."""
+        try:
+            stub = moneyops_pb2_grpc.ClientServiceStub(self.channel)
+            request = CreateClientRequest(
+                org_id=org_id,
+                name=client_data.get("name", ""),
+                email=client_data.get("email", ""),
+                phone=client_data.get("phone", ""),
+                gst_number=client_data.get("gstin", ""),
+            )
+            response = await stub.CreateClient(request, timeout=30)
+
+            if response.success:
+                client = response.client
+                return {
+                    "success": True,
+                    "data": {
+                        "id": client.id,
+                        "name": client.display_name,
+                        "email": client.email,
+                        "status": client.status,
+                    },
+                    "source": "grpc",
+                }
+            else:
+                error_msg = response.error.message if response.error else "Unknown error"
+                return {
+                    "success": False,
+                    "error": f"gRPC error: {error_msg}",
+                    "source": "grpc",
+                }
+        except grpc.RpcError as e:
+            return {
+                "success": False,
+                "error": f"gRPC error: {e.code()}: {e.details()}",
+                "source": "grpc",
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "source": "grpc",
+            }
+
+    async def get_finance_metrics(
+        self,
+        org_id: str,
+        business_id: str = "1"
+    ) -> Dict[str, Any]:
+        """Get finance metrics via gRPC."""
+        try:
+            stub = moneyops_pb2_grpc.FinanceServiceStub(self.channel)
+            request = GetFinanceMetricsRequest(
+                org_id=org_id,
+                business_id=business_id,
+            )
+            response = await stub.GetFinanceMetrics(request, timeout=30)
+
+            if response.success and response.data:
+                data = response.data
+                return {
+                    "success": True,
+                    "data": {
+                        "revenue": data.total_revenue,
+                        "expenses": data.total_expenses,
+                        "netProfit": data.net_profit,
+                        "cashBalance": data.cash_balance,
+                        "outstandingInvoices": data.outstanding_invoices,
+                        "outstandingAmount": data.outstanding_amount,
+                    },
+                    "source": "grpc",
+                }
+            else:
+                error_msg = response.error.message if response.error else "Unknown error"
+                return {
+                    "success": False,
+                    "error": f"gRPC error: {error_msg}",
+                    "source": "grpc",
+                }
+        except grpc.RpcError as e:
+            return {
+                "success": False,
+                "error": f"gRPC error: {e.code()}: {e.details()}",
+                "source": "grpc",
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "source": "grpc",
+            }
+
+    async def get_financial_summary(
+        self,
+        org_id: str
+    ) -> Dict[str, Any]:
+        """Get financial summary via gRPC."""
+        try:
+            stub = moneyops_pb2_grpc.FinanceServiceStub(self.channel)
+            request = FinancialSummaryRequest(
+                org_id=org_id,
+            )
+            response = await stub.GetFinancialSummary(request, timeout=30)
+
+            if response.success and response.data:
+                data = response.data
+                return {
+                    "success": True,
+                    "data": {
+                        "totalIncome": data.total_income,
+                        "totalExpense": data.total_expense,
+                        "recentTransactions": [
+                            {
+                                "id": tx.id,
+                                "type": tx.type,
+                                "amount": tx.amount,
+                                "description": tx.description,
+                                "date": tx.date,
+                                "category": tx.category,
+                            }
+                            for tx in data.recent_transactions
+                        ],
                     },
                     "source": "grpc",
                 }

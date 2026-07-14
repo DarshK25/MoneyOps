@@ -58,7 +58,7 @@ class GrowthExecutor(BaseExecutor):
         self._start_time = 0.0
 
         try:
-            if any(w in user_request for w in ["forecast", "predict", "revenue projection"]):
+            if any(w in user_request for w in ["forecast", "predict", "revenue projection", "future revenue"]):
                 result = await self._forecast_revenue(state)
             elif any(w in user_request for w in ["upsell", "cross-sell", "expand"]):
                 result = await self._identify_upsell(state)
@@ -68,6 +68,11 @@ class GrowthExecutor(BaseExecutor):
                 result = await self._optimize_treds(state)
             elif any(w in user_request for w in ["dashboard", "overview", "summary", "growth"]):
                 result = await self._growth_dashboard(state)
+            elif any(w in user_request for w in ["revenue", "profit", "financial", "current", "now", "status"]):
+                # Current financial status queries should go to finance_ops, but if they land here,
+                # delegate to finance_ops via cross-agent query
+                result = await self._fallback_response(user_request)
+                result["delegation_hint"] = "finance_ops"
             else:
                 result = await self._fallback_response(user_request)
 

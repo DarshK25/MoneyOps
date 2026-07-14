@@ -68,11 +68,16 @@ class MasterOrchestrator:
 Determine which executor(s) should handle the user's request.
 
 Executors:
-- finance_ops: Invoices, payments, expenses, financial summaries, balances
+- finance_ops: Invoices, payments, expenses, financial summaries, balances, current revenue/profit, overdue invoices, cash position
 - compliance: GST filing, tax compliance, TDS, invoice templates
 - collections: Payment reminders, WhatsApp/SMS collections, overdue invoices
 - treds: Invoice discounting, working capital, TReDS registration
-- growth: Revenue forecast, upsell opportunities, churn risk, growth strategy
+- growth: Revenue FORECAST, future projections, upsell opportunities, churn risk, growth strategy (NOT current revenue queries)
+
+KEY DISTINCTION:
+- "What is my revenue?" / "Current revenue" / "How much money?" -> finance_ops
+- "Forecast revenue" / "Predict future revenue" / "Revenue projection" -> growth
+- "Whats the revenue" / "Revenue status" / "Financial summary" -> finance_ops
 
 If the request needs MULTIPLE executors, list the primary one first.
 Respond with a comma-separated list (e.g. "finance_ops,compliance" or just "finance_ops").
@@ -114,7 +119,7 @@ Valid names: finance_ops, compliance, collections, treds, growth"""
             return AgentRole.COLLECTIONS
         elif any(w in msg for w in ["discount", "treds", "working capital", "invoice discount"]):
             return AgentRole.TREDS
-        elif any(w in msg for w in ["forecast", "growth", "upsell", "churn", "retention", "revenue projection"]):
+        elif any(w in msg for w in ["forecast", "growth", "upsell", "churn", "retention", "revenue projection", "predict"]):
             return AgentRole.GROWTH
         else:
             return AgentRole.FINANCE_OPS
