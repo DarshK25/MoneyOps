@@ -13,7 +13,7 @@ export default function Header() {
                     <span className="font-bold text-lg text-white">MoneyOps</span>
                 </Link>
                 <div className="flex items-center gap-3">
-                    <Link to="/settings">
+                    <Link to="/workspace/settings">
                         <Avatar className="h-8 w-8 cursor-pointer hover:opacity-80 transition-opacity">
                             <AvatarImage src="" />
                             <AvatarFallback style={{ backgroundColor: "#4CBB1720", color: "#4CBB17" }}>

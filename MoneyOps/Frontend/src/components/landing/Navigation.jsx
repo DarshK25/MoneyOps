@@ -73,12 +73,12 @@ export default function Navigation() {
                 <div className="hidden md:flex items-center space-x-3">
                     {!isSignedIn ? (
                         <>
-                            <Link to="/sign-in">
+                            <Link to="/auth/sign-in">
                                 <button className="text-sm font-medium text-[#A0A0A0] hover:text-white transition-colors px-3 py-1.5">
                                     Sign In
                                 </button>
                             </Link>
-                            <Link to="/sign-up">
+                            <Link to="/auth/sign-up">
                                 <button className="text-sm font-semibold bg-[#4CBB17] text-black px-4 py-1.5 rounded-lg hover:bg-[#3da314] transition-colors">
                                     Get Started
                                 </button>
@@ -86,7 +86,7 @@ export default function Navigation() {
                         </>
                     ) : (
                         <>
-                            <Link to="/analytics">
+                            <Link to="/workspace/overview">
                                 <button className="text-sm font-semibold bg-[#4CBB17] text-black px-4 py-1.5 rounded-lg hover:bg-[#3da314] transition-colors">
                                     Dashboard
                                 </button>

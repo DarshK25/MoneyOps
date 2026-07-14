@@ -282,6 +282,7 @@ export default function NewInvoicePage() {
             toast.success("Invoice created successfully");
             rememberTeamSecurityCode(internalOrgId, teamActionCode);
             navigate("/invoices");
+
         } catch (error) { toast.error(error?.message || "Failed to create invoice"); }
         finally { setLoading(false); }
     };

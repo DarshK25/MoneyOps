@@ -36,9 +36,11 @@ export default function App() {
 
             <Routes>
                 <Route path="/" element={<LandingPage />} />
-                <Route path="/sign-in/*" element={<SignInPage />} />
-                <Route path="/sign-up/*" element={<SignUpPage />} />
-                <Route path="/oauth2/redirect" element={<OAuth2RedirectPage />} />
+
+                {/* Auth routes */}
+                <Route path="/auth/sign-in" element={<SignInPage />} />
+                <Route path="/auth/sign-up" element={<SignUpPage />} />
+                <Route path="/auth/oauth2/callback" element={<OAuth2RedirectPage />} />
 
                 {/* Onboarding — protected (must be signed in) but no sidebar */}
                 <Route
@@ -52,7 +54,7 @@ export default function App() {
 
                 {/* Invite acceptance route */}
                 <Route
-                    path="/invite/:token"
+                    path="/auth/invite/:token"
                     element={
                         <ProtectedRoute>
                             <InviteAcceptPage />
@@ -77,26 +79,28 @@ export default function App() {
                         </ProtectedRoute>
                     }
                 >
-                    <Route path="/clients" element={<ClientsPage />} />
-                    <Route path="/cashflow" element={<CashflowPage />} />
-                    <Route path="/finances" element={<FinancesPage />} />
+                    <Route path="/workspace/overview" element={<AnalyticsPage />} />
+                    <Route path="/workspace/cashflow" element={<CashflowPage />} />
+                    <Route path="/workspace/transactions" element={<TransactionsPage />} />
+                    <Route path="/workspace/documents" element={<DocumentsPage />} />
+                    <Route path="/workspace/settings" element={<SettingsPage />} />
+
                     <Route path="/invoices" element={<InvoicesPage />} />
                     <Route path="/invoices/new" element={<NewInvoicePage />} />
                     <Route path="/invoices/:id" element={<InvoiceDetailPage />} />
-                    <Route path="/recurring-invoices" element={<RecurringInvoicesPage />} />
-                    <Route path="/bulk-upload" element={<BulkUploadPage />} />
-                    <Route path="/settings" element={<SettingsPage />} />
-                    <Route path="/analytics" element={<AnalyticsPage />} />
-                    <Route path="/transactions" element={<TransactionsPage />} />
-                    <Route path="/documents" element={<DocumentsPage />} />
-                    
-                    {/* 5 Core Agents */}
-                    <Route path="/finance-agent" element={<FinanceIntelligencePage />} />
-                    <Route path="/sales-crm" element={<SalesCRMPage />} />
-                    <Route path="/market-intelligence" element={<MarketResearchPage />} />
-                    <Route path="/compliance" element={<CompliancePage />} />
+                    <Route path="/invoices/schedules" element={<RecurringInvoicesPage />} />
+                    <Route path="/invoices/bulk-upload" element={<BulkUploadPage />} />
+
+                    <Route path="/sales/clients" element={<ClientsPage />} />
+                    <Route path="/sales/crm" element={<SalesCRMPage />} />
+                    <Route path="/sales/market-intelligence" element={<MarketResearchPage />} />
+
+                    <Route path="/finance" element={<FinancesPage />} />
+                    <Route path="/finance/intelligence" element={<FinanceIntelligencePage />} />
+                    <Route path="/finance/compliance" element={<CompliancePage />} />
+
                     <Route path="/orchestrator" element={<OrchestratorPage />} />
-                    <Route path="/teams" element={<TeamsPage />} />
+                    <Route path="/team" element={<TeamsPage />} />
                 </Route>
             </Routes>
         </>

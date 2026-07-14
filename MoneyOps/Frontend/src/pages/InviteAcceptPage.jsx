@@ -19,7 +19,7 @@ export default function InviteAcceptPage() {
 
         if (!isSignedIn) {
             toast.info("Please sign in to accept the invitation");
-            navigate("/sign-up");
+            navigate("/auth/sign-up");
             return;
         }
 
@@ -30,7 +30,7 @@ export default function InviteAcceptPage() {
                 await api.post(`/api/invites/accept/${token}`);
 
                 toast.success("Successfully joined the organization!");
-                navigate("/teams");
+                navigate("/team");
                 
             } catch (err) {
                 setStatus("error");
@@ -57,7 +57,7 @@ export default function InviteAcceptPage() {
                 <div className="mo-card max-w-md w-full text-center">
                     <h2 className="text-xl font-bold text-red-500 mb-2">Invalid Invite</h2>
                     <p className="text-[#A0A0A0] mb-6">{errorMsg}</p>
-                    <button onClick={() => navigate("/")} className="mo-btn-primary w-full justify-center">Go to Dashboard</button>
+                    <button onClick={() => navigate("/workspace/overview")} className="mo-btn-primary w-full justify-center">Go to Dashboard</button>
                 </div>
             </div>
         );

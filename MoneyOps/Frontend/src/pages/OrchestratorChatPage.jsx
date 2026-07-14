@@ -343,6 +343,7 @@ export default function OrchestratorChatPage() {
             <div className="flex items-center gap-3">
               <button
                 onClick={() => navigate("/orchestrator")}
+
                 className="rounded-lg border border-[#2A2A2A] p-2 text-[#A0A0A0] transition-colors hover:text-white"
               >
                 <ArrowLeft className="h-4 w-4" />

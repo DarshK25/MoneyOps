@@ -25,7 +25,7 @@ export function ProtectedRoute({ children }) {
 
     // ── 2. Not signed in → login page ─────────────────────────────────────────
     if (!isSignedIn) {
-        return <Navigate to="/sign-in" state={{ from: location }} replace />;
+        return <Navigate to="/auth/sign-in" state={{ from: location }} replace />;
     }
 
     // ── 3. Waiting for onboarding status from backend ──────────────────────────
@@ -40,7 +40,7 @@ export function ProtectedRoute({ children }) {
 
     // ── 5. Already complete but on /onboarding → send to dashboard ────────────
     if (complete && isOnboardingRoute) {
-        return <Navigate to="/analytics" replace />;
+        return <Navigate to="/workspace/overview" replace />;
     }
 
     return children;

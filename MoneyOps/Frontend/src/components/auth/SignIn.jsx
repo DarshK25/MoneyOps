@@ -348,7 +348,7 @@ export function SignIn({ redirectUrl = "/" }) {
 
           <div className="text-center text-sm">
             <span className="text-white/60">Don't have an account? </span>
-            <a href="/sign-up" className="text-[#4CBB17] hover:underline font-medium">
+            <a href="/auth/sign-up" className="text-[#4CBB17] hover:underline font-medium">
               Sign up
             </a>
           </div>

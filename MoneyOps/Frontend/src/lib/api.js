@@ -40,7 +40,7 @@ class ApiClient {
     if (response.status === 401 && !endpoint.includes('/auth/')) {
       authClient.clearAuth();
       if (typeof window !== "undefined") {
-        window.location.href = "/sign-in";
+        window.location.href = "/auth/sign-in";
       }
       throw new Error(data.message || data.error || "Unauthorized");
     }

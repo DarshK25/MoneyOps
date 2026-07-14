@@ -18,32 +18,32 @@ export default function OAuth2RedirectPage() {
     if (error) {
       const message = KNOWN_ERRORS.has(error) ? error : "authentication_failed";
       toast.error("Authentication failed: " + message);
-      navigate("/sign-in");
+      navigate("/auth/sign-in");
       return;
     }
 
     if (token) {
-      window.history.replaceState({}, '', '/oauth2/redirect');
+      window.history.replaceState({}, '', '/auth/oauth2/callback');
 
       const handleOAuthSuccess = async () => {
         try {
           const result = await setToken(token);
           if (result.success) {
-            navigate("/analytics", { replace: true });
+            navigate("/workspace/overview", { replace: true });
           } else {
             throw new Error(result.error || "Failed to authenticate");
           }
         } catch (err) {
           console.error("OAuth redirect error:", err);
           toast.error("Authentication failed. Please try again.");
-          navigate("/sign-in");
+          navigate("/auth/sign-in");
         }
       };
       
       handleOAuthSuccess();
     } else {
       toast.error("No authentication token received");
-      navigate("/sign-in");
+      navigate("/auth/sign-in");
     }
   }, [searchParams, navigate, setToken]);
 

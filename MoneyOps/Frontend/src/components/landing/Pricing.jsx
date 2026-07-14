@@ -21,7 +21,7 @@ const PLANS = [
     period: "month",
     description: "Perfect for freelancers getting started with AI invoicing.",
     buttonText: "Start for Free",
-    href: "/sign-up",
+    href: "/auth/sign-up",
     isPopular: false,
     target: "Great for acquisition & viral growth",
     features: [
@@ -39,7 +39,7 @@ const PLANS = [
     period: "month",
     description: "For active consultants sending 20+ invoices a month.",
     buttonText: "Get Pro",
-    href: "/sign-up",
+    href: "/auth/sign-up",
     isPopular: true,
     target: "Target: Active consultants",
     features: [
@@ -58,7 +58,7 @@ const PLANS = [
     period: "month",
     description: "For small agencies with shared clients and team workflows.",
     buttonText: "Get Team",
-    href: "/sign-up",
+    href: "/auth/sign-up",
     isPopular: false,
     target: "Target: Small agencies (3–5 people)",
     features: [

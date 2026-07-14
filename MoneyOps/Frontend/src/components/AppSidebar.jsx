@@ -93,7 +93,7 @@ export function AppSidebar(props) {
 
   const mainNavItems = [
     {
-      href: "/analytics",
+      href: "/workspace/overview",
       title: "Overview",
       icon: <Home className="h-4 w-4" />,
     },
@@ -103,27 +103,27 @@ export function AppSidebar(props) {
       icon: <FileText className="h-4 w-4" />,
     },
     {
-      href: "/recurring-invoices",
+      href: "/invoices/schedules",
       title: "Recurring",
       icon: <Repeat className="h-4 w-4" />,
     },
     {
-      href: "/clients",
+      href: "/sales/clients",
       title: "Clients",
       icon: <Users className="h-4 w-4" />,
     },
     {
-      href: "/cashflow",
+      href: "/workspace/cashflow",
       title: "Cash Flow",
       icon: <BarChart3 className="h-4 w-4" />,
     },
     {
-      href: "/transactions",
+      href: "/workspace/transactions",
       title: "Transactions",
       icon: <Receipt className="h-4 w-4" />,
     },
     // {
-    //   href: "/documents",
+    //   href: "/workspace/documents",
     //   title: "Documents",
     //   icon: <FileText className="h-4 w-4" />,
     // },
@@ -131,22 +131,22 @@ export function AppSidebar(props) {
 
   const agentNavItems = [
     {
-      href: "/finance-agent",
+      href: "/finance/intelligence",
       title: "Finance Agent",
       icon: <Calculator className="h-4 w-4" />,
     },
     {
-      href: "/sales-crm",
+      href: "/sales/crm",
       title: "Sales CRM",
       icon: <TrendingUp className="h-4 w-4" />,
     },
     {
-      href: "/compliance",
+      href: "/finance/compliance",
       title: "Compliance",
       icon: <Shield className="h-4 w-4" />,
     },
     {
-      href: "/market-intelligence",
+      href: "/sales/market-intelligence",
       title: "Market Agent",
       icon: <Search className="h-4 w-4" />,
     },
@@ -166,12 +166,12 @@ export function AppSidebar(props) {
       matchSubpaths: false,
     },
     {
-      href: "/teams",
+      href: "/team",
       title: "Teams",
       icon: <Users className="h-4 w-4" />,
     },
     {
-      href: "/settings",
+      href: "/workspace/settings",
       title: "Settings",
       icon: <Settings className="h-4 w-4" />,
     },
