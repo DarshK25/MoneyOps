@@ -1,6 +1,8 @@
 package com.moneyops.transactions.service;
 
 import com.moneyops.compliance.ComplianceMetadataService;
+import com.moneyops.events.dto.DomainEvent;
+import com.moneyops.events.producer.IEventPublisher;
 import com.moneyops.jpa.persistence.TransactionDocumentStore;
 import com.moneyops.transactions.dto.TransactionDto;
 import com.moneyops.transactions.entity.Transaction;
@@ -8,6 +10,8 @@ import com.moneyops.transactions.entity.TransactionType;
 import com.moneyops.transactions.mapper.TransactionMapper;
 import com.moneyops.transactions.validator.TransactionValidator;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -21,10 +25,12 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -34,6 +40,25 @@ public class TransactionService {
     private final TransactionMapper transactionMapper;
     private final TransactionValidator transactionValidator;
     private final ComplianceMetadataService complianceMetadataService;
+    
+    @Autowired(required = false)
+    private IEventPublisher eventPublisher;
+
+    private static final String TOPIC_TRANSACTION_EVENTS = "moneyops.transaction.events";
+@RequiredArgsConstructor
+@Transactional
+public class TransactionService {
+
+    private final TransactionDocumentStore transactionStore;
+    private final TransactionMapper transactionMapper;
+    private final TransactionValidator transactionValidator;
+    private final ComplianceMetadataService complianceMetadataService;
+
+    @ConditionalOnProperty(name = "spring.kafka.enabled", havingValue = "true", matchIfMissing = false)
+    private final IEventPublisher eventPublisher;
+
+    private static final String TOPIC_PAYMENT_EVENTS = "moneyops.payment.events";
+    private static final String TOPIC_EXPENSE_EVENTS = "moneyops.expense.events";
 
     public Page<TransactionDto> getAllTransactions(String orgId, int page, int size) {
         if (orgId == null || orgId.isBlank()) {
@@ -81,6 +106,10 @@ public class TransactionService {
         complianceMetadataService.normalizeTransaction(transaction);
 
         Transaction saved = transactionStore.save(transaction);
+        
+        // Publish Kafka event
+        publishTransactionEvent(saved, "TRANSACTION_CREATED", "Transaction created");
+        
         return transactionMapper.toDto(saved);
     }
 
@@ -194,5 +223,32 @@ public class TransactionService {
                 "totalIncome", income,
                 "totalExpense", expense,
                 "netProfit", income.subtract(expense));
+    }
+
+    private void publishTransactionEvent(Transaction transaction, String eventType, String message) {
+        if (eventPublisher != null) {
+            try {
+                String topic = transaction.getType() == TransactionType.INCOME ? TOPIC_PAYMENT_EVENTS : TOPIC_EXPENSE_EVENTS;
+                String payload = String.format(
+                    "{\"eventType\":\"%s\",\"transactionId\":\"%s\",\"orgId\":\"%s\",\"amount\":%s,\"type\":\"%s\",\"category\":\"%s\",\"description\":\"%s\",\"timestamp\":%d}",
+                    eventType,
+                    transaction.getId(),
+                    transaction.getOrgId(),
+                    transaction.getAmount(),
+                    transaction.getType().name(),
+                    transaction.getCategory() != null ? transaction.getCategory() : "",
+                    transaction.getDescription() != null ? transaction.getDescription().replace("\"", "'") : "",
+                    System.currentTimeMillis()
+                );
+                DomainEvent event = new DomainEvent(topic, transaction.getId(), payload);
+                eventPublisher.publish(event);
+            } catch (Exception e) {
+                log.warn("Failed to publish transaction event", e);
+            }
+        }
+    }
+
+    private void log(String msg) {
+        System.out.println(msg);
     }
 }

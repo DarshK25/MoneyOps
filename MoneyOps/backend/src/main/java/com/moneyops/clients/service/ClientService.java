@@ -5,6 +5,7 @@ import com.moneyops.clients.entity.Client;
 import com.moneyops.clients.mapper.ClientMapper;
 import com.moneyops.clients.validator.ClientValidator;
 import com.moneyops.audit.service.AuditLogService;
+import com.moneyops.events.producer.IEventPublisher;
 import com.moneyops.jpa.persistence.ClientDocumentStore;
 import com.moneyops.security.team.TeamActionAuthorizationService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,6 +40,11 @@ public class ClientService {
 
     @Autowired
     private AuditLogService auditLogService;
+
+    @Autowired(required = false)
+    private IEventPublisher eventPublisher;
+
+    private static final String TOPIC_CLIENT_EVENTS = "moneyops.client.events";
 
     public List<ClientDto> getAllClients(String orgId) {
         if (orgId == null || orgId.isBlank()) {
@@ -105,6 +111,10 @@ public class ClientService {
 
         Client saved = clientStore.save(client);
         auditLogService.logCreate("CLIENT", saved.getId(), saved);
+        
+        // Publish Kafka event
+        publishClientEvent(saved, "CLIENT_CREATED", "Client created via " + dto.getSource());
+        
         return clientMapper.toDto(saved);
     }
 
@@ -136,6 +146,10 @@ public class ClientService {
         client.setUpdatedBy(updatedBy);
 
         Client saved = clientStore.save(client);
+        
+        // Publish Kafka event
+        publishClientEvent(saved, "CLIENT_UPDATED", "Client updated");
+        
         return clientMapper.toDto(saved);
     }
 
@@ -143,6 +157,9 @@ public class ClientService {
         clientStore.findByIdAndOrgId(id, orgId)
                 .orElseThrow(() -> new RuntimeException("Client not found"));
         clientStore.softDelete(id, orgId);
+        
+        // Publish Kafka event
+        publishClientEvent(id, orgId, "CLIENT_DELETED", "Client deleted", null);
     }
 
     public List<ClientDto> searchClients(String orgId, String search) {
@@ -190,6 +207,41 @@ public class ClientService {
         ScoredClient(ClientDto client, double score) {
             this.client = client;
             this.score = score;
+        }
+    }
+
+    private void publishClientEvent(Client client, String eventType, String description) {
+        if (eventPublisher == null) return;
+        try {
+            String payload = String.format(
+                "{\"eventType\":\"%s\",\"clientId\":\"%s\",\"orgId\":\"%s\",\"name\":\"%s\",\"email\":\"%s\",\"description\":\"%s\",\"timestamp\":%d}",
+                eventType, client.getId(), client.getOrgId(), 
+                client.getName() != null ? client.getName().replace("\"", "\\\"") : "",
+                client.getEmail() != null ? client.getEmail().replace("\"", "\\\"") : "",
+                description, System.currentTimeMillis()
+            );
+            com.moneyops.events.dto.DomainEvent event = new com.moneyops.events.dto.DomainEvent(
+                TOPIC_CLIENT_EVENTS, client.getId(), payload
+            );
+            eventPublisher.publish(event);
+        } catch (Exception e) {
+            log.warn("Failed to publish client event", e);
+        }
+    }
+
+    private void publishClientEvent(String clientId, String orgId, String eventType, String description, Client client) {
+        if (eventPublisher == null) return;
+        try {
+            String payload = String.format(
+                "{\"eventType\":\"%s\",\"clientId\":\"%s\",\"orgId\":\"%s\",\"description\":\"%s\",\"timestamp\":%d}",
+                eventType, clientId, orgId, description, System.currentTimeMillis()
+            );
+            com.moneyops.events.dto.DomainEvent event = new com.moneyops.events.dto.DomainEvent(
+                TOPIC_CLIENT_EVENTS, clientId, payload
+            );
+            eventPublisher.publish(event);
+        } catch (Exception e) {
+            log.warn("Failed to publish client event", e);
         }
     }
 }

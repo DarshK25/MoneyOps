@@ -68,15 +68,17 @@ class MasterOrchestrator:
 Determine which executor(s) should handle the user's request.
 
 Executors:
-- finance_ops: Invoices, payments, expenses, financial summaries, balances, current revenue/profit, overdue invoices, cash position, invoicing, billing
+- finance_ops: Invoices, payments, expenses, financial summaries, balances, current revenue/profit, overdue invoices, cash position, invoicing, billing, business health/status, current status, business status
 - compliance: GST filing, tax compliance, TDS, invoice templates
 - collections: Payment reminders, WhatsApp/SMS collections, overdue invoices
 - treds: Invoice discounting, working capital, TReDS registration
-- growth: Revenue FORECAST, future projections, upsell opportunities, churn risk, growth strategy (NOT current revenue/invoicing queries)
+- growth: Revenue FORECAST, future projections, upsell opportunities, churn risk, growth strategy (NOT current revenue/invoicing/business status queries)
 
 KEY DISTINCTION:
-- "What is my revenue?" / "Current revenue" / "How much money?" / "Invoicing" / "Billing" / "Financial summary" -> finance_ops
-- "Forecast revenue" / "Predict future revenue" / "Revenue projection" / "Growth strategy" / "Scale business" -> growth
+- "What is my revenue?" / "Current revenue" / "How much money?" / "Invoicing" / "Billing" / "Financial summary" / "Business status" / "Current status" / "Business health" -> finance_ops
+- "Forecast revenue" / "Predict future revenue" / "Revenue projection" / "Growth strategy" / "Scale business" / "Future growth" -> growth
+
+IMPORTANT: "Business back on track", "current status", "business health", "business status" are CURRENT STATE queries -> finance_ops
 
 DEFAULT TO SINGLE EXECUTOR unless user explicitly asks for multiple things.
 Respond with EXACTLY ONE name: finance_ops, compliance, collections, treds, or growth"""
