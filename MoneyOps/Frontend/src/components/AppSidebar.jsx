@@ -2,6 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
   BarChart3,
+  Brain,
   FileText,
   Home,
   Users,
@@ -14,6 +15,7 @@ import {
   Receipt,
   MessageSquare,
   Repeat,
+  Zap,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -93,8 +95,8 @@ export function AppSidebar(props) {
 
   const mainNavItems = [
     {
-      href: "/workspace/overview",
-      title: "Overview",
+      href: "/dashboard",
+      title: "Dashboard",
       icon: <Home className="h-4 w-4" />,
     },
     {
@@ -103,65 +105,60 @@ export function AppSidebar(props) {
       icon: <FileText className="h-4 w-4" />,
     },
     {
-      href: "/invoices/schedules",
+      href: "/invoices/recurring",
       title: "Recurring",
       icon: <Repeat className="h-4 w-4" />,
     },
     {
-      href: "/sales/clients",
+      href: "/clients",
       title: "Clients",
       icon: <Users className="h-4 w-4" />,
     },
     {
-      href: "/workspace/cashflow",
+      href: "/cashflow",
       title: "Cash Flow",
       icon: <BarChart3 className="h-4 w-4" />,
     },
     {
-      href: "/workspace/transactions",
+      href: "/transactions",
       title: "Transactions",
       icon: <Receipt className="h-4 w-4" />,
     },
-    // {
-    //   href: "/workspace/documents",
-    //   title: "Documents",
-    //   icon: <FileText className="h-4 w-4" />,
-    // },
   ];
 
   const agentNavItems = [
     {
-      href: "/finance/intelligence",
-      title: "Finance Agent",
-      icon: <Calculator className="h-4 w-4" />,
+      href: "/intelligence",
+      title: "Finance Intelligence",
+      icon: <Brain className="h-4 w-4" />,
     },
     {
-      href: "/sales/crm",
+      href: "/crm",
       title: "Sales CRM",
       icon: <TrendingUp className="h-4 w-4" />,
     },
     {
-      href: "/finance/compliance",
+      href: "/compliance",
       title: "Compliance",
       icon: <Shield className="h-4 w-4" />,
     },
     {
-      href: "/sales/market-intelligence",
-      title: "Market Agent",
+      href: "/market",
+      title: "Market Intelligence",
       icon: <Search className="h-4 w-4" />,
     },
     {
-      href: "/orchestrator",
-      title: "Orchestrator",
-      icon: <GitMerge className="h-4 w-4" />,
+      href: "/agent",
+      title: "AI Agent",
+      icon: <Zap className="h-4 w-4" />,
       matchSubpaths: false,
     },
   ];
 
   const utilityNavItems = [
     {
-      href: "/orchestrator/chat",
-      title: "Chat Workspace",
+      href: "/agent/chat",
+      title: "Agent Chat",
       icon: <MessageSquare className="h-4 w-4" />,
       matchSubpaths: false,
     },
@@ -171,7 +168,7 @@ export function AppSidebar(props) {
       icon: <Users className="h-4 w-4" />,
     },
     {
-      href: "/workspace/settings",
+      href: "/settings",
       title: "Settings",
       icon: <Settings className="h-4 w-4" />,
     },

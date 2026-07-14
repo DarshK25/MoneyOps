@@ -205,24 +205,24 @@ export default function OrchestratorChatPage() {
     setSending(true);
 
     try {
-      const payload = await api.post("/api/v1/voice/process", {
-        text,
-        user_id: internalUserId,
-        org_id: internalOrgId,
+      const payload = await api.post("/api/v1/agent/chat", {
+        message: text,
         session_id: session.id,
+        org_id: internalOrgId,
+        user_id: internalUserId,
+        business_id: "1",
         context: {
           channel: "chat",
           agent_type: "orchestrator",
           preferences,
         },
-        conversation_history: preferences.rememberContext ? preparedSession?.messages || [userMessage] : [userMessage],
       });
 
       const actions = extractActions(payload);
       const agentMessage = {
         id: `msg-agent-${Date.now()}`,
         role: "agent",
-        text: payload.response_text || "I've processed that.",
+        text: payload.message || "I've processed that.",
         timestamp: new Date().toISOString(),
         actions,
         reasoning_depth: Number(payload.reasoning_depth || (actions.length > 0 ? 1 : 0)),

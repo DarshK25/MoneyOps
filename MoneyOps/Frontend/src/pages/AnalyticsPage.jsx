@@ -7,6 +7,9 @@ import {
     Loader2,
     RefreshCw,
     Info,
+    Lightbulb,
+    AlertTriangle,
+    Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { InteractiveTrendCard } from "@/components/ui/trend-card";
@@ -62,6 +65,8 @@ export default function AnalyticsPage() {
     const [data, setData] = useState(null);
     const [orgName, setOrgName] = useState("Your Business");
     const [loading, setLoading] = useState(true);
+    const [aiInsights, setAiInsights] = useState([]);
+    const [aiLoading, setAiLoading] = useState(false);
 
     useEffect(() => {
         if (user?.id) {
@@ -168,6 +173,43 @@ export default function AnalyticsPage() {
         }
     };
 
+    const fetchAiInsights = async (revenue, expenses, netProfit, collectionRate, totalClients, totalInvoices, invoices, clients) => {
+        if (aiLoading) return;
+        setAiLoading(true);
+        try {
+            const prompt = `Analyze this business financial data and provide 3-4 specific, actionable insights as JSON:
+Revenue: ₹${revenue.toLocaleString()}
+Expenses: ₹${expenses.toLocaleString()}
+Net Profit: ₹${netProfit.toLocaleString()}
+Collection Rate: ${collectionRate.toFixed(1)}%
+Active Clients: ${totalClients}
+Total Invoices: ${totalInvoices}
+Overdue: ${invoices.filter(i => i.status === "OVERDUE").length}
+
+Return JSON array: [{type: "warning|opportunity|success", title: "...", message: "...", action: "...", priority: "high|medium|low"}]`;
+
+            const response = await api.post("/api/v1/agent/chat", {
+                message: prompt,
+                user_id: user.id,
+                org_id: orgId,
+                session_id: `dashboard-${Date.now()}`,
+                context: { channel: "dashboard", agent_type: "finance" },
+            });
+            if (response.message) {
+                try {
+                    const insights = JSON.parse(response.message);
+                    setAiInsights(Array.isArray(insights) ? insights : []);
+                } catch {
+                    setAiInsights([{ type: "opportunity", title: "AI Analysis", message: response.message, priority: "medium" }]);
+                }
+            }
+        } catch (err) {
+            console.error("AI insights fetch failed:", err);
+        } finally {
+            setAiLoading(false);
+        }
+    };
+
     if (loading) {
         return (
             <div className="flex items-center justify-center h-96">
@@ -189,6 +231,21 @@ export default function AnalyticsPage() {
 
     const { kpis, revenueByCategory, monthlyTrends, clientMetrics } = data;
 
+    // Fetch AI insights once after data loads
+    useEffect(() => {
+        if (data && !aiInsights.length && !aiLoading) {
+            const revenue = Number(data.kpis?.[0]?.value?.replace(/[₹,]/g, "") || 0);
+            const netProfit = Number(data.kpis?.[1]?.value?.replace(/[₹,]/g, "") || 0);
+            const expenses = Number(data.kpis?.[2]?.value?.replace(/[₹,]/g, "") || 0);
+            const collectionRate = Number(data.kpis?.[0]?.change?.replace(/[^0-9.]/g, "") || 0);
+            const totalClients = Number(data.kpis?.[3]?.value || 0);
+            const totalInvoices = Number(data.kpis?.[3]?.change?.replace(/[^0-9]/g, "") || 0);
+
+            // We need invoices data - fetch it or use a simpler approach
+            fetchAiInsights(revenue, expenses, netProfit, collectionRate, totalClients, totalInvoices, [], []);
+        }
+    }, [data]);
+
     return (
         <div className="flex flex-col gap-6">
             <div className="flex items-center justify-between flex-wrap gap-4">
@@ -200,9 +257,6 @@ export default function AnalyticsPage() {
                     <button onClick={fetchAnalytics} className="mo-btn-secondary flex items-center gap-2">
                         <RefreshCw className="h-4 w-4" /> Refresh
                     </button>
-                    {/* <button className="mo-btn-primary flex items-center gap-2">
-                        <BarChart3 className="h-4 w-4" /> Export Report
-                    </button> */}
                 </div>
             </div>
 
@@ -313,20 +367,74 @@ export default function AnalyticsPage() {
                 </div>
             </div>
 
+            {/* AI-Powered Insights Section */}
             <div className="mo-card">
-                <h2 className="mo-h2 mb-1">AI Insights & Recommendations</h2>
-                <p className="mo-text-secondary mb-5">Data-driven insights from your live financial data</p>
-                <div className="p-4 bg-[#4CBB1710] border border-[#4CBB1730] rounded-xl flex gap-4 items-start">
-                    <div className="bg-[#4CBB1720] p-2 rounded-lg shrink-0">
-                        <TrendingUp className="h-5 w-5 text-[#4CBB17]" />
-                    </div>
+                <div className="flex items-center justify-between mb-4">
                     <div>
-                        <h4 className="font-semibold text-[#4CBB17] text-sm">3-month operating view</h4>
-                        <p className="text-sm text-[#A0A0A0] mt-1 leading-relaxed">
-                            The charts above now track the last three months only, so revenue and expenses reflect a clean recent operating trend instead of a mixed all-time ledger. Use this view to compare billing momentum against actual spending before making growth decisions.
-                        </p>
+                        <h2 className="mo-h2 mb-1">AI Insights & Recommendations</h2>
+                        <p className="mo-text-secondary">Data-driven analysis from your financial data</p>
                     </div>
+                    {aiLoading && (
+                        <div className="flex items-center gap-2 text-sm text-[#A0A0A0]">
+                            <RefreshCw className="h-4 w-4 animate-spin text-[#4CBB17]" />
+                            <span>Analyzing...</span>
+                        </div>
+                    )}
                 </div>
+                {aiInsights.length === 0 && !aiLoading ? (
+                    <div className="p-4 bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl text-center">
+                        <Lightbulb className="h-8 w-8 text-[#A0A0A0] mx-auto mb-2" />
+                        <p className="text-sm text-[#A0A0A0]">AI is analyzing your financial data...</p>
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        {aiInsights.map((insight, idx) => (
+                            <div
+                                key={idx}
+                                className={`p-4 rounded-xl border-l-4 transition-all ${
+                                    insight.type === "warning" ? "bg-[#CD1C1810] border-[#CD1C18]" :
+                                    insight.type === "opportunity" ? "bg-[#FFB30010] border-[#FFB300]" :
+                                    "bg-[#4CBB1710] border-[#4CBB17]"
+                                }`}
+                            >
+                                <div className="flex items-start gap-3">
+                                    <div className={`flex-shrink-0 p-2 rounded-lg ${
+                                        insight.type === "warning" ? "bg-[#CD1C1820]" :
+                                        insight.type === "opportunity" ? "bg-[#FFB30020]" :
+                                        "bg-[#4CBB1720]"
+                                    }`}>
+                                        {insight.type === "warning" && <AlertTriangle className="h-5 w-5 text-[#CD1C18]" />}
+                                        {insight.type === "opportunity" && <Lightbulb className="h-5 w-5 text-[#FFB300]" />}
+                                        {insight.type === "success" && <Zap className="h-5 w-5 text-[#4CBB17]" />}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <h4 className={`font-semibold text-sm ${insight.type === "warning" ? "text-[#CD1C18]" : insight.type === "opportunity" ? "text-[#FFB300]" : "text-[#4CBB17]"}`}>
+                                            {insight.title}
+                                            <span className={`ml-2 px-1.5 py-0.5 text-[10px] font-medium rounded ${insight.priority === "high" ? "bg-[#CD1C1820] text-[#CD1C18]" : insight.priority === "medium" ? "bg-[#FFB30020] text-[#FFB300]" : "bg-[#4CBB1720] text-[#4CBB17]"}`}>
+                                                {insight.priority}
+                                            </span>
+                                        </h4>
+                                        <p className="text-sm text-[#A0A0A0] mt-1">{insight.message}</p>
+                                        {insight.action && (
+                                            <button
+                                                className="mt-2 text-xs text-[#4CBB17] hover:underline font-medium"
+                                                onClick={() => {
+                                                    if (insight.action === "invoices") window.location.href = "/invoices";
+                                                    else if (insight.action === "clients") window.location.href = "/clients";
+                                                    else if (insight.action === "cashflow") window.location.href = "/cashflow";
+                                                    else if (insight.action === "transactions") window.location.href = "/transactions";
+                                                    else if (insight.action === "compliance") window.location.href = "/compliance";
+                                                }}
+                                            >
+                                                {insight.actionLabel || `Take action →`}
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
         </div>
     );

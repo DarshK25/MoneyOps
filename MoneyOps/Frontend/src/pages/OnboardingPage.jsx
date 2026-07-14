@@ -69,7 +69,7 @@ export default function OnboardingPage() {
                 : "/api/onboarding/join-business";
             await api.post(endpoint, payload);
             toast.success("Onboarding completed! Redirecting to dashboard…");
-            setTimeout(() => { navigate("/workspace/overview", { replace: true }); }, 1500);
+            setTimeout(() => { navigate("/dashboard", { replace: true }); }, 1500);
         } catch (error) {
             console.error("Onboarding error:", error);
             toast.error(error.message || "Failed to complete onboarding");

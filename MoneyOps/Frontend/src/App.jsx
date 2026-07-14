@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
 import { Toaster } from "sonner";
 import LandingPage from "@/pages/LandingPage";
 import SignInPage from "@/pages/SignInPage";
@@ -31,7 +31,6 @@ import OAuth2RedirectPage from "@/pages/OAuth2RedirectPage";
 export default function App() {
     return (
         <>
-            {/* Global toast notifications (sonner) */}
             <Toaster position="top-right" richColors />
 
             <Routes>
@@ -62,8 +61,9 @@ export default function App() {
                     }
                 />
 
+                {/* Chat workspace — standalone (no sidebar) */}
                 <Route
-                    path="/orchestrator/chat"
+                    path="/agent/chat"
                     element={
                         <ProtectedRoute>
                             <OrchestratorChatPage />
@@ -79,27 +79,27 @@ export default function App() {
                         </ProtectedRoute>
                     }
                 >
-                    <Route path="/workspace/overview" element={<AnalyticsPage />} />
-                    <Route path="/workspace/cashflow" element={<CashflowPage />} />
-                    <Route path="/workspace/transactions" element={<TransactionsPage />} />
-                    <Route path="/workspace/documents" element={<DocumentsPage />} />
-                    <Route path="/workspace/settings" element={<SettingsPage />} />
+                    <Route path="/dashboard" element={<AnalyticsPage />} />
+                    <Route path="/cashflow" element={<CashflowPage />} />
+                    <Route path="/transactions" element={<TransactionsPage />} />
+                    <Route path="/documents" element={<DocumentsPage />} />
+                    <Route path="/settings" element={<SettingsPage />} />
 
                     <Route path="/invoices" element={<InvoicesPage />} />
                     <Route path="/invoices/new" element={<NewInvoicePage />} />
                     <Route path="/invoices/:id" element={<InvoiceDetailPage />} />
-                    <Route path="/invoices/schedules" element={<RecurringInvoicesPage />} />
-                    <Route path="/invoices/bulk-upload" element={<BulkUploadPage />} />
+                    <Route path="/invoices/recurring" element={<RecurringInvoicesPage />} />
+                    <Route path="/invoices/bulk" element={<BulkUploadPage />} />
 
-                    <Route path="/sales/clients" element={<ClientsPage />} />
-                    <Route path="/sales/crm" element={<SalesCRMPage />} />
-                    <Route path="/sales/market-intelligence" element={<MarketResearchPage />} />
+                    <Route path="/clients" element={<ClientsPage />} />
+                    <Route path="/crm" element={<SalesCRMPage />} />
+                    <Route path="/market" element={<MarketResearchPage />} />
 
                     <Route path="/finance" element={<FinancesPage />} />
-                    <Route path="/finance/intelligence" element={<FinanceIntelligencePage />} />
-                    <Route path="/finance/compliance" element={<CompliancePage />} />
+                    <Route path="/intelligence" element={<FinanceIntelligencePage />} />
+                    <Route path="/compliance" element={<CompliancePage />} />
 
-                    <Route path="/orchestrator" element={<OrchestratorPage />} />
+                    <Route path="/agent" element={<OrchestratorPage />} />
                     <Route path="/team" element={<TeamsPage />} />
                 </Route>
             </Routes>

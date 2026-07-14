@@ -137,7 +137,7 @@ export default function Hero() {
                     transition={{ duration: 0.6, delay: 0.4 }}
                     className="flex flex-wrap gap-4 justify-center mb-16"
                 >
-                    <Link to="/workspace/overview">
+                    <Link to="/dashboard">
                         <button
                             className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold transition-all hover:scale-105"
                             style={{ backgroundColor: "#4CBB17", color: "#000" }}

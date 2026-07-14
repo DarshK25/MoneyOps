@@ -3,7 +3,7 @@ import { useLocation } from "react-router-dom";
 
 export default function SignInPage() {
     const location = useLocation();
-    const from = (location.state?.from?.pathname) || "/workspace/overview";
+    const from = (location.state?.from?.pathname) || "/dashboard";
 
     return <SignIn redirectUrl={from} />;
 }

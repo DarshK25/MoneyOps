@@ -116,10 +116,10 @@ export default function FinancesPage() {
     }, [invoices]);
 
     const quickActions = useMemo(() => [
-        { label: "View Transactions", icon: Calculator, path: "/workspace/transactions" },
-        { label: "View Cash Flow", icon: TrendingUp, path: "/workspace/cashflow" },
+        { label: "View Transactions", icon: Calculator, path: "/transactions" },
+        { label: "View Cash Flow", icon: TrendingUp, path: "/cashflow" },
         { label: "Review Overdue", icon: AlertCircle, path: "/invoices", count: overdueCount },
-        { label: "Generate Report", icon: CheckCircle, path: "/workspace/overview" },
+        { label: "Generate Report", icon: CheckCircle, path: "/dashboard" },
     ], [overdueCount]);
 
     if (loading) {

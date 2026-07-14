@@ -328,13 +328,13 @@ export function FinanceIntelligenceDashboard({ businessId: initialBusinessId }) 
                                                         if (title.includes("collection") || title.includes("capital") || title.includes("overdue")) {
                                                             navigate("/invoices");
                                                         } else if (title.includes("expense") || title.includes("cost") || title.includes("spend")) {
-                                                            navigate("/workspace/transactions");
+                                                            navigate("/transactions");
                                                         } else if (title.includes("budget") || title.includes("baseline")) {
-                                                            navigate("/workspace/settings");
+                                                            navigate("/settings");
                                                         } else if (title.includes("tax") || title.includes("gst") || title.includes("compliance")) {
-                                                            navigate("/finance/compliance");
+                                                            navigate("/compliance");
                                                         } else {
-                                                            navigate("/workspace/overview");
+                                                            navigate("/dashboard");
                                                         }
                                                     }}
                                                 >{insight.action} →</button>

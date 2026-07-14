@@ -161,7 +161,7 @@ function dispatchUIEvent(event, navigate) {
         title: "Client created",
         message: event.client_name || event.message || "Client created",
         timestamp: new Date().toISOString(),
-        path: event.path || "/sales/clients",
+        path: event.path || "/clients",
       },
     }));
     window.dispatchEvent(new CustomEvent("voice:open_input_dialog", { detail: null }));

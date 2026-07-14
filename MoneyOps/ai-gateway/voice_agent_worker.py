@@ -23,9 +23,17 @@ from livekit.agents import (
     cli,
 )
 from livekit.plugins import groq, silero
+from livekit.plugins.groq import STT, LLM, TTS
 
 from app.orchestration.agent_router import agent_router
 from app.schemas.intents import Intent
+
+# Pre-warm models at module load (reduces per-session init time)
+_STT_MODEL = STT(model="whisper-large-v3-turbo")
+_LLM_FAST = LLM(model="llama-3.1-8b-instant")  # Fast model for greetings/simple
+_LLM_SMART = LLM(model="llama-3.3-70b-versatile")  # Smart model for complex
+_TTS_MODEL = TTS()
+_VAD_MODEL = silero.VAD.load()
 
 # ── Environment ───────────────────────────────────────────────────────────────
 _env_path = Path(__file__).resolve().parent.parent / ".env"
@@ -171,10 +179,10 @@ async def entrypoint(ctx: JobContext):
     )
 
     session = AgentSession(
-        stt=groq.STT(model="whisper-large-v3-turbo"),
-        llm=groq.LLM(model="llama-3.3-70b-versatile"),
-        tts=groq.TTS(),        # Real Groq TTS — actual voice output
-        vad=silero.VAD.load(),
+        stt=_STT_MODEL,
+        llm=_LLM_FAST,  # Fast model for initial greeting & simple responses
+        tts=_TTS_MODEL,
+        vad=_VAD_MODEL,
     )
 
     await session.start(
@@ -183,8 +191,9 @@ async def entrypoint(ctx: JobContext):
         room_input_options=RoomInputOptions(),
     )
 
+    # Instant pre-recorded greeting via fast model (no 70B cold start)
     await session.generate_reply(
-        instructions="Greet the user warmly in one short sentence. Introduce yourself as MoneyOps AI and mention you can help with invoices, payments, and financial queries."
+        instructions="Greet the user warmly in one short sentence. Introduce yourself as MoneyOps AI and mention you can help with invoices, payments, and financial queries.",
     )
     logger.info("Voice agent is live — listening for commands")
 

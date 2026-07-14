@@ -86,7 +86,7 @@ export default function Navigation() {
                         </>
                     ) : (
                         <>
-                            <Link to="/workspace/overview">
+                            <Link to="/dashboard">
                                 <button className="text-sm font-semibold bg-[#4CBB17] text-black px-4 py-1.5 rounded-lg hover:bg-[#3da314] transition-colors">
                                     Dashboard
                                 </button>

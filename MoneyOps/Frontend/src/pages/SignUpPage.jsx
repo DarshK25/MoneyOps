@@ -18,7 +18,7 @@ export default function SignUpPage() {
         const result = await signUp(email, password, name);
         setLoading(false);
         if (result.success) {
-            navigate("/workspace/overview", { replace: true });
+            navigate("/dashboard", { replace: true });
         } else {
             setError(result.error || "Sign up failed");
         }

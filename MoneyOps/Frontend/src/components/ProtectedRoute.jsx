@@ -40,7 +40,7 @@ export function ProtectedRoute({ children }) {
 
     // ── 5. Already complete but on /onboarding → send to dashboard ────────────
     if (complete && isOnboardingRoute) {
-        return <Navigate to="/workspace/overview" replace />;
+        return <Navigate to="/dashboard" replace />;
     }
 
     return children;

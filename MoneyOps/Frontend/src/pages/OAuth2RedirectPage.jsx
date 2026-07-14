@@ -29,7 +29,7 @@ export default function OAuth2RedirectPage() {
         try {
           const result = await setToken(token);
           if (result.success) {
-            navigate("/workspace/overview", { replace: true });
+            navigate("/dashboard", { replace: true });
           } else {
             throw new Error(result.error || "Failed to authenticate");
           }

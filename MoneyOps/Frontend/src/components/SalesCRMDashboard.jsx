@@ -245,9 +245,9 @@ export function SalesCRMDashboard({ businessId, onRefresh }) {
                                     {insight.action && (
                                         <button className="mt-2 text-xs text-[#4CBB17] hover:underline font-medium" onClick={() => {
                                             if (insight.action === "Review Invoices") navigate("/invoices");
-                                            else if (insight.action === "View Clients") navigate("/sales/clients");
+                                            else if (insight.action === "View Clients") navigate("/clients");
                                             else if (insight.action === "Set Reminders") navigate("/invoices");
-                                            else if (insight.action === "View Details") navigate("/sales/clients");
+                                            else if (insight.action === "View Details") navigate("/clients");
                                         }}>{insight.action} →</button>
                                     )}
                                 </div>

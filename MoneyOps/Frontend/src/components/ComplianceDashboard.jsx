@@ -284,7 +284,7 @@ export function ComplianceDashboard({ businessId, data, onRefresh, initialTab = 
                                             <p className="mt-1 text-xs text-[#A0A0A0]">Collections issues often become tax and compliance issues next.</p>
                                         </button>
                                         <button
-                                            onClick={() => navigate("/workspace/transactions")}
+                                            onClick={() => navigate("/transactions")}
                                             className="rounded-lg border border-[#2A2A2A] bg-[#111111] px-3 py-3 text-left transition-all hover:border-[#4CBB1740] sm:col-span-2"
                                         >
                                             <p className="text-sm font-semibold text-white">Keep Expense Evidence Current</p>
