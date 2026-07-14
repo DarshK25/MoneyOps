@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useUser } from "@/contexts/AuthContext";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
+import { formatDate, parseDate } from "@/lib/utils";
 
 const STATUS_STYLES = {
     paid: "mo-badge-success",
@@ -315,20 +316,20 @@ export default function InvoicesPage() {
                                         <div>
                                             <p className="text-[#A0A0A0] mb-0.5 text-xs">Issue Date</p>
                                             <p className="font-medium text-white">
-                                                {new Date(invoice.issueDate).toLocaleDateString()}
+                                                {formatDate(invoice.issueDate)}
                                             </p>
                                         </div>
                                         <div>
                                             <p className="text-[#A0A0A0] mb-0.5 text-xs">Due Date</p>
                                             <p className="font-medium text-white">
-                                                {new Date(invoice.dueDate).toLocaleDateString()}
+                                                {formatDate(invoice.dueDate)}
                                             </p>
                                         </div>
                                         <div>
                                             <p className="text-[#A0A0A0] mb-0.5 text-xs">Payment</p>
                                             <p className="font-medium text-white">
                                                 {invoice.paymentDate
-                                                    ? new Date(invoice.paymentDate).toLocaleDateString()
+                                                    ? formatDate(invoice.paymentDate)
                                                     : "Not paid"}
                                             </p>
                                         </div>

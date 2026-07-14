@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useUser } from "@/contexts/AuthContext";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
+import { formatDate } from "@/lib/utils";
 
 const FREQUENCY_LABELS = {
     DAILY: "Daily",
@@ -171,14 +172,7 @@ export default function RecurringInvoicesPage() {
         return searchMatch;
     });
 
-    const formatDate = (dateStr) => {
-        if (!dateStr) return "N/A";
-        return new Date(dateStr).toLocaleDateString("en-IN", {
-            day: "numeric",
-            month: "short",
-            year: "numeric"
-        });
-    };
+
 
     return (
         <div className="flex flex-col gap-6">

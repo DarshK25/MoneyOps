@@ -18,6 +18,7 @@ import { ArrowLeft, Send, FileText, Loader2, DollarSign, Trash2 } from "lucide-r
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useUser } from "@/contexts/AuthContext";
+import { formatDate } from "@/lib/utils";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 
 const STATUS_BADGE = {
@@ -219,6 +220,7 @@ export default function InvoiceDetailPage() {
             await api.delete(`/api/invoices/${invId}`);
             toast.success("Invoice deleted successfully");
             navigate("/invoices");
+
         } catch (error) {
             toast.error(error?.message || "Failed to delete invoice");
             setDeleting(false);
@@ -388,8 +390,8 @@ export default function InvoiceDetailPage() {
                         <div className="grid grid-cols-2 gap-4 text-sm mb-6">
                             {[
                                 { label: "Customer", value: invoice.clientName || "N/A" },
-                                { label: "Issue Date", value: invoice.issueDate ? new Date(invoice.issueDate).toLocaleDateString() : "N/A" },
-                                { label: "Due Date", value: invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : "N/A" },
+                                { label: "Issue Date", value: formatDate(invoice.issueDate) },
+                                { label: "Due Date", value: formatDate(invoice.dueDate) },
                                 { label: "Total Amount", value: `₹${(invoice.totalAmount || 0).toLocaleString("en-IN")}`, highlight: true },
                             ].map(({ label, value, highlight }) => (
                                 <div key={label}>

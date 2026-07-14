@@ -3,6 +3,7 @@ import { Calculator, TrendingUp, AlertCircle, CheckCircle, Loader2, RefreshCw, A
 import { toast } from "sonner";
 import { useAuth, useUser } from "@/contexts/AuthContext";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
+import { formatDate } from "@/lib/utils";
 
 function formatInr(value) {
     return `₹${Number(value || 0).toLocaleString("en-IN")}`;
@@ -115,10 +116,10 @@ export default function FinancesPage() {
     }, [invoices]);
 
     const quickActions = useMemo(() => [
-        { label: "View Transactions", icon: Calculator, path: "/transactions" },
-        { label: "View Cash Flow", icon: TrendingUp, path: "/cashflow" },
+        { label: "View Transactions", icon: Calculator, path: "/workspace/transactions" },
+        { label: "View Cash Flow", icon: TrendingUp, path: "/workspace/cashflow" },
         { label: "Review Overdue", icon: AlertCircle, path: "/invoices", count: overdueCount },
-        { label: "Generate Report", icon: CheckCircle, path: "/analytics" },
+        { label: "Generate Report", icon: CheckCircle, path: "/workspace/overview" },
     ], [overdueCount]);
 
     if (loading) {
@@ -206,7 +207,7 @@ export default function FinancesPage() {
                                                 Invoice #{inv.invoiceNumber} — {inv.clientName || "No client"}
                                             </p>
                                             <p className="text-xs text-[#A0A0A0] mt-0.5">
-                                                {inv.issueDate ? new Date(inv.issueDate).toLocaleDateString() : ""} · {formatInr(inv.totalAmount)}
+                                                {formatDate(inv.issueDate)} · {formatInr(inv.totalAmount)}
                                             </p>
                                         </div>
                                         <span className={`text-xs px-2 py-0.5 rounded-md font-medium flex-shrink-0 border ${isPaid

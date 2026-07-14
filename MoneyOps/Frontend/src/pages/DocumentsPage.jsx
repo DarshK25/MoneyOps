@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { DocumentUpload } from "@/components/DocumentUpload";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
+import { formatDate } from "@/lib/utils";
 
 const DEFAULT_BUSINESS_ID = 1;
 
@@ -90,7 +91,7 @@ export default function DocumentsPage() {
                     <div className="flex items-center gap-3 mt-1.5 text-xs text-[#A0A0A0]">
                         <span className="flex items-center gap-1">
                             <Clock className="h-3 w-3" />
-                            {new Date(doc.uploadedAt).toLocaleDateString()}
+                            {formatDate(doc.uploadedAt)}
                         </span>
                         {doc.category && (
                             <span className="px-1.5 py-0.5 rounded bg-[#2A2A2A] text-xs">{doc.category}</span>

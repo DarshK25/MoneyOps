@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { useUser } from "@/contexts/AuthContext";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 import { getRememberedTeamSecurityCode, rememberTeamSecurityCode } from "@/lib/teamSecurityCode";
+import { formatDate } from "@/lib/utils";
 
 const ROLE_STYLES = {
     OWNER: "bg-[#4CBB1720] text-[#4CBB17] border-[#4CBB1740]",
@@ -434,7 +435,7 @@ export default function TeamsPage() {
                                         <span className={`inline-flex items-center text-[10px] px-2 py-0.5 rounded-md border font-bold ${STATUS_STYLES[member.status] || STATUS_STYLES.ACTIVE}`}>
                                             {member.status}
                                         </span>
-                                        <p className="text-xs text-[#A0A0A0] mt-0.5">Joined {new Date(member.createdAt).toLocaleDateString()}</p>
+                                        <p className="text-xs text-[#A0A0A0] mt-0.5">Joined {formatDate(member.createdAt)}</p>
                                     </div>
                                     {member.role !== "OWNER" && (
                                         <button className="p-1.5 rounded-lg text-[#A0A0A0] hover:text-white hover:bg-[#2A2A2A] transition-colors">

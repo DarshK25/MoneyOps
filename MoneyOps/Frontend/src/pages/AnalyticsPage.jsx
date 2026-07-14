@@ -96,17 +96,20 @@ export default function AnalyticsPage() {
             const invoices = invoicesData?.data?.content || invoicesData?.content || invoicesData?.data || invoicesData || [];
             const transactions = transactionsData?.data?.content || transactionsData?.content || transactionsData?.data || transactionsData || [];
 
-            const revenue = Number(metrics?.revenue || 0);
-            const expenses = Number(metrics?.expenses || 0);
-            const netProfit = Number(metrics?.netProfit || 0);
-            const collectionRate = Number(metrics?.collectionRate || 0);
+            const m = metrics?.data || metrics;
+            const revenue = Number(m?.revenue || 0);
+            const expenses = Number(m?.expenses || 0);
+            const netProfit = Number(m?.netProfit || 0);
+            const collectionRate = Number(m?.collectionRate || 0);
+            const paidCount = Number(m?.paidCount || 0);
+            const totalInvoices = Number(m?.totalInvoices || 0);
             const totalClients = Array.isArray(clients) ? clients.length : 0;
 
             const kpis = [
                 { name: "Total Revenue", value: `₹${revenue.toLocaleString("en-IN")}`, trend: revenue > 0 ? "up" : "neutral", change: revenue > 0 ? `+${collectionRate.toFixed(0)}% collected` : "0%" },
                 { name: "Net Profit", value: `₹${netProfit.toLocaleString("en-IN")}`, trend: netProfit > 0 ? "up" : netProfit < 0 ? "down" : "neutral", change: revenue > 0 ? `${((netProfit / revenue) * 100).toFixed(1)}% margin` : "0%" },
                 { name: "Expenses", value: `₹${expenses.toLocaleString("en-IN")}`, trend: expenses > 0 ? "down" : "neutral", change: revenue > 0 ? `${((expenses / revenue) * 100).toFixed(1)}% of revenue` : "0%" },
-                { name: "Active Clients", value: String(totalClients), trend: totalClients > 0 ? "up" : "neutral", change: `${metrics?.totalInvoices || 0} invoices` },
+                { name: "Active Clients", value: String(totalClients), trend: totalClients > 0 ? "up" : "neutral", change: `${totalInvoices} invoices` },
             ];
 
             const budgetItems = budget?.items || [];
@@ -145,9 +148,7 @@ export default function AnalyticsPage() {
                 expenses: item.expenses,
             }));
 
-            const paidInvoices = Number(metrics?.paidCount || 0);
-            const totalInvoices = Number(metrics?.totalInvoices || 0);
-            const paymentRate = totalInvoices > 0 ? Math.round((paidInvoices / totalInvoices) * 100) : 0;
+            const paymentRate = totalInvoices > 0 ? Math.round((paidCount / totalInvoices) * 100) : 0;
             const avgValue = totalClients > 0 ? Math.round(revenue / totalClients) : 0;
 
             const clientMetrics = [

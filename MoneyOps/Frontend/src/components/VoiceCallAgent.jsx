@@ -18,6 +18,7 @@ import { useVoiceEvents } from "@/hooks/useVoiceEvents";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 import ClientInputDialog from "./ClientInputDialog";
 import { saveVoiceSession } from "@/lib/agentWorkspaceStorage";
+import { api } from "@/lib/api";
 
 export function VoiceCallAgent({ agentType = "orchestrator" }) {
     const { user, isLoaded } = useUser();

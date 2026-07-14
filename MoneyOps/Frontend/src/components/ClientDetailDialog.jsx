@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from "@/lib/api";
+import { formatDate } from "@/lib/utils";
 
 function normalizeClientEmail(value) {
   const raw = String(value || '').trim();
@@ -215,7 +216,7 @@ export default function ClientDetailDialog({ client, onClose, onUpdate, onDelete
                           </div>
                           <div>
                             <p className="text-xs font-semibold text-white">{inv.invoiceNumber}</p>
-                            <p className="text-[10px] text-white/40">{new Date(inv.createdAt).toLocaleDateString()}</p>
+                            <p className="text-[10px] text-white/40">{formatDate(inv.createdAt)}</p>
                           </div>
                         </div>
                         <div className="text-right flex items-center gap-4">

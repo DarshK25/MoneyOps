@@ -8,6 +8,7 @@ import {
   Clock,
   GitMerge,
   Loader2,
+  MessageSquare,
   Mic,
   RefreshCw,
   TrendingUp,
@@ -267,7 +268,7 @@ export function OrchestratorDashboard({ businessId = 1 }) {
       setClients(normalizeCollection(clientsRes));
       setInvoices(normalizeCollection(invoicesRes));
       setTransactions(normalizeCollection(transactionsRes));
-      setMetrics(metricsRes);
+      setMetrics(metricsRes?.data || metricsRes);
       setActivities(normalizeCollection(activitiesRes));
       setBackendConversations(normalizeCollection(conversationsRes));
       setMemories(normalizeCollection(memoryRes));

@@ -14,6 +14,7 @@ import {
     ChevronDown,
     ChevronUp,
 } from "lucide-react";
+import { formatDate } from "@/lib/utils";
 
 const PRIORITY_BADGE = {
     high: "bg-[#CD1C1820] text-[#CD1C18] border-[#CD1C1840]",
@@ -281,6 +282,7 @@ function deriveInsights(snapshot, profile, citations) {
             message: `${snapshot.overdue_count} overdue invoice${snapshot.overdue_count > 1 ? "s are" : " is"} tying up ₹${Number(snapshot?.overdue_amount || 0).toLocaleString("en-IN")}. Close those collections before pushing hard on new acquisition.`,
             action: "View overdue invoices",
             link: "/invoices?filter=overdue",
+
         });
     }
 
@@ -336,7 +338,7 @@ function CitationCard({ item }) {
                     <p className="text-sm font-semibold text-white">{item.title}</p>
                     <p className="mt-1 text-xs text-[#A0A0A0]">
                         {item.source}
-                        {item.publishedAt ? ` • ${new Date(item.publishedAt).toLocaleDateString()}` : ""}
+                        {item.publishedAt ? ` • ${formatDate(item.publishedAt)}` : ""}
                     </p>
                 </div>
                 <span className="rounded-md bg-[#1F1F1F] px-2 py-1 text-[10px] uppercase tracking-wide text-[#A0A0A0]">{item.type}</span>

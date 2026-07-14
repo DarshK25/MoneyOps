@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import { useUser } from "@/contexts/AuthContext";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 import { InteractiveTrendCard } from "@/components/ui/trend-card";
+import { formatDate } from "@/lib/utils";
 
 const CHART_COLORS = ["#4CBB17", "#CD1C1880", "#60A5FA", "#FFB300", "#A78BFA", "#34D399"];
 
@@ -512,7 +513,7 @@ export function FinanceIntelligenceDashboard({ businessId: initialBusinessId }) 
                                         {ledgerEntries.slice(0, 20).map((entry, idx) => (
                                             <tr key={idx} className="hover:bg-[#1A1A1A] transition-colors">
                                                 <td className="p-3 text-white font-medium">{entry.particular}</td>
-                                                <td className="p-3 text-right text-[#A0A0A0]">{new Date(entry.date).toLocaleDateString()}</td>
+                                                <td className="p-3 text-right text-[#A0A0A0]">{formatDate(entry.date)}</td>
                                                 <td className="p-3 text-right text-[#CD1C18]">{entry.debit > 0 ? `₹${entry.debit.toLocaleString()}` : "—"}</td>
                                                 <td className="p-3 text-right text-[#4CBB17]">{entry.credit > 0 ? `₹${entry.credit.toLocaleString()}` : "—"}</td>
                                                 <td className="p-3 text-right font-semibold text-white">₹{entry.balance.toLocaleString()}</td>

@@ -63,7 +63,7 @@ export default function CashflowPage() {
             setCashFlowData({
                 invoices: Array.isArray(invoicesData) ? invoicesData : invoicesData?.data?.content || invoicesData?.content || invoicesData?.data || [],
                 transactions: Array.isArray(transactionsData) ? transactionsData : transactionsData?.data?.content || transactionsData?.content || transactionsData?.transactions || [],
-                metrics: metricsData || {},
+                metrics: metricsData?.data || metricsData || {},
             });
         } finally {
             setLoading(false);
