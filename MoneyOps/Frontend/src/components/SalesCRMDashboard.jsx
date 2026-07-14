@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { RefreshCw, TrendingUp, TrendingDown, AlertTriangle, Users, DollarSign, Activity, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useUser } from "@/contexts/AuthContext";
@@ -24,6 +25,7 @@ function StatCard({ label, value, sub, icon: Icon, iconColor }) {
 }
 
 export function SalesCRMDashboard({ businessId, onRefresh }) {
+    const navigate = useNavigate();
     const { user } = useUser();
     const { orgId } = useOnboardingStatus();
     const [loading, setLoading] = useState(true);
@@ -241,7 +243,12 @@ export function SalesCRMDashboard({ businessId, onRefresh }) {
                                     </div>
                                     <p className="text-sm text-[#A0A0A0]">{insight.message}</p>
                                     {insight.action && (
-                                        <button className="mt-2 text-xs text-[#4CBB17] hover:underline font-medium">{insight.action} →</button>
+                                        <button className="mt-2 text-xs text-[#4CBB17] hover:underline font-medium" onClick={() => {
+                                            if (insight.action === "Review Invoices") navigate("/invoices");
+                                            else if (insight.action === "View Clients") navigate("/sales/clients");
+                                            else if (insight.action === "Set Reminders") navigate("/invoices");
+                                            else if (insight.action === "View Details") navigate("/sales/clients");
+                                        }}>{insight.action} →</button>
                                     )}
                                 </div>
                             </div>
