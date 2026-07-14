@@ -68,30 +68,29 @@ class MasterOrchestrator:
 Determine which executor(s) should handle the user's request.
 
 Executors:
-- finance_ops: Invoices, payments, expenses, financial summaries, balances, current revenue/profit, overdue invoices, cash position
+- finance_ops: Invoices, payments, expenses, financial summaries, balances, current revenue/profit, overdue invoices, cash position, invoicing, billing
 - compliance: GST filing, tax compliance, TDS, invoice templates
 - collections: Payment reminders, WhatsApp/SMS collections, overdue invoices
 - treds: Invoice discounting, working capital, TReDS registration
-- growth: Revenue FORECAST, future projections, upsell opportunities, churn risk, growth strategy (NOT current revenue queries)
+- growth: Revenue FORECAST, future projections, upsell opportunities, churn risk, growth strategy (NOT current revenue/invoicing queries)
 
 KEY DISTINCTION:
-- "What is my revenue?" / "Current revenue" / "How much money?" -> finance_ops
-- "Forecast revenue" / "Predict future revenue" / "Revenue projection" -> growth
-- "Whats the revenue" / "Revenue status" / "Financial summary" -> finance_ops
+- "What is my revenue?" / "Current revenue" / "How much money?" / "Invoicing" / "Billing" / "Financial summary" -> finance_ops
+- "Forecast revenue" / "Predict future revenue" / "Revenue projection" / "Growth strategy" / "Scale business" -> growth
 
-If the request needs MULTIPLE executors, list the primary one first.
-Respond with a comma-separated list (e.g. "finance_ops,compliance" or just "finance_ops").
-Valid names: finance_ops, compliance, collections, treds, growth"""
+DEFAULT TO SINGLE EXECUTOR unless user explicitly asks for multiple things.
+Respond with EXACTLY ONE name: finance_ops, compliance, collections, treds, or growth"""
 
         try:
             response = await self.llm.simple_completion(
                 prompt=user_message,
                 system_prompt=system_prompt,
-                max_tokens=50,
-                temperature=0.1,
+                max_tokens=20,
+                temperature=0.0,
             )
-            names = [n.strip().lower() for n in response.strip().split(",")]
-
+            logger.info("llm_routing_response", raw=response.strip())
+            name = response.strip().lower()
+            
             role_map = {
                 "finance_ops": AgentRole.FINANCE_OPS,
                 "compliance": AgentRole.COMPLIANCE,
@@ -99,14 +98,13 @@ Valid names: finance_ops, compliance, collections, treds, growth"""
                 "treds": AgentRole.TREDS,
                 "growth": AgentRole.GROWTH,
             }
-
-            roles = []
-            for name in names:
-                role = role_map.get(name)
-                if role and role not in roles:
-                    roles.append(role)
-
-            return roles if roles else [AgentRole.FINANCE_OPS]
+            
+            role = role_map.get(name)
+            if role:
+                return [role]
+            
+            logger.warning("llm_routing_invalid_response", response=response)
+            return [self._select_executor_fallback(user_message)]
         except Exception as e:
             logger.error("llm_routing_error", error=str(e))
             return [self._select_executor_fallback(user_message)]
@@ -119,8 +117,10 @@ Valid names: finance_ops, compliance, collections, treds, growth"""
             return AgentRole.COLLECTIONS
         elif any(w in msg for w in ["discount", "treds", "working capital", "invoice discount"]):
             return AgentRole.TREDS
-        elif any(w in msg for w in ["forecast", "growth", "upsell", "churn", "retention", "revenue projection", "predict"]):
+        elif any(w in msg for w in ["forecast", "growth", "upsell", "churn", "retention", "revenue projection", "predict", "future", "strategy", "scale"]):
             return AgentRole.GROWTH
+        elif any(w in msg for w in ["invoice", "invoicing", "payment", "revenue", "profit", "expense", "balance", "cash", "financial", "summary", "metrics", "overdue", "due"]):
+            return AgentRole.FINANCE_OPS
         else:
             return AgentRole.FINANCE_OPS
 

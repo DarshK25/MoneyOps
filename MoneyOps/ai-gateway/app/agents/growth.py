@@ -68,11 +68,9 @@ class GrowthExecutor(BaseExecutor):
                 result = await self._optimize_treds(state)
             elif any(w in user_request for w in ["dashboard", "overview", "summary", "growth"]):
                 result = await self._growth_dashboard(state)
-            elif any(w in user_request for w in ["revenue", "profit", "financial", "current", "now", "status"]):
-                # Current financial status queries should go to finance_ops, but if they land here,
-                # delegate to finance_ops via cross-agent query
-                result = await self._fallback_response(user_request)
-                result["delegation_hint"] = "finance_ops"
+            elif any(w in user_request for w in ["revenue", "profit", "financial", "current", "now", "status", "invoicing", "billing"]):
+                # Delegate current financial status to finance_ops
+                result = await self._delegate_to_finance(state, user_request)
             else:
                 result = await self._fallback_response(user_request)
 
@@ -83,6 +81,33 @@ class GrowthExecutor(BaseExecutor):
             logger.error("growth_executor_error", error=str(e))
 
         return state
+
+    async def _delegate_to_finance(self, state, user_request: str) -> Dict[str, Any]:
+        """Delegate current financial status query to finance_ops executor"""
+        try:
+            # Use message bus to query finance executor
+            from app.agentos.message_bus import message_bus, AgentMessage, MessageType
+            
+            msg = AgentMessage(
+                message_type=MessageType.QUERY,
+                sender=self.name,
+                receiver="finance_executor",
+                payload={"query": f"financial summary: {user_request}"},
+                org_id=state.org_id,
+                session_id=state.session_id,
+            )
+            await message_bus.send(msg)
+            
+            return {
+                "success": True,
+                "response": "I'll get your current financial status from the finance team.",
+                "operation": "delegated_to_finance",
+                "delegation_hint": "finance_ops",
+                "requires_followup": True
+            }
+        except Exception as e:
+            logger.error("delegation_failed", error=str(e))
+            return {"success": False, "response": "Could not delegate to finance team. Please try again."}
 
     async def run_autonomous_cycle(self, org_id: str, user_id: Optional[str] = None) -> CycleResult:
         try:

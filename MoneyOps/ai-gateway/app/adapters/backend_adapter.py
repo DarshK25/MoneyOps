@@ -1,6 +1,7 @@
 """
 Backend HTTP adapter: http client for backend core API
 Handles all communication with Springboot backend
+Uses gRPC for low-latency internal calls, falls back to HTTP
 """
 
 from typing import Dict, Any, List, Optional, Literal
@@ -96,7 +97,10 @@ class BackendHttpAdapter:
             self._org_uuid_cache: Dict[str, str] = {}
             self._ONBOARDING_TTL = 300
 
-        logger.info("backend_adapter_initialized", base_url=self.base_url, redis_cache=self._use_redis_cache)
+        # gRPC availability
+        self._grpc_enabled = settings.GRPC_ENABLED and grpc_client is not None
+
+        logger.info("backend_adapter_initialized", base_url=self.base_url, redis_cache=self._use_redis_cache, grpc_enabled=self._grpc_enabled)
 
     @staticmethod
     def _unwrap_collection(data: Any) -> List[Dict[str, Any]]:
@@ -116,6 +120,27 @@ class BackendHttpAdapter:
                 if isinstance(data.get(key), list):
                     return data[key]
         return []
+
+    async def _try_grpc(self, grpc_func, *args, fallback_func=None, **kwargs) -> BackendResponse:
+        """Try gRPC call, fall back to HTTP on failure."""
+        if self._grpc_enabled:
+            try:
+                result = await grpc_func(*args, **kwargs)
+                if result.get("success"):
+                    return BackendResponse(
+                        success=True,
+                        data=result.get("data"),
+                        status_code=200,
+                    )
+                # gRPC call succeeded but returned error - log and fall back
+                logger.warning("grpc_call_returned_error", error=result.get("error"), fallback=True)
+            except Exception as e:
+                logger.warning("grpc_call_exception", error=str(e), fallback=True)
+        
+        # Fall back to HTTP
+        if fallback_func:
+            return await fallback_func()
+        return BackendResponse(success=False, error="No fallback available", status_code=500)
 
     async def resolve_org_uuid(self, user_id: str) -> Optional[str]:
         if not user_id or user_id == "unknown":
@@ -167,7 +192,6 @@ class BackendHttpAdapter:
         if org_id:
             internal_uuid = org_id
             if org_id.startswith("org_") or org_id.startswith("user_"):
-                # Use user_id for resolution if available, fallback to org_id
                 resolution_key = user_id or org_id
                 resolved = await self.resolve_org_uuid(resolution_key)
                 if resolved:
@@ -273,23 +297,15 @@ class BackendHttpAdapter:
     async def create_invoice_direct(
         self, org_id: str, user_id: str, payload: Dict[str, Any]
     ) -> BackendResponse:
-        # Use gRPC if enabled
-        if settings.GRPC_ENABLED and grpc_client:
-            try:
-                result = await grpc_client.create_invoice(org_id, payload)
-                return BackendResponse(
-                    success=result.get("success", False),
-                    data=result.get("data"),
-                    error=result.get("error"),
-                    status_code=200 if result.get("success") else 500,
-                )
-            except Exception as e:
-                logger.error("grpc_create_invoice_error", org_id=org_id, error=str(e))
-                # Fall through to HTTP
-
-        return await self._request(
-            "POST", "/api/invoices", data=payload, org_id=org_id, user_id=user_id
+        # Try gRPC first
+        grpc_result = await self._try_grpc(
+            grpc_client.create_invoice,
+            org_id, payload,
+            fallback_func=lambda: self._request(
+                "POST", "/api/invoices", data=payload, org_id=org_id, user_id=user_id
+            )
         )
+        return grpc_result
 
     async def validate_team_action_code(
         self, org_id: str, user_id: str, team_action_code: str
@@ -305,12 +321,20 @@ class BackendHttpAdapter:
     async def get_clients(
         self, org_id: str, limit: int = 100, user_id: Optional[str] = None
     ) -> List[Dict[str, Any]]:
+        # Try gRPC first
+        grpc_result = await self._try_grpc(
+            grpc_client.get_clients,
+            org_id, limit,
+            fallback_func=lambda: self._request(
+                "GET", "/api/clients", params={"page": 0, "size": limit}, org_id=org_id, user_id=user_id
+            )
+        )
+        if grpc_result.success and grpc_result.data:
+            return grpc_result.data
+        
+        # Fallback HTTP response
         resp = await self._request(
-            "GET",
-            "/api/clients",
-            params={"page": 0, "size": limit},
-            org_id=org_id,
-            user_id=user_id,
+            "GET", "/api/clients", params={"page": 0, "size": limit}, org_id=org_id, user_id=user_id
         )
         if resp.success and resp.data:
             return self._unwrap_collection(resp.data)
@@ -323,21 +347,18 @@ class BackendHttpAdapter:
         status: Optional[str] = None,
         user_id: Optional[str] = None,
     ) -> BackendResponse:
-        # Use gRPC if enabled
-        if settings.GRPC_ENABLED and grpc_client:
-            try:
-                result = await grpc_client.get_invoices(org_id, status)
-                return BackendResponse(
-                    success=result.get("success", False),
-                    data=result.get("data"),
-                    error=result.get("error"),
-                    status_code=200 if result.get("success") else 500,
-                )
-            except Exception as e:
-                logger.error("grpc_get_invoices_error", org_id=org_id, error=str(e))
-                # Fall through to HTTP
-
-        params = {"limit": limit}
+        # Try gRPC first
+        grpc_result = await self._try_grpc(
+            grpc_client.get_invoices,
+            org_id, status,
+            fallback_func=lambda: self._request(
+                "GET", "/api/invoices", params={"page": 0, "size": limit, **({"status": status} if status else {})}, org_id=org_id, user_id=user_id
+            )
+        )
+        if grpc_result.success:
+            return grpc_result
+        
+        # Fallback HTTP
         params = {"page": 0, "size": limit}
         if status:
             params["status"] = status
@@ -348,16 +369,51 @@ class BackendHttpAdapter:
             resp.data = self._unwrap_collection(resp.data)
         return resp
 
+    async def get_invoice(
+        self,
+        invoice_id: str,
+        org_id: str,
+        user_id: Optional[str] = None,
+    ) -> BackendResponse:
+        # Try gRPC first
+        grpc_result = await self._try_grpc(
+            grpc_client.get_invoice,
+            invoice_id, org_id,
+            fallback_func=lambda: self._request(
+                "GET", f"/api/invoices/{invoice_id}", org_id=org_id, user_id=user_id
+            )
+        )
+        return grpc_result
+
     async def get_finance_metrics(
         self, business_id: Optional[Any], org_id: str, user_id: Optional[str] = None
     ) -> BackendResponse:
-        return await self._request(
-            "GET",
-            "/api/finance-intelligence/metrics",
-            params={"businessId": normalize_business_id(business_id)},
-            org_id=org_id,
-            user_id=user_id,
+        # Try gRPC first
+        grpc_result = await self._try_grpc(
+            grpc_client.get_finance_metrics,
+            org_id, normalize_business_id(business_id),
+            fallback_func=lambda: self._request(
+                "GET",
+                "/api/finance-intelligence/metrics",
+                params={"businessId": normalize_business_id(business_id)},
+                org_id=org_id,
+                user_id=user_id,
+            )
         )
+        return grpc_result
+
+    async def get_financial_summary(
+        self, org_id: str, user_id: Optional[str] = None
+    ) -> BackendResponse:
+        # Try gRPC first
+        grpc_result = await self._try_grpc(
+            grpc_client.get_financial_summary,
+            org_id,
+            fallback_func=lambda: self._request(
+                "GET", "/api/transactions/summary", org_id=org_id, user_id=user_id
+            )
+        )
+        return grpc_result
 
     async def send_collection_email(
         self,
@@ -371,8 +427,8 @@ class BackendHttpAdapter:
         user_id: Optional[str] = None,
         tone: str = "gentle",
     ) -> dict:
-        # Use gRPC if enabled
-        if settings.GRPC_ENABLED and grpc_client:
+        # Try gRPC first
+        if self._grpc_enabled and grpc_client:
             try:
                 result = await grpc_client.send_collection_email(
                     invoice_id=invoice_id,
@@ -423,19 +479,18 @@ class BackendHttpAdapter:
             "source": "http",
         }
 
-    async def get_financial_summary(
-        self, org_id: str, user_id: Optional[str] = None
-    ) -> BackendResponse:
-        return await self._request(
-            "GET", "/api/transactions/summary", org_id=org_id, user_id=user_id
-        )
-
     async def create_client(
         self, org_id: str, user_id: Optional[str], payload: Dict[str, Any]
     ) -> BackendResponse:
-        return await self._request(
-            "POST", "/api/clients", data=payload, org_id=org_id, user_id=user_id
+        # Try gRPC first
+        grpc_result = await self._try_grpc(
+            grpc_client.create_client,
+            org_id, payload,
+            fallback_func=lambda: self._request(
+                "POST", "/api/clients", data=payload, org_id=org_id, user_id=user_id
+            )
         )
+        return grpc_result
 
     async def get(
         self,

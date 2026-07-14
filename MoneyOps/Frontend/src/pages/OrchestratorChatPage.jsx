@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import { useUser } from "@/contexts/AuthContext";
 import {
   ArrowLeft,
+  ArrowUp,
+  ArrowDown,
   Bot,
   ChevronDown,
   Clock3,
@@ -15,6 +17,9 @@ import {
   Send,
   Settings2,
   Trash2,
+  FileText,
+  AlertTriangle,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
@@ -68,6 +73,129 @@ function extractActions(payload) {
   return actions;
 }
 
+// Rich response renderer for structured agent responses
+function AgentResponseRenderer({ message, actions, reasoning_depth, duration_ms }) {
+  const [showRaw, setShowRaw] = useState(false);
+
+  // Detect if message contains structured financial data
+  const hasFinancialData = /Revenue:|Expenses:|Profit:|Overdue:|URGENT:|Rs\./i.test(message.text);
+  const hasTableData = /\|\s*[^|]+\s*\|/i.test(message.text) || message.text.includes("---");
+
+  if (hasFinancialData && !hasTableData) {
+    // Parse financial summary into structured cards
+    const revenueMatch = message.text.match(/Revenue:\s*Rs\.([\d,]+)/);
+    const expensesMatch = message.text.match(/Expenses:\s*Rs\.([\d,]+)/);
+    const profitMatch = message.text.match(/Profit:\s*Rs\.([\d,]+)/);
+    const marginMatch = message.text.match(/\(([\d.]+)%\)/);
+    const overdueMatch = message.text.match(/(\d+)\s*overdue\s*worth\s*Rs\.([\d,]+)/i);
+    const urgentMatch = message.text.match(/URGENT:.*?(\d+)\s*overdue\s*worth\s*Rs\.([\d,]+)/i);
+
+    return (
+      <div className="space-y-3">
+        <div className="grid gap-3 md:grid-cols-4">
+          {revenueMatch && (
+            <div className="rounded-xl border border-[#4CBB1730] bg-[#4CBB1710] p-4">
+              <p className="text-xs text-[#A0A0A0] uppercase tracking-wide">Revenue</p>
+              <p className="text-2xl font-bold text-[#4CBB17]">₹{revenueMatch[1]}</p>
+            </div>
+          )}
+          {expensesMatch && (
+            <div className="rounded-xl border border-[#CD1C1830] bg-[#CD1C1810] p-4">
+              <p className="text-xs text-[#A0A0A0] uppercase tracking-wide">Expenses</p>
+              <p className="text-2xl font-bold text-[#CD1C18]">₹{expensesMatch[1]}</p>
+            </div>
+          )}
+          {profitMatch && (
+            <div className="rounded-xl border border-[#4CBB1730] bg-[#4CBB1710] p-4">
+              <p className="text-xs text-[#A0A0A0] uppercase tracking-wide">Net Profit</p>
+              <p className="text-2xl font-bold text-[#4CBB17]">₹{profitMatch[1]}</p>
+            </div>
+          )}
+          {marginMatch && (
+            <div className="rounded-xl border border-[#FFB30030] bg-[#FFB30010] p-4">
+              <p className="text-xs text-[#A0A0A0] uppercase tracking-wide">Margin</p>
+              <p className="text-2xl font-bold text-[#FFB300]">{marginMatch[1]}%</p>
+            </div>
+          )}
+        </div>
+        {(overdueMatch || urgentMatch) && (
+          <div className="rounded-xl border border-[#CD1C1840] bg-[#CD1C1815] p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <AlertTriangle className="h-5 w-5 text-[#CD1C18]" />
+              <span className="font-semibold text-[#CD1C18]">Action Required</span>
+            </div>
+            <p className="text-sm text-[#E6E6E6]">
+              {urgentMatch 
+                ? `${urgentMatch[1]} overdue invoice(s) worth ₹${urgentMatch[2]}`
+                : `${overdueMatch[1]} overdue item(s) worth ₹${overdueMatch[2]}`}
+            </p>
+            <div className="mt-3 flex gap-2">
+              <button className="mo-btn-primary text-sm flex items-center gap-1">
+                <FileText className="h-3.5 w-3.5" /> View Overdue
+              </button>
+              <button className="mo-btn-secondary text-sm flex items-center gap-1">
+                <Sparkles className="h-3.5 w-3.5" /> Send Reminders
+              </button>
+            </div>
+          </div>
+        )}
+        <details className="mt-2 group">
+          <summary className="flex items-center gap-2 text-xs text-[#A0A0A0] cursor-pointer hover:text-white">
+            <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" />
+            <span>Show raw response</span>
+          </summary>
+          <pre className="mt-2 p-3 rounded-lg bg-[#0A0A0A] border border-[#2A2A2A] text-xs text-[#8A8A8A] overflow-x-auto whitespace-pre-wrap">
+            {message.text}
+          </pre>
+        </details>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="whitespace-pre-wrap text-sm leading-7">{message.text}</p>
+      {hasTableData && (
+        <div className="rounded-lg border border-[#2A2A2A] bg-[#111111] overflow-x-auto">
+          <pre className="p-3 text-xs text-[#A0A0A0] overflow-x-auto">{message.text}</pre>
+        </div>
+      )}
+      {actions?.length > 0 && (
+        <div className="mt-3 space-y-2">
+          <p className="text-xs font-semibold text-[#4CBB17]">Follow-up Actions:</p>
+          {actions.map((action, i) => (
+            <button
+              key={i}
+              className="w-full text-left rounded-lg border border-[#2A2A2A] bg-[#151515] px-3 py-2 text-sm text-white hover:bg-[#1A1A1A] transition-colors flex items-center gap-2"
+              onClick={() => {
+                if (action.path) window.location.href = action.path;
+              }}
+            >
+              <Sparkles className="h-4 w-4 text-[#4CBB17]" />
+              <span>{action.title}</span>
+              {action.message && <span className="text-xs text-[#A0A0A0] ml-auto">{action.message}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+      {(reasoning_depth > 0 || duration_ms > 2000) && (
+        <button
+          type="button"
+          onClick={() => setActivityOpen(true)}
+          className="mt-3 flex items-center gap-2 pl-4 text-sm text-[#B9B9B9] transition-colors hover:text-white"
+        >
+          <Clock3 className="h-4 w-4 text-[#A0A0A0]" />
+          <span>
+            Thought for {(duration_ms / 1000).toFixed(1)}s
+            <span className="ml-1 text-[#8A8A8A]">›</span>
+          </span>
+        </button>
+      )}
+      <p className="mt-3 text-[11px] text-[#707070]">{formatDateTime(message.timestamp)}</p>
+    </div>
+  );
+}
+
 export default function OrchestratorChatPage() {
   const navigate = useNavigate();
   const { user } = useUser();
@@ -107,6 +235,55 @@ export default function OrchestratorChatPage() {
     [activeSessionId, sessions]
   );
   const activityFeed = activeSession?.actions || [];
+
+  // Message history for up/down arrow navigation
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const userMessageHistory = activeSession?.messages?.filter(m => m.role === "user").map(m => m.text) || [];
+
+  // Keyboard handler for Enter to send, Shift+Enter for newline, Up/Down for history
+  const handleKeyDown = useCallback((e) => {
+    const isShift = e.shiftKey;
+    const isEnter = e.key === "Enter";
+    const isUp = e.key === "ArrowUp";
+    const isDown = e.key === "ArrowDown";
+
+    // Enter to send, Shift+Enter for newline
+    if (isEnter && !isShift) {
+      e.preventDefault();
+      if (draft.trim() && !sending) {
+        handleSend();
+      }
+      return;
+    }
+
+    // Up arrow - previous message
+    if (isUp && userMessageHistory.length > 0) {
+      e.preventDefault();
+      if (historyIndex === -1) {
+        setHistoryIndex(userMessageHistory.length - 1);
+      } else if (historyIndex > 0) {
+        setHistoryIndex(historyIndex - 1);
+      }
+      if (historyIndex !== -1) {
+        setDraft(userMessageHistory[historyIndex]);
+      }
+      return;
+    }
+
+    // Down arrow - next message or clear
+    if (isDown && userMessageHistory.length > 0) {
+      e.preventDefault();
+      if (historyIndex === -1) return;
+      if (historyIndex < userMessageHistory.length - 1) {
+        setHistoryIndex(historyIndex + 1);
+        setDraft(userMessageHistory[historyIndex + 1]);
+      } else {
+        setHistoryIndex(-1);
+        setDraft("");
+      }
+      return;
+    }
+  }, [draft, sending, handleSend, historyIndex, userMessageHistory]);
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -202,6 +379,7 @@ export default function OrchestratorChatPage() {
     });
 
     setDraft("");
+    setHistoryIndex(-1);
     setSending(true);
 
     try {
@@ -442,6 +620,7 @@ export default function OrchestratorChatPage() {
                     ref={textareaRef}
                     value={draft}
                     onChange={(event) => setDraft(event.target.value)}
+                    onKeyDown={handleKeyDown}
                     placeholder="Ask the orchestrator to create invoices, summarize collections, check compliance, run market updates, or act on workspace data..."
                     className="max-h-[220px] min-h-[72px] w-full resize-none overflow-y-auto bg-transparent px-1 py-1 text-sm text-white outline-none placeholder:text-[#666666]"
                   />

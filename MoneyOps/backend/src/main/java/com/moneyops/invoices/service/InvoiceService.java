@@ -44,7 +44,9 @@ import java.io.ByteArrayOutputStream;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -67,6 +69,13 @@ public class InvoiceService {
     private final OrganizationDocumentStore orgStore;
     private final RedisQueueService queueService;
     private final RedisQueueConfig queueConfig;
+
+    private final KafkaEventPublisher kafkaEventPublisher;
+    private final IEventPublisher eventPublisher; // Kafka event publisher
+
+    // Event topic constants
+    private static final String TOPIC_INVOICE_EVENTS = "moneyops.invoice.events";
+    private static final String TOPIC_PAYMENT_EVENTS = "moneyops.payment.events";
 
     public org.springframework.data.domain.Page<InvoiceDto> getAllInvoices(String orgId, int page, int size) {
         if (orgId == null || orgId.isBlank()) throw new com.moneyops.shared.exceptions.UnauthorizedException("Missing organization context");
@@ -193,6 +202,10 @@ public class InvoiceService {
 
         Invoice saved = invoiceStore.save(invoice);
         auditLogService.logCreate("INVOICE", saved.getId(), saved);
+        
+        // Publish Kafka event
+        publishInvoiceEvent(saved, "INVOICE_CREATED", "Invoice created via " + dto.getSource());
+        
         return populateClientDetails(saved);
     }
 
@@ -232,7 +245,12 @@ public class InvoiceService {
         }
 
         // ✨ Soft Delete
-        invoiceStore.softDelete(id, orgId);
+        invoice.setStatus(InvoiceStatus.CANCELLED);
+        invoice.setUpdatedAt(LocalDateTime.now());
+        Invoice saved = invoiceStore.save(invoice);
+        
+        // Publish Kafka event
+        publishInvoiceEvent(saved, "INVOICE_CANCELLED", "Invoice cancelled");
     }
 
     public InvoiceDto sendInvoice(String id, String orgId) {
@@ -278,6 +296,9 @@ public class InvoiceService {
         invoice.setUpdatedAt(LocalDateTime.now());
         Invoice saved = invoiceStore.save(invoice);
         auditLogService.logUpdate("INVOICE", saved.getId(), beforeUpdate, saved);
+        
+        // Publish Kafka event
+        publishInvoiceEvent(saved, "INVOICE_SENT", "Invoice sent to client");
         return populateClientDetails(saved);
     }
 
@@ -340,6 +361,11 @@ public class InvoiceService {
         invoice.setBalanceDue(BigDecimal.ZERO);
         invoice.setUpdatedAt(LocalDateTime.now());
         Invoice saved = invoiceStore.save(invoice);
+        
+        // Publish Kafka events
+        publishInvoiceEvent(saved, "INVOICE_PAID", "Invoice marked as paid");
+        publishPaymentEvent(saved, "PAYMENT_RECEIVED", "Payment received for invoice");
+        
         return populateClientDetails(saved);
     }
 
@@ -763,6 +789,82 @@ public class InvoiceService {
         invoice.setUpdatedAt(LocalDateTime.now());
         invoiceStore.save(invoice);
 
-        return createdTransaction;
+return createdTransaction;
     }
+
+    // ===== Kafka Event Publishing =====
+
+    private void publishInvoiceEvent(Invoice invoice, String eventType, String message) {
+        if (kafkaEventPublisher == null) return;
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("invoiceId", invoice.getId());
+            payload.put("invoiceNumber", invoice.getInvoiceNumber());
+            payload.put("clientId", invoice.getClientId());
+            payload.put("orgId", invoice.getOrgId());
+            payload.put("amount", invoice.getTotalAmount());
+            payload.put("status", invoice.getStatus().name());
+            payload.put("eventType", eventType);
+            payload.put("message", message);
+            payload.put("timestamp", LocalDateTime.now().toString());
+            
+            com.moneyops.events.dto.DomainEvent event = new com.moneyops.events.dto.DomainEvent(
+                "moneyops.invoice.events", invoice.getId(), payload
+            );
+            kafkaEventPublisher.publish(event);
+            log.debug("Published invoice event: {}", eventType);
+        } catch (Exception e) {
+            log.warn("Failed to publish invoice event: {}", e.getMessage());
+        }
+    }
+
+    private void publishPaymentEvent(Invoice invoice, String eventType, String message) {
+        if (kafkaEventPublisher == null) return;
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("invoiceId", invoice.getId());
+            payload.put("invoiceNumber", invoice.getInvoiceNumber());
+            payload.put("clientId", invoice.getClientId());
+            payload.put("orgId", invoice.getOrgId());
+            payload.put("amount", invoice.getTotalAmount());
+            payload.put("eventType", eventType);
+            payload.put("message", message);
+            payload.put("timestamp", LocalDateTime.now().toString());
+            
+            com.moneyops.events.dto.DomainEvent event = new com.moneyops.events.dto.DomainEvent(
+                "moneyops.payment.events", invoice.getId(), payload
+            );
+            kafkaEventPublisher.publish(event);
+            log.debug("Published payment event: {}", eventType);
+        } catch (Exception e) {
+            log.warn("Failed to publish payment event: {}", e.getMessage());
+        }
+    }
+
+    private void publishClientEvent(String clientId, String orgId, String eventType, String message, Object clientData) {
+        if (kafkaEventPublisher == null) return;
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("clientId", clientId);
+            payload.put("orgId", orgId);
+            payload.put("eventType", eventType);
+            payload.put("message", message);
+            payload.put("data", clientData);
+            payload.put("timestamp", LocalDateTime.now().toString());
+            
+            com.moneyops.events.dto.DomainEvent event = new com.moneyops.events.dto.DomainEvent(
+                "moneyops.client.events", clientId, payload
+            );
+            kafkaEventPublisher.publish(event);
+            log.debug("Published client event: {}", eventType);
+        } catch (Exception e) {
+            log.warn("Failed to publish client event: {}", e.getMessage());
+        }
+    }
+
+    // Helper method to call from createInvoice
+    private void publishInvoiceCreatedEvent(Invoice invoice) {
+        publishInvoiceEvent(invoice, "INVOICE_CREATED", "New invoice created");
+    }
+}
 }
