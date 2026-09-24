@@ -37,6 +37,8 @@ from app.agentos.identity import (
     GROWTH_AGENT_IDENTITY, CEO_AGENT_IDENTITY,
 )
 from app.agents.activity_stream import activity_stream, ActivityType, Priority
+from app.middleware.agent_rate_limiter import check_executor_concurrency
+from app.utils.tracing import get_trace_id, set_trace_id
 
 logger = get_logger(__name__)
 
@@ -87,6 +89,7 @@ class ExecutionState:
     business_id: str = "1"
     thread_id: str = "default"
     session_id: str = ""
+    trace_id: str = ""  # populated from contextvars on creation
     conversation_history: list = field(default_factory=list)
     execution_plan: List[str] = field(default_factory=list)
     completed_steps: List[str] = field(default_factory=list)
@@ -143,15 +146,41 @@ class BaseExecutor:
         )
         self._start_time: float = 0.0
 
+    async def _ensure_registered(self):
+        """Idempotent AgentOS registration. Safe to call multiple times."""
+        if not hasattr(self, '_agentos_registered') or not self._agentos_registered:
+            await message_bus.register_agent(self.name)
+            governance.register_agent(self.name, self.role)
+            self._agentos_registered = True
+            logger.info("agentos_initialized", agent=self.name, role=self.role.value, trace_id=get_trace_id())
+
     async def _init_agentos(self):
-        await message_bus.register_agent(self.name)
-        governance.register_agent(self.name, self.role)
-        logger.info("agentos_initialized", agent=self.name, role=self.role.value)
+        await self._ensure_registered()
+
+    async def _check_concurrency_limit(self, state: ExecutionState) -> bool:
+        """Check per-agent concurrency cap. Returns True if allowed."""
+        if state.org_id:
+            allowed = await check_executor_concurrency(self.name, state.org_id)
+            if not allowed:
+                logger.warning(
+                    "executor_concurrency_limit_reached",
+                    agent=self.name,
+                    org_id=state.org_id,
+                    trace_id=get_trace_id(),
+                )
+                return False
+        return True
 
     async def execute(self, state: ExecutionState) -> ExecutionState:
+        # Assert AgentOS registration before any execution — fail loud, not quiet
+        if not hasattr(self, '_agentos_registered') or not self._agentos_registered:
+            await self._ensure_registered()
         raise NotImplementedError
 
     async def run_autonomous_cycle(self, org_id: str, user_id: Optional[str] = None) -> CycleResult:
+        # AgentOS registration check at the top (idempotent)
+        await self._ensure_registered()
+
         try:
             state = ExecutionState(
                 user_request="run_autonomous_cycle",
@@ -222,7 +251,7 @@ class BaseExecutor:
     def delegate_to(self, target_role: str, message: str, state: ExecutionState):
         state.delegation_target = target_role
         state.delegation_message = message
-        logger.info("agent_delegation", from_agent=self.name, to_agent=target_role)
+        logger.info("agent_delegation", from_agent=self.name, to_agent=target_role, trace_id=get_trace_id())
 
     def share_context_with(self, key: str, value: Any, state: ExecutionState, namespace: str = None):
         ns = namespace or self.name
@@ -315,6 +344,16 @@ class FinanceExecutor(BaseExecutor):
         user_request = state.user_request.lower()
         org_id = state.org_id
 
+        # ── Concurrency cap check (same pattern added to all executors) ─────────
+        if not await self._check_concurrency_limit(state):
+            state.agent_outputs[self.name] = {
+                "success": False,
+                "operation": "concurrency_limited",
+                "response": f"{self.name} is at capacity. Please try again shortly.",
+            }
+            state.completed_steps.append(self.name)
+            return state
+
         try:
             action = self._classify_action(user_request)
             should_proceed, eval_result = await self._evaluate_and_decide(action, state)
@@ -352,7 +391,7 @@ class FinanceExecutor(BaseExecutor):
 
         except Exception as e:
             state.errors.append(f"{self.name}: {str(e)}")
-            logger.error("finance_executor_error", error=str(e), org_id=org_id)
+            logger.error("finance_executor_error", error=str(e), org_id=org_id, trace_id=get_trace_id())
             duration_ms = (time.time() - self._start_time) * 1000
             await self._audit("execute", "", str(e), False, duration_ms, error=str(e), org_id=org_id)
 
@@ -387,17 +426,30 @@ class FinanceExecutor(BaseExecutor):
         for attempt in range(retries + 1):
             try:
                 response = await self.llm.simple_completion(prompt=prompt, task_type="simple")
-                return json.loads(response)
+                # Try direct JSON parse first
+                try:
+                    return json.loads(response)
+                except json.JSONDecodeError:
+                    # Try to extract JSON from code blocks or surrounding text
+                    import re
+                    json_match = re.search(r'\{(?:[^{}]|(?:\{[^{}]*\}))*\}', response, re.DOTALL)
+                    if json_match:
+                        return json.loads(json_match.group(0))
+                    raise
             except (json.JSONDecodeError, ValueError) as e:
+                if attempt < retries:
+                    await asyncio.sleep(0.3)
+                    continue
+                logger.warning("llm_extraction_failed", error=str(e), attempt=attempt, trace_id=get_trace_id())
+                # Return minimal default instead of None so callers don't break
+                return {}
+            except Exception as e:
+                logger.error("llm_extraction_error", error=str(e), attempt=attempt, trace_id=get_trace_id())
                 if attempt < retries:
                     await asyncio.sleep(0.5)
                     continue
-                logger.warning("llm_extraction_failed", error=str(e), attempt=attempt)
-                return None
-            except Exception as e:
-                logger.error("llm_extraction_error", error=str(e), attempt=attempt)
-                return None
-        return None
+                return {}
+        return {}
 
     async def _create_invoice(self, state: ExecutionState) -> Dict[str, Any]:
         prompt = f"""Extract invoice details from: {state.user_request}
@@ -618,6 +670,14 @@ class ComplianceExecutor(BaseExecutor):
     async def execute(self, state: ExecutionState) -> ExecutionState:
         self._start_time = time.time()
         user_request = state.user_request.lower()
+
+        if not await self._check_concurrency_limit(state):
+            state.agent_outputs[self.name] = {
+                "success": False, "operation": "concurrency_limited",
+                "response": f"{self.name} is at capacity. Please try again shortly.",
+            }
+            state.completed_steps.append(self.name)
+            return state
 
         try:
             action = self._classify_action(user_request)
@@ -849,6 +909,14 @@ class CollectionsExecutor(BaseExecutor):
     async def execute(self, state: ExecutionState) -> ExecutionState:
         self._start_time = time.time()
         user_request = state.user_request.lower()
+
+        if not await self._check_concurrency_limit(state):
+            state.agent_outputs[self.name] = {
+                "success": False, "operation": "concurrency_limited",
+                "response": f"{self.name} is at capacity. Please try again shortly.",
+            }
+            state.completed_steps.append(self.name)
+            return state
 
         try:
             if any(w in user_request for w in ["send reminder", "chase", "follow up"]):

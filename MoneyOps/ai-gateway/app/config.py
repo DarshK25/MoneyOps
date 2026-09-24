@@ -36,10 +36,10 @@ class Settings(BaseSettings):
     NEWS_API_KEY: Optional[str] = None
     SERPAPI_KEY: Optional[str] = None
 
-    GROQ_MODEL: str = "llama-3.1-8b-instant"
-    GROQ_MODEL_COMPLEX: str = "llama-3.1-8b-instant"
-    GROQ_VOICE_MODEL: str = "llama-3.3-70b-versatile"
-    GROQ_VOICE_FINAL_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_MODEL: str = "openai/gpt-oss-20b"
+    GROQ_MODEL_COMPLEX: str = "openai/gpt-oss-120b"
+    GROQ_VOICE_MODEL: str = "openai/gpt-oss-20b"
+    GROQ_VOICE_FINAL_MODEL: str = "openai/gpt-oss-120b"
 
     LLM_TEMPERATURE: float = 0.3
     LLM_MAX_TOKENS: int = 2000
@@ -118,6 +118,13 @@ class Settings(BaseSettings):
     LIVEKIT_URL: str = "wss://your-project.livekit.cloud"
     LIVEKIT_API_KEY: Optional[str] = None
     LIVEKIT_API_SECRET: Optional[str] = None
+
+    # Kafka
+    KAFKA_ENABLED: bool = True
+    KAFKA_BOOTSTRAP_SERVERS: str = "localhost:9092"
+    KAFKA_CONSUMER_GROUP_ID: str = "ai-gateway-consumer"
+    KAFKA_AGENT_JOBS_TOPIC: str = "moneyops.agent.jobs"
+    MONGODB_URI: str = "mongodb://127.0.0.1:27017"
 
     model_config = SettingsConfigDict(
         env_file=str(_ROOT_ENV),

@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.llm.multi_provider import llm_client as groq_client
+from app.config import settings
 from app.orchestration.intent_classifier import IntentClassifier
 from app.orchestration.entity_extractor import EntityExtractor
 from app.schemas.intents import Intent
@@ -66,7 +67,7 @@ async def test_health_llm():
         return {
             "status": "healthy",
             "llm_response": completion.strip(),
-            "model": groq_client.model,
+            "model": settings.GROQ_MODEL,
         }
     except Exception as e:
         logger.error("test_health_llm_error", error=str(e), exc_info=True)

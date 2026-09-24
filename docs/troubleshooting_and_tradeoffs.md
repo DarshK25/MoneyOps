@@ -200,3 +200,66 @@ git reset --hard origin/dev
     ```powershell
     rm MoneyOps/backend/data/*.db
     ```
+
+---
+
+## 🔍 September 2026 Revival — Deep Audit Bug Journal
+*I reopened MoneyOps after ~4 months dormant. Before writing a single line of new code I did a read-the-real-code audit of every service (not the docs, not the docstrings — the actual code paths). These are the bugs that had genuinely killed the project. For each I record how I found it, what it actually was, the blast radius, the fix, and the tradeoff behind the fix — because the tradeoff is the interesting part.*
+
+### R1. The entire AI Gateway couldn't import — a one-line `SyntaxError` [FATAL]
+**How I found it:** Nothing in the Python service would boot. `python -c "import app.main"` failed immediately.
+**What it was:** `ai-gateway/app/agents/base_executor.py:253` had two statements collapsed onto one physical line:
+```python
+state.delegation_message = message            logger.info(...)
+```
+A stray merge/edit had eaten the newline. Because `base_executor` is imported transitively by `app.main`, this single line took down the *whole* AI application — every agent, every route.
+**Impact:** 100% of AI-gateway functionality dead. This is why "the agents are dumb" — they never ran at all.
+**Fix:** Split the statements back onto two lines.
+**Key lesson (interview):** A syntax error in a hot-path module is a *fail-closed* dependency — one bad line 250 levels deep blocks the import graph above it. Lint/CI (`python -m py_compile`, ruff) in the pipeline would have caught this before merge. This is my #1 argument for wiring a pre-commit compile step.
+
+### R2. Redis reconnect storm filled 44 GB of disk [SEV-1]
+**How I found it:** Two untracked log files were eating the disk — `backend_out_v5.log` at **34.8 GB** and a backend log at **9.68 GB**. I tailed and sampled them before deleting: thousands upon thousands of `io.lettuce.core.RedisConnectionException` / `java.net.ConnectException` stack traces.
+**What it was:** The backend was configured to talk to Redis at `localhost:6379`, but no Redis was running locally (the `.env` even documents Redis as unavailable). Lettuce retried the connection **unboundedly, with no backoff and no circuit breaker**, and every single failed attempt logged a full multi-line stack trace. An Upstash serverless Redis was actually available in `.env` but nothing pointed at it.
+**Impact:** 44 GB of pure noise logs; disk pressure; real signal buried; startup and steady-state both spammed.
+**Fix (planned):** (a) point Redis at the Upstash serverless instance that already exists, and (b) make Redis a *graceful-degradation* dependency — capped exponential backoff, a circuit breaker, and log-once-then-suppress on repeated identical failures instead of a stack trace per attempt.
+**Tradeoff:** Fail-open (in-memory fallback) keeps the app usable without Redis but silently loses the queue/cache/rate-limit guarantees; fail-closed is honest but blocks boot. I chose degrade-with-loud-single-warning over both extremes.
+**Key lesson (interview):** Unbounded retry + per-attempt stack-trace logging + a hard dependency assumption = a disk-filling outage from a *missing* service. Retries need backoff, breakers, and log deduplication. This is one of my strongest "I debugged a production-shaped failure" stories.
+
+### R3. Voice agent "always falls back" — a 10s-vs-30s timeout mismatch [SEV-1]
+**How I found it:** Users reported the voice agent connecting after *minutes* and then always replying with a canned "this is taking too long" line. I traced the request path from the LiveKit worker → voice-service → AI gateway.
+**What it was — three compounding bugs:**
+1. **Timeout mismatch:** `voice-service/app/agent/config.py:53` sets the gateway timeout to **30s**, but `docker-compose.yml:143` overrode `AI_GATEWAY_TIMEOUT` to **10s**. The LLM + gRPC pipeline routinely takes >10s, so the client aborted and emitted the fallback line *while the gateway was still successfully producing the real answer*.
+2. **Error laundering:** `guard.py:11` discarded the real gateway text on a `FAILED` stage and returned a canned "I hit a snag," and a broad regex sanitizer at `entrypoint.py:340` rewrote legitimate replies into fallbacks.
+3. **Wrong prompt entirely:** the agent was constructed with `Agent(instructions="MoneyOps Voice Agent")` — a placeholder string. The real, carefully-written `instructions.py` prompt was never imported. So even when it *did* answer, it answered with no persona or tool guidance.
+**Impact:** The single most-visible feature (voice-to-invoice) looked completely broken to every user.
+**Fix (planned):** single source of truth for the timeout (env var, no docker override fighting config.py), raise it to a realistic budget, remove the sanitizer/guard laundering so real errors surface honestly, and import the real `instructions.py`.
+**Key lesson (interview):** Config precedence bugs are brutal because *nothing errors* — the value is simply wrong, and a too-tight client timeout turns a slow-but-working backend into a "broken" one. And never launder a real error into a friendly fallback before you've logged the truth; you blind yourself.
+**The minutes-to-connect** was separate: LiveKit worker control-socket drops (getaddrinfo/PONG failures) plus ~10–40s cold start per call (redundant health checks, STT/TTS built 3×, VAD cold-load, a broken prewarm using `asyncio.get_event_loop()` with no running loop). Prewarm and provider reuse are the fix.
+
+### R4. "Dual persistence" was actually split-brain [SEV-1, data integrity]
+**How I found it:** The compliance dashboard showed empty data even though invoices existed. I followed the write path vs the read path per module.
+**What it was:** The README claimed "dual persistence" across Postgres + MongoDB. In reality, core writes (invoices/clients/transactions) go to **Postgres only**, while Compliance / Recurring / Payments / Bulk modules still read and write **MongoDB** — an abandoned store. So compliance queried an empty Mongo while the data sat in Postgres, and bulk-created invoices were invisible to the Postgres-backed list.
+**Impact:** Whole modules silently operating on the wrong (empty/stale) datastore. No error — just wrong answers.
+**Fix (planned):** pick one system of record (Postgres), migrate the stragglers off Mongo, and delete the "dual persistence" claim. `scripts/migrate_to_pg.py` and `scripts/reconcile_stores.py` are the start of this.
+**Key lesson (interview):** "Dual persistence" with no sync is not redundancy, it's two half-truths. A system of record must be singular unless you have real CDC/outbox syncing them. This is my go-to answer for "tell me about a data-consistency bug."
+
+### R5. Finance metrics gRPC always returned zeros — ThreadLocal lost across gRPC threads
+**How I found it:** `getFinanceMetrics` returned an all-zeros object no matter the tenant. I compared the working HTTP path against the gRPC path.
+**What it was:** Tenant scoping uses an `OrgContext` `ThreadLocal`. On the HTTP path a filter populates it per request; but gRPC calls are served on gRPC's own worker threads and **no server interceptor set the OrgContext there** (`FinanceGrpcService.java:28`). So every tenant-scoped query ran with a null org and matched nothing → zeros. There was also hardcoded "VoltNest" demo text at `FinanceIntelligenceService.java:360`.
+**Impact:** Every metric surfaced over gRPC was silently zero — looked like "the numbers don't work" rather than "scoping is broken."
+**Fix (planned):** a gRPC `ServerInterceptor` that extracts the org from call metadata and populates `OrgContext` (with a `finally` clear), mirroring the HTTP filter. Remove the demo text.
+**Key lesson (interview):** `ThreadLocal` context does not cross execution boundaries for free — every entry point (HTTP filter, gRPC interceptor, async executor, Kafka consumer) must establish and tear down the context itself. This is a classic multi-transport tenancy bug.
+
+### R6. The "AI agents" were keyword routing, not reasoning
+**How I found it:** I read `_classify_action` expecting LLM tool-calling and found a regex/keyword `if/elif` ladder.
+**What it was:** Routing was pattern-matching on keywords; the LLM was only used to extract entities and to write the fallback sentence — it never *decided* anything. Worse, a genuine second "brain" (`orchestration/intent_classifier.py`, `entity_extractor.py`, `agent_router.py`, `tools/*`, `agents/compliance_agent.py`) existed but was **dead code referenced only by tests**. Two agent systems, neither doing real reasoning in production.
+**Impact:** The core product claim ("a team of AI agents") was theater. This is the single biggest gap between the pitch and the reality, and the heart of what this revival has to fix for real.
+**Fix (direction):** real LLM tool-calling agents (the models decide which tool to call), with the executors demoted to *tools* the agent can invoke — then wire in memory, RAG, guardrails, and evals so the intelligence is measurable, not asserted.
+**Key lesson (interview):** Be able to say clearly where the LLM actually makes a decision vs where it's decoration. "Keyword routing dressed as agents" is exactly the kind of honesty an interviewer respects, paired with the plan to make it real.
+
+### Security findings (audit batch)
+- **Committed JWT secret:** `start_services.ps1:2` hardcoded a real `JWT_SECRET` (tracked, and therefore in git history). I removed the file during cleanup, but the value **must be rotated** because deleting a file does not scrub history.
+- **Tenant spoofing gap:** `api-gateway` `AuthenticationFilter.java:74` trusts an `X-Org-Id` header; the guard meant to validate it against the token (`validateHeadersAgainstToken`) is dead. Same class of impersonation bug I already fixed once in the backend `JwtFilter` (§3.4) — it reappeared at the gateway layer.
+- **Wildcard CORS with credentials**, and a **fail-open rate limiter** (if the limiter backend is down, requests pass) — both need to fail-closed / be scoped.
+
+*Cleanup done this pass: reclaimed ~44 GB by deleting the runaway logs and stray `nul`; removed leftover Copilot upgrade-tooling folders under `.github/`; pruned `__pycache__`/`.pytest_cache`; removed tracked scratch (`tests/test_*.{ps1,py}`) and consolidated five launch scripts down to one canonical `start.ps1` (also eliminating the hardcoded-secret script and one hardwired `C:\DARSH\...` absolute path).*
