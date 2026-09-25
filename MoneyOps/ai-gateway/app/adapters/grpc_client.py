@@ -17,7 +17,7 @@ from app.grpc.gen.moneyops_pb2 import (  # noqa: F401
     InvoiceStatus,
     GetClientsRequest,
     CreateClientRequest,
-    GetFinanceMetricsRequest,
+    FinanceMetricsRequest,
     FinancialSummaryRequest,
     Empty,
 )
@@ -381,7 +381,7 @@ class GRPCClient:
         """Get finance metrics via gRPC."""
         try:
             stub = moneyops_pb2_grpc.FinanceServiceStub(self.channel)
-            request = GetFinanceMetricsRequest(
+            request = FinanceMetricsRequest(
                 org_id=org_id,
                 business_id=business_id,
             )

@@ -299,6 +299,20 @@ OPERATIONAL INTENTS (Basic CRUD operations):
 - TRANSACTION_QUERY: Search/list transactions
 - ACCOUNT_STATEMENT: Generate account statement
 
+COLLECTIONS INTENTS (Payment reminders & chasing overdue clients):
+- REMINDER_CREATE: Send/schedule a payment reminder or follow-up to clients (e.g. "send payment reminders to my overdue clients", "follow up on unpaid invoices", "chase late payers", "nudge clients who haven't paid")
+- REMINDER_LIST: List scheduled or sent reminders
+- REMINDER_CANCEL: Cancel a scheduled reminder
+
+COMPLIANCE & TAX INTENTS (GST, tax, audit, regulatory obligations):
+- COMPLIANCE_QUERY: General compliance/regulatory question
+- COMPLIANCE_CHECK: Check compliance status or upcoming filing deadlines
+- COMPLIANCE_REPORT: Generate a compliance report
+- GST_QUERY: Anything about GST — filing, returns, GSTR, due dates (e.g. "do I need to file GST this quarter?", "when is my GST return due?", "what's my GST liability?")
+- TAX_CALCULATION: Calculate tax owed
+- TAX_OPTIMIZATION: How to reduce tax liability
+- AUDIT_READINESS: Audit preparation or readiness
+
 STRATEGIC INTENTS (Business intelligence):
 - BUSINESS_HEALTH_CHECK: Overall business health/score inquiry
 - PROBLEM_DIAGNOSIS: Why is X metric down/problematic?
@@ -337,6 +351,7 @@ INSTRUCTIONS:
 1. If Locked Intent is not None, favor it heavily unless the user explicitly wants to "cancel" or start something completely unrelated.
 2. Even if the input is garbled (e.g., "you did his first april" instead of "due 1st of april"), use the Active Workflow and Entities to infer the true intent.
 3. If an entity like a name or date is provided, and we are in a creation flow, it is likely continuing that flow.
+4. Prefer a SPECIFIC domain intent over GENERAL_QUERY whenever the input clearly concerns a domain: GST/tax/filing/audit → the COMPLIANCE & TAX intents; sending/scheduling payment reminders or chasing overdue clients → the COLLECTIONS intents. Only use GENERAL_QUERY when no specific intent above fits.
 """
 
         if isinstance(conversation_history, list) and len(conversation_history) > 0:

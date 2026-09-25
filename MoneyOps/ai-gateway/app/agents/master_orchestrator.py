@@ -29,9 +29,96 @@ from app.agentos.memory import agent_memory
 from app.agentos.identity import CEO_AGENT_IDENTITY
 from app.llm.multi_provider import llm_client
 from app.adapters.backend_adapter import get_backend_adapter
+from app.schemas.intents import Intent
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+# Maps the classifier's rich Intent enum onto the executor roles we actually run.
+# We route on Intent (not IntentClassification.primary_agent) on purpose: the
+# AgentType enum has no COLLECTIONS/TReDS member, so routing on primary_agent
+# would strand those executors. Anything not listed falls back to FINANCE_OPS.
+INTENT_TO_ROLE: Dict[Intent, AgentRole] = {
+    # Invoices, clients, transactions, payments, balances, statements, documents
+    Intent.INVOICE_QUERY: AgentRole.FINANCE_OPS,
+    Intent.INVOICE_CREATE: AgentRole.FINANCE_OPS,
+    Intent.INVOICE_UPDATE: AgentRole.FINANCE_OPS,
+    Intent.INVOICE_DELETE: AgentRole.FINANCE_OPS,
+    Intent.INVOICE_SEND: AgentRole.FINANCE_OPS,
+    Intent.INVOICE_STATUS_CHECK: AgentRole.FINANCE_OPS,
+    Intent.INVOICE_DOWNLOAD: AgentRole.FINANCE_OPS,
+    Intent.INVOICE_PAYMENT: AgentRole.FINANCE_OPS,
+    Intent.INVOICE_PARTIAL_PAYMENT: AgentRole.FINANCE_OPS,
+    Intent.INVOICE_MARK_PAID: AgentRole.FINANCE_OPS,
+    Intent.CLIENT_QUERY: AgentRole.FINANCE_OPS,
+    Intent.CLIENT_CREATE: AgentRole.FINANCE_OPS,
+    Intent.CLIENT_UPDATE: AgentRole.FINANCE_OPS,
+    Intent.CLIENT_DELETE: AgentRole.FINANCE_OPS,
+    Intent.CLIENT_HISTORY: AgentRole.FINANCE_OPS,
+    Intent.TRANSACTION_QUERY: AgentRole.FINANCE_OPS,
+    Intent.TRANSACTION_CREATE: AgentRole.FINANCE_OPS,
+    Intent.TRANSACTION_EXPENSE: AgentRole.FINANCE_OPS,
+    Intent.TRANSACTION_INCOME: AgentRole.FINANCE_OPS,
+    Intent.PAYMENT_RECORD: AgentRole.FINANCE_OPS,
+    Intent.PAYMENT_QUERY: AgentRole.FINANCE_OPS,
+    Intent.BALANCE_CHECK: AgentRole.FINANCE_OPS,
+    Intent.ACCOUNT_STATEMENT: AgentRole.FINANCE_OPS,
+    Intent.DOCUMENT_UPLOAD: AgentRole.FINANCE_OPS,
+    Intent.DOCUMENT_QUERY: AgentRole.FINANCE_OPS,
+    Intent.DOCUMENT_ANALYZE: AgentRole.FINANCE_OPS,
+    # Current-state financial / strategic-finance queries → finance ops
+    Intent.BUSINESS_HEALTH_CHECK: AgentRole.FINANCE_OPS,
+    Intent.PROBLEM_DIAGNOSIS: AgentRole.FINANCE_OPS,
+    Intent.BUDGET_OPTIMIZATION: AgentRole.FINANCE_OPS,
+    Intent.CASH_FLOW_PLANNING: AgentRole.FINANCE_OPS,
+    Intent.PROFIT_OPTIMIZATION: AgentRole.FINANCE_OPS,
+    Intent.INVESTMENT_ADVICE: AgentRole.FINANCE_OPS,
+    Intent.DEBT_MANAGEMENT: AgentRole.FINANCE_OPS,
+    Intent.RISK_ASSESSMENT: AgentRole.FINANCE_OPS,
+    Intent.REPORT_GENERATE: AgentRole.FINANCE_OPS,
+    Intent.ANALYTICS_QUERY: AgentRole.FINANCE_OPS,
+    # Reminders / collections
+    Intent.REMINDER_CREATE: AgentRole.COLLECTIONS,
+    Intent.REMINDER_LIST: AgentRole.COLLECTIONS,
+    Intent.REMINDER_CANCEL: AgentRole.COLLECTIONS,
+    # Compliance / tax
+    Intent.COMPLIANCE_QUERY: AgentRole.COMPLIANCE,
+    Intent.COMPLIANCE_CHECK: AgentRole.COMPLIANCE,
+    Intent.COMPLIANCE_REPORT: AgentRole.COMPLIANCE,
+    Intent.GST_QUERY: AgentRole.COMPLIANCE,
+    Intent.TAX_OPTIMIZATION: AgentRole.COMPLIANCE,
+    Intent.TAX_CALCULATION: AgentRole.COMPLIANCE,
+    Intent.AUDIT_READINESS: AgentRole.COMPLIANCE,
+    # Forward-looking / growth / sales / strategy / customer intelligence / ops
+    Intent.FORECAST_REQUEST: AgentRole.GROWTH,
+    Intent.TREND_ANALYSIS: AgentRole.GROWTH,
+    Intent.BENCHMARK_COMPARISON: AgentRole.GROWTH,
+    Intent.SALES_STRATEGY: AgentRole.GROWTH,
+    Intent.CUSTOMER_ACQUISITION: AgentRole.GROWTH,
+    Intent.PRICING_STRATEGY: AgentRole.GROWTH,
+    Intent.MARKETING_OPTIMIZATION: AgentRole.GROWTH,
+    Intent.CUSTOMER_RETENTION: AgentRole.GROWTH,
+    Intent.COMPETITIVE_POSITIONING: AgentRole.GROWTH,
+    Intent.GROWTH_STRATEGY: AgentRole.GROWTH,
+    Intent.MARKET_EXPANSION: AgentRole.GROWTH,
+    Intent.PRODUCT_STRATEGY: AgentRole.GROWTH,
+    Intent.SCALING_ADVICE: AgentRole.GROWTH,
+    Intent.PARTNERSHIP_OPPORTUNITIES: AgentRole.GROWTH,
+    Intent.CUSTOMER_SEGMENTATION: AgentRole.GROWTH,
+    Intent.CHURN_PREDICTION: AgentRole.GROWTH,
+    Intent.CUSTOMER_LIFETIME_VALUE: AgentRole.GROWTH,
+    Intent.CUSTOMER_FEEDBACK_ANALYSIS: AgentRole.GROWTH,
+    Intent.SWOT_ANALYSIS: AgentRole.GROWTH,
+    Intent.SCENARIO_PLANNING: AgentRole.GROWTH,
+    Intent.GOAL_SETTING: AgentRole.GROWTH,
+    Intent.PROCESS_OPTIMIZATION: AgentRole.GROWTH,
+    Intent.INVENTORY_OPTIMIZATION: AgentRole.GROWTH,
+    Intent.RESOURCE_ALLOCATION: AgentRole.GROWTH,
+    # Invoice discounting / working capital
+    # (No dedicated TReDS Intent exists yet; TReDS is reached via the keyword
+    #  fallback until an explicit discounting intent is added to the taxonomy.)
+}
 
 
 class MasterOrchestrator:
@@ -63,52 +150,36 @@ class MasterOrchestrator:
         self._agent_health: Dict[str, Dict[str, Any]] = {}
         logger.info("ceo_orchestrator_initialized", executors=list(self.executors.keys()))
 
-    async def _select_executor_llm(self, user_message: str) -> List[AgentRole]:
-        system_prompt = """You are a routing agent for a financial SaaS platform.
-Determine which executor(s) should handle the user's request.
-
-Executors:
-- finance_ops: Invoices, payments, expenses, financial summaries, balances, current revenue/profit, overdue invoices, cash position, invoicing, billing, business health/status, current status, business status
-- compliance: GST filing, tax compliance, TDS, invoice templates
-- collections: Payment reminders, WhatsApp/SMS collections, overdue invoices
-- treds: Invoice discounting, working capital, TReDS registration
-- growth: Revenue FORECAST, future projections, upsell opportunities, churn risk, growth strategy (NOT current revenue/invoicing/business status queries)
-
-KEY DISTINCTION:
-- "What is my revenue?" / "Current revenue" / "How much money?" / "Invoicing" / "Billing" / "Financial summary" / "Business status" / "Current status" / "Business health" -> finance_ops
-- "Forecast revenue" / "Predict future revenue" / "Revenue projection" / "Growth strategy" / "Scale business" / "Future growth" -> growth
-
-IMPORTANT: "Business back on track", "current status", "business health", "business status" are CURRENT STATE queries -> finance_ops
-
-DEFAULT TO SINGLE EXECUTOR unless user explicitly asks for multiple things.
-Respond with EXACTLY ONE name: finance_ops, compliance, collections, treds, or growth"""
-
+    async def _route_via_classifier(
+        self,
+        user_message: str,
+        conversation_history: Optional[List[Dict[str, Any]]] = None,
+    ) -> List[AgentRole]:
+        """
+        Route the request through the LLM IntentClassifier (the real reasoning
+        'brain' that lives in app/orchestration/), then map the classified
+        Intent onto an executor role via INTENT_TO_ROLE. The keyword matcher is
+        kept only as a last-resort safety net if classification fails outright.
+        """
         try:
-            response = await self.llm.simple_completion(
-                prompt=user_message,
-                system_prompt=system_prompt,
-                max_tokens=20,
-                temperature=0.0,
+            from app.orchestration.intent_classifier import intent_classifier
+
+            classification = await intent_classifier.classify(
+                user_input=user_message,
+                conversation_history=conversation_history or [],
             )
-            logger.info("llm_routing_response", raw=response.strip())
-            name = response.strip().lower()
-            
-            role_map = {
-                "finance_ops": AgentRole.FINANCE_OPS,
-                "compliance": AgentRole.COMPLIANCE,
-                "collections": AgentRole.COLLECTIONS,
-                "treds": AgentRole.TREDS,
-                "growth": AgentRole.GROWTH,
-            }
-            
-            role = role_map.get(name)
-            if role:
-                return [role]
-            
-            logger.warning("llm_routing_invalid_response", response=response)
-            return [self._select_executor_fallback(user_message)]
+            role = INTENT_TO_ROLE.get(classification.intent, AgentRole.FINANCE_OPS)
+            logger.info(
+                "intent_routing",
+                intent=classification.intent.value,
+                confidence=round(float(classification.confidence), 3),
+                primary_agent=classification.primary_agent.value,
+                role=role.value,
+                reasoning=(classification.reasoning or "")[:160],
+            )
+            return [role]
         except Exception as e:
-            logger.error("llm_routing_error", error=str(e))
+            logger.error("intent_routing_error", error=str(e))
             return [self._select_executor_fallback(user_message)]
 
     def _select_executor_fallback(self, user_message: str) -> AgentRole:
@@ -154,7 +225,9 @@ Respond with EXACTLY ONE name: finance_ops, compliance, collections, treds, or g
                     "errors": [],
                 }
 
-            executor_roles = await self._select_executor_llm(user_message)
+            executor_roles = await self._route_via_classifier(
+                user_message, conversation_history
+            )
             executor_role = executor_roles[0]
             execution_plan = executor_roles
 
