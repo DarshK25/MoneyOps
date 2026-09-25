@@ -24,6 +24,8 @@ import com.moneyops.clients.mapper.ClientMapper;
 import com.moneyops.clients.dto.ClientDto;
 import com.moneyops.invoices.validator.InvoiceValidator;
 import com.moneyops.email.EmailService;
+import com.moneyops.events.producer.IEventPublisher;
+import com.moneyops.events.producer.KafkaEventPublisher;
 import com.moneyops.queue.RedisQueueConfig;
 import com.moneyops.queue.RedisQueueService;
 import com.moneyops.security.team.TeamActionAuthorizationService;
@@ -866,5 +868,4 @@ return createdTransaction;
     private void publishInvoiceCreatedEvent(Invoice invoice) {
         publishInvoiceEvent(invoice, "INVOICE_CREATED", "New invoice created");
     }
-}
 }

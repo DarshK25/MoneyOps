@@ -8,6 +8,8 @@ import com.moneyops.audit.service.AuditLogService;
 import com.moneyops.events.producer.IEventPublisher;
 import com.moneyops.jpa.persistence.ClientDocumentStore;
 import com.moneyops.security.team.TeamActionAuthorizationService;
+import com.moneyops.shared.exceptions.BusinessRuleException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -22,6 +24,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import org.apache.commons.text.similarity.JaroWinklerSimilarity;
 
+@Slf4j
 @Service
 @Transactional
 public class ClientService {

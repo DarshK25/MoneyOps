@@ -11,7 +11,7 @@ import com.moneyops.transactions.mapper.TransactionMapper;
 import com.moneyops.transactions.validator.TransactionValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -43,19 +43,6 @@ public class TransactionService {
     
     @Autowired(required = false)
     private IEventPublisher eventPublisher;
-
-    private static final String TOPIC_TRANSACTION_EVENTS = "moneyops.transaction.events";
-@RequiredArgsConstructor
-@Transactional
-public class TransactionService {
-
-    private final TransactionDocumentStore transactionStore;
-    private final TransactionMapper transactionMapper;
-    private final TransactionValidator transactionValidator;
-    private final ComplianceMetadataService complianceMetadataService;
-
-    @ConditionalOnProperty(name = "spring.kafka.enabled", havingValue = "true", matchIfMissing = false)
-    private final IEventPublisher eventPublisher;
 
     private static final String TOPIC_PAYMENT_EVENTS = "moneyops.payment.events";
     private static final String TOPIC_EXPENSE_EVENTS = "moneyops.expense.events";

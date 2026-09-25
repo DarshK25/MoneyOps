@@ -12,6 +12,8 @@ import com.moneyops.organizations.mapper.OrganizationMapper;
 import com.moneyops.organizations.repository.BusinessOrganizationRepository;
 import com.moneyops.organizations.repository.RegulatoryProfileRepository;
 import com.moneyops.organizations.validator.OrganizationValidator;
+import com.moneyops.shared.exceptions.BusinessRuleException;
+import com.moneyops.shared.exceptions.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
