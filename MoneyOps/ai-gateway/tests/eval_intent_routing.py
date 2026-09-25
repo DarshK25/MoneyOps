@@ -63,9 +63,8 @@ DATASET = [
     ("How do I get more customers?", "growth"),
     ("How can I retain my existing customers?", "growth"),
     ("Predict my cash flow for next quarter", "growth"),
-    # --- treds: KNOWN GAP - no dedicated Intent exists yet, reachable only via
-    #     the keyword fallback, so the classifier is expected to miss these.
-    #     Kept in the set on purpose so the report shows the honest weak spot. ---
+    # --- treds: dedicated TREDS_DISCOUNT / TREDS_QUERY intents now exist in the
+    #     taxonomy and route straight through the classifier (no keyword fallback). ---
     ("Can I discount this invoice on TReDS for early cash?", "treds"),
     ("I want to raise working capital against my receivables", "treds"),
 ]

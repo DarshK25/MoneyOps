@@ -313,6 +313,10 @@ COMPLIANCE & TAX INTENTS (GST, tax, audit, regulatory obligations):
 - TAX_OPTIMIZATION: How to reduce tax liability
 - AUDIT_READINESS: Audit preparation or readiness
 
+TReDS INTENTS (Invoice discounting / raising working capital against receivables):
+- TREDS_DISCOUNT: Discount/factor a specific invoice on TReDS for early cash, or raise working capital against receivables (e.g. "discount this invoice on TReDS for early cash", "I want to raise working capital against my receivables", "factor my unpaid invoices")
+- TREDS_QUERY: Questions about TReDS — discounting rates, eligible invoices, platforms (RXIL/M1xchange/Invoicemart), how invoice financing works
+
 STRATEGIC INTENTS (Business intelligence):
 - BUSINESS_HEALTH_CHECK: Overall business health/score inquiry
 - PROBLEM_DIAGNOSIS: Why is X metric down/problematic?
@@ -351,7 +355,7 @@ INSTRUCTIONS:
 1. If Locked Intent is not None, favor it heavily unless the user explicitly wants to "cancel" or start something completely unrelated.
 2. Even if the input is garbled (e.g., "you did his first april" instead of "due 1st of april"), use the Active Workflow and Entities to infer the true intent.
 3. If an entity like a name or date is provided, and we are in a creation flow, it is likely continuing that flow.
-4. Prefer a SPECIFIC domain intent over GENERAL_QUERY whenever the input clearly concerns a domain: GST/tax/filing/audit → the COMPLIANCE & TAX intents; sending/scheduling payment reminders or chasing overdue clients → the COLLECTIONS intents. Only use GENERAL_QUERY when no specific intent above fits.
+4. Prefer a SPECIFIC domain intent over GENERAL_QUERY whenever the input clearly concerns a domain: GST/tax/filing/audit → the COMPLIANCE & TAX intents; sending/scheduling payment reminders or chasing overdue clients → the COLLECTIONS intents; discounting/factoring an invoice or raising working capital against receivables → the TReDS intents (NOT a generic invoice or cash-flow intent). Only use GENERAL_QUERY when no specific intent above fits.
 """
 
         if isinstance(conversation_history, list) and len(conversation_history) > 0:

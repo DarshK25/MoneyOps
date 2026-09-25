@@ -55,6 +55,10 @@ class Intent(str, Enum):
     COMPLIANCE_REPORT = "COMPLIANCE_REPORT"
     GST_QUERY = "GST_QUERY"
 
+    # TReDS (invoice discounting / working capital against receivables)
+    TREDS_DISCOUNT = "TREDS_DISCOUNT"
+    TREDS_QUERY = "TREDS_QUERY"
+
     # Strategic / Analytical
     BUSINESS_HEALTH_CHECK = "BUSINESS_HEALTH_CHECK"
     PROBLEM_DIAGNOSIS = "PROBLEM_DIAGNOSIS"
@@ -360,6 +364,20 @@ INTENT_REQUIREMENTS: Dict[Intent, IntentRequirements] = {
     Intent.COMPLIANCE_CHECK: DEFAULT_STRATEGIC,
     Intent.COMPLIANCE_REPORT: DEFAULT_STRATEGIC,
     Intent.GST_QUERY: DEFAULT_STRATEGIC,
+    Intent.TREDS_DISCOUNT: IntentRequirements(
+        required_entities=["invoice_id"],
+        optional_entities=["amount", "client_name", "platform", "tenure_days"],
+        requires_user_confirmation=True,
+        minimum_confidence=0.75,
+        primary_agent=AgentType.FINANCE_AGENT,
+        requires_external_data=True,
+        expected_response_format="json",
+    ),
+    Intent.TREDS_QUERY: IntentRequirements(
+        optional_entities=["invoice_id", "amount", "platform", "tenure_days"],
+        primary_agent=AgentType.FINANCE_AGENT,
+        requires_external_data=True,
+    ),
     Intent.TAX_OPTIMIZATION: DEFAULT_STRATEGIC,
     Intent.TAX_CALCULATION: DEFAULT_STRATEGIC,
     Intent.AUDIT_READINESS: DEFAULT_STRATEGIC,

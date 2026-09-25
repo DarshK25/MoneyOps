@@ -115,9 +115,9 @@ INTENT_TO_ROLE: Dict[Intent, AgentRole] = {
     Intent.PROCESS_OPTIMIZATION: AgentRole.GROWTH,
     Intent.INVENTORY_OPTIMIZATION: AgentRole.GROWTH,
     Intent.RESOURCE_ALLOCATION: AgentRole.GROWTH,
-    # Invoice discounting / working capital
-    # (No dedicated TReDS Intent exists yet; TReDS is reached via the keyword
-    #  fallback until an explicit discounting intent is added to the taxonomy.)
+    # Invoice discounting / working capital against receivables
+    Intent.TREDS_DISCOUNT: AgentRole.TREDS,
+    Intent.TREDS_QUERY: AgentRole.TREDS,
 }
 
 
