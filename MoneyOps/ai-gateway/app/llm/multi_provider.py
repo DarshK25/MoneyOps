@@ -88,14 +88,17 @@ class MultiProviderClient:
                 priority_for=[TaskType.REALTIME, TaskType.SIMPLE],
             )
             
-        # Cerebras - Highest quota
+        # Cerebras - highest quota, but the chat API requires paid billing
+        # (returns 402 without it), so it is opt-in: set CEREBRAS_ENABLED=true
+        # once billing is active. Left out of rotation by default so a dead
+        # provider never poisons the fallback chain.
         cerebras_key = getattr(settings, "CEREBRAS_API_KEY", None)
-        if cerebras_key:
+        if cerebras_key and getattr(settings, "CEREBRAS_ENABLED", False):
             self.providers["cerebras"] = {
                 "api_key": cerebras_key,
                 "base_url": "https://api.cerebras.ai/v1",
-                "model": "llama3.1-8b",
-                "model_complex": "llama3.1-70b",
+                "model": "qwen-3.8-27b",
+                "model_complex": "gpt-oss-120b",
             }
             self.capabilities["cerebras"] = ProviderCapability(
                 name="cerebras",
@@ -111,8 +114,8 @@ class MultiProviderClient:
         if gemini_key:
             self.providers["gemini"] = {
                 "api_key": gemini_key,
-                "model": "gemini-1.5-flash",
-                "model_complex": "gemini-1.5-pro",
+                "model": "gemini-2.5-flash",
+                "model_complex": "gemini-2.5-pro",
             }
             self.capabilities["gemini"] = ProviderCapability(
                 name="gemini",
@@ -269,67 +272,86 @@ class MultiProviderClient:
         provider_names = self._get_providers_for_task(task_type)
         
         last_error = None
-        for provider_name in provider_names:
-            if provider_name not in self.providers:
-                continue
-                
-            try:
-                import time as _time
-                _call_start = _time.time()
-                result = await self._call_provider(
-                    provider_name=provider_name,
-                    messages=messages,
-                    temperature=temperature or 0.3,
-                    max_tokens=max_tokens or 2000,
-                    response_format=response_format,
-                    use_complex=use_complex_model,
-                )
-                _call_duration = (_time.time() - _call_start) * 1000
-                
-                logger.info(
-                    "llm_completion_success",
-                    provider=provider_name,
-                    task_type=task_type.value,
-                    duration_ms=round(_call_duration, 1),
-                )
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            rate_limited = False
+            for provider_name in provider_names:
+                if provider_name not in self.providers:
+                    continue
 
-                # Cache the response for future queries
-                if last_user_msg and not tools and not response_format:
-                    try:
-                        content = result["choices"][0]["message"]["content"]
-                        token_count = result.get("usage", {}).get("total_tokens", 0)
-                        from app.cache.semantic_cache import semantic_cache
-                        asyncio.ensure_future(semantic_cache.set(
-                            query=last_user_msg,
-                            response=content,
-                            provider=provider_name,
-                            tokens_used=token_count,
-                            latency_ms=_call_duration,
-                        ))
-                    except Exception as e:
-                        logger.debug("llm_cache_store_failed", error=str(e))
-                
-                return result
-                
-            except Exception as e:
-                error_str = str(e).lower()
-                if "429" in error_str or "rate" in error_str:
-                    logger.warning(
-                        "llm_rate_limit",
+                try:
+                    import time as _time
+                    _call_start = _time.time()
+                    result = await self._call_provider(
+                        provider_name=provider_name,
+                        messages=messages,
+                        temperature=temperature or 0.3,
+                        max_tokens=max_tokens or 2000,
+                        response_format=response_format,
+                        use_complex=use_complex_model,
+                    )
+                    _call_duration = (_time.time() - _call_start) * 1000
+
+                    logger.info(
+                        "llm_completion_success",
                         provider=provider_name,
                         task_type=task_type.value,
+                        duration_ms=round(_call_duration, 1),
+                    )
+
+                    # Cache the response for future queries
+                    if last_user_msg and not tools and not response_format:
+                        try:
+                            content = result["choices"][0]["message"]["content"]
+                            token_count = result.get("usage", {}).get("total_tokens", 0)
+                            from app.cache.semantic_cache import semantic_cache
+                            asyncio.ensure_future(semantic_cache.set(
+                                query=last_user_msg,
+                                response=content,
+                                provider=provider_name,
+                                tokens_used=token_count,
+                                latency_ms=_call_duration,
+                            ))
+                        except Exception as e:
+                            logger.debug("llm_cache_store_failed", error=str(e))
+
+                    return result
+
+                except Exception as e:
+                    error_str = str(e).lower()
+                    if any(s in error_str for s in ("429", "rate", "503", "quota", "overloaded")):
+                        logger.warning(
+                            "llm_rate_limit",
+                            provider=provider_name,
+                            task_type=task_type.value,
+                            error=str(e),
+                        )
+                        rate_limited = True
+                        continue  # Try next provider
+
+                    # Any other error: record it and still try the next provider
+                    # (availability over fail-fast) rather than aborting the chain.
+                    last_error = e
+                    logger.error(
+                        "llm_error",
+                        provider=provider_name,
                         error=str(e),
                     )
-                    continue  # Try next provider
-                    
-                last_error = e
-                logger.error(
-                    "llm_error",
-                    provider=provider_name,
-                    error=str(e),
+                    continue
+
+            # Whole chain exhausted for this attempt. If it was purely rate
+            # limits, back off and retry the chain; otherwise stop.
+            if rate_limited and attempt < max_attempts - 1:
+                backoff = 2 ** attempt  # 1s, 2s
+                logger.warning(
+                    "llm_all_providers_rate_limited",
+                    attempt=attempt + 1,
+                    backoff_s=backoff,
                 )
-                break  # Different error, don't fallback
-                
+                await asyncio.sleep(backoff)
+                continue
+            break
+
         # All providers failed
         if last_error:
             raise last_error
@@ -432,8 +454,14 @@ class MultiProviderClient:
             "generationConfig": {
                 "temperature": temperature,
                 "maxOutputTokens": max_tokens,
+                # Gemini 2.5 "thinking" otherwise eats the output budget and
+                # truncates the answer; disable it for these short completions.
+                "thinkingConfig": {"thinkingBudget": 0},
             }
         }
+        # Native JSON mode: makes Gemini return raw JSON (no markdown fences).
+        if response_format and response_format.get("type") == "json_object":
+            payload["generationConfig"]["responseMimeType"] = "application/json"
         
         resp = await self._http_client.post(url, json=payload, timeout=30.0)
         resp.raise_for_status()
@@ -472,9 +500,12 @@ class MultiProviderClient:
                 max_tokens=max_tokens,
                 response_format={"type": "json_object"},
                 task_type=task_type,
+                skip_cache=True,
             )
         except Exception:
-            # Fallback: ask for JSON in prompt
+            # Fallback: ask for JSON in prompt. Must still skip the semantic
+            # cache: a JSON-parsing call must never consume a cached prose
+            # answer (a low-similarity hit returns non-JSON and crashes parsing).
             json_messages = messages.copy()
             if json_messages:
                 last_msg = json_messages[-1]
@@ -484,6 +515,7 @@ class MultiProviderClient:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 task_type=task_type,
+                skip_cache=True,
             )
             
         content = response["choices"][0]["message"]["content"]
@@ -537,11 +569,26 @@ class MultiProviderClient:
 
 
 def extract_json(content: str) -> str:
-    """Extract JSON from markdown code blocks or raw string"""
-    content = content.strip()
-    json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", content, re.DOTALL)
-    if json_match:
-        return json_match.group(1)
+    """Extract a JSON object from markdown code blocks or raw/prefixed text.
+
+    Robust to: fenced ```json blocks (with or without a closing fence),
+    leading prose or reasoning, and trailing commentary. Falls back to the
+    outermost brace span so a slightly malformed wrapper never blocks parsing.
+    """
+    content = (content or "").strip()
+    # Properly fenced block: ```json { ... } ```
+    fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", content, re.DOTALL)
+    if fenced:
+        return fenced.group(1)
+    # Unpaired/opening fence only: strip the markers we can see.
+    if content.startswith("```"):
+        content = re.sub(r"^```(?:json)?\s*", "", content)
+        content = re.sub(r"\s*```$", "", content).strip()
+    # Fall back to the outermost {...} span (drops leading prose/reasoning).
+    start = content.find("{")
+    end = content.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        return content[start:end + 1]
     return content
 
 

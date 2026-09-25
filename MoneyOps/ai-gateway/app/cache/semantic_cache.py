@@ -68,7 +68,7 @@ class CacheEntry:
 
 class SemanticCache:
     CACHE_NAMESPACE = "semantic-cache"
-    DEFAULT_THRESHOLD = 0.40
+    DEFAULT_THRESHOLD = 0.92
     DEFAULT_TTL = 3600
     MAX_MEMORY_ENTRIES = 2000
 
