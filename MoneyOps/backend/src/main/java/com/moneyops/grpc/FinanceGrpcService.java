@@ -3,6 +3,7 @@ package com.moneyops.grpc;
 import com.moneyops.intelligence.FinanceIntelligenceService;
 import com.moneyops.transactions.service.TransactionService;
 import com.moneyops.transactions.dto.TransactionDto;
+import com.moneyops.shared.utils.OrgContext;
 import io.grpc.stub.StreamObserver;
 import net.devh.boot.grpc.server.service.GrpcService;
 import java.math.BigDecimal;
@@ -25,6 +26,12 @@ public class FinanceGrpcService extends FinanceServiceGrpc.FinanceServiceImplBas
     public void getFinanceMetrics(FinanceMetricsRequest request,
                                   StreamObserver<GetFinanceMetricsResponse> responseObserver) {
         try {
+            // gRPC worker threads never run the servlet auth filter, so OrgContext
+            // is empty here and FinanceIntelligenceService.getMetrics() would read a
+            // null org id and return zeros. Seed it from the request's org id, then
+            // clear it in finally so tenant state never leaks onto a pooled thread.
+            OrgContext.setOrgId(request.getOrgId());
+
             Object metrics = intelligenceService.getMetrics(request.getBusinessId());
 
             FinanceMetrics.Builder builder = FinanceMetrics.newBuilder();
@@ -50,6 +57,8 @@ public class FinanceGrpcService extends FinanceServiceGrpc.FinanceServiceImplBas
                             .setMessage(e.getMessage()))
                     .build());
             responseObserver.onCompleted();
+        } finally {
+            OrgContext.clear();
         }
     }
 
