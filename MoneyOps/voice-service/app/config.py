@@ -50,7 +50,13 @@ class Settings(BaseSettings):
 
     # AI Gateway
     AI_GATEWAY_URL: str = "http://localhost:8005"
-    AI_GATEWAY_TIMEOUT: int = 15  # seconds — tighter timeout so failures surface quickly
+    # Read budget for the gateway's full LLM classify -> gRPC -> LLM reply pipeline.
+    # This is applied as httpx's *read* timeout only (connect fails fast, see
+    # AI_GATEWAY_CONNECT_TIMEOUT). It must be >= the pipeline's real p95 latency,
+    # otherwise a slow-but-working turn is cut off and the caller hears a canned
+    # "taking longer" line instead of the real answer.
+    AI_GATEWAY_TIMEOUT: int = 30  # seconds
+    AI_GATEWAY_CONNECT_TIMEOUT: float = 5.0  # seconds — a down gateway surfaces quickly
 
     # Session
     SESSION_TIMEOUT_S: int = 600  # 10 minutes

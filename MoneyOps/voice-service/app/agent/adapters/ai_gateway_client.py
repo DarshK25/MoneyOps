@@ -22,7 +22,14 @@ class AIGatewayClient:
 
     def __init__(self):
         self.base_url = settings.AI_GATEWAY_URL
-        self.timeout = settings.AI_GATEWAY_TIMEOUT
+        # Split the budget: a short connect timeout surfaces a down gateway in a
+        # few seconds, while the longer read timeout gives the gateway's full
+        # classify -> gRPC -> reply pipeline room to finish. A single scalar here
+        # would cut off a slow-but-working turn and force a canned fallback.
+        self.timeout = httpx.Timeout(
+            settings.AI_GATEWAY_TIMEOUT,
+            connect=settings.AI_GATEWAY_CONNECT_TIMEOUT,
+        )
 
     async def process_voice_input(
         self,

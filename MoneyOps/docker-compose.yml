@@ -140,7 +140,10 @@ services:
       - .env
     environment:
       AI_GATEWAY_URL: http://ai-gateway:8005
-      AI_GATEWAY_TIMEOUT: "10"
+      # Must not undercut the gateway's real pipeline latency, or working turns
+      # get killed mid-flight and the caller hears the canned fallback. Kept in
+      # step with the voice-service default in config.py.
+      AI_GATEWAY_TIMEOUT: "30"
     depends_on:
       ai-gateway:
         condition: service_healthy
