@@ -21,6 +21,12 @@ public abstract class BaseWorker implements Runnable {
 
     protected volatile boolean running = true;
 
+    // When the backing store (Redis) is unreachable, popJob throws immediately instead of
+    // blocking for pollTimeout. Without a pause here the loop spins as fast as the CPU allows,
+    // burning a core and writing tens of thousands of stack traces a second. Back off between
+    // failures so a Redis outage degrades to a slow, quiet retry instead of a log flood.
+    private static final long ERROR_BACKOFF_MILLIS = 5000;
+
     protected BaseWorker(RedisQueueService queueService,
                          RedisTemplate<String, String> redisTemplate,
                          ObjectMapper objectMapper,
@@ -50,7 +56,14 @@ public abstract class BaseWorker implements Runnable {
                 processJob(job);
 
             } catch (Exception e) {
-                log.error("Worker {} error", this.getClass().getSimpleName(), e);
+                log.error("Worker {} error, backing off {}ms before retry",
+                        this.getClass().getSimpleName(), ERROR_BACKOFF_MILLIS, e);
+                try {
+                    Thread.sleep(ERROR_BACKOFF_MILLIS);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
             }
         }
 

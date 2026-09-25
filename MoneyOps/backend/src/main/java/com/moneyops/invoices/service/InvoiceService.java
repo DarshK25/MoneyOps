@@ -23,8 +23,8 @@ import com.moneyops.invoices.mapper.InvoiceMapper;
 import com.moneyops.clients.mapper.ClientMapper;
 import com.moneyops.clients.dto.ClientDto;
 import com.moneyops.invoices.validator.InvoiceValidator;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.moneyops.email.EmailService;
-import com.moneyops.events.producer.IEventPublisher;
 import com.moneyops.events.producer.KafkaEventPublisher;
 import com.moneyops.queue.RedisQueueConfig;
 import com.moneyops.queue.RedisQueueService;
@@ -72,8 +72,10 @@ public class InvoiceService {
     private final RedisQueueService queueService;
     private final RedisQueueConfig queueConfig;
 
-    private final KafkaEventPublisher kafkaEventPublisher;
-    private final IEventPublisher eventPublisher; // Kafka event publisher
+    // Optional: only present when Kafka is enabled. The publish helpers below
+    // null-check it, so the service must still start when Kafka is off.
+    @Autowired(required = false)
+    private KafkaEventPublisher kafkaEventPublisher;
 
     // Event topic constants
     private static final String TOPIC_INVOICE_EVENTS = "moneyops.invoice.events";
